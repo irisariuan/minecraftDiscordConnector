@@ -1,6 +1,6 @@
 import type { ChatInputCommandInteraction, Client, SlashCommandBuilder } from "discord.js";
 
-interface CommandFile {
+export interface CommandFile {
     command: SlashCommandBuilder
     execute: (interaction: ChatInputCommandInteraction ,client: Client) => void | Promise<void>
 }
