@@ -40,7 +40,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
     if (!comparePermission(await readPermission(user.id), [PermissionFlags.approve])) return
     if (approving) {
-        const { success, message } = await runCommandOnServer(approval.command)
+        const success = await runCommandOnServer(approval.command)
         if (!success) {
             return reaction.message.reply("An error occurred while running the command on the server")
         }
@@ -50,7 +50,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
         .setDescription("Command executed successfully")
         .addFields(
             { name: 'Command', value: approval.command },
-            { name: 'Output', value: message },
+            { name: 'Execution', value: 'Command executed successfully' },
         )
         await reaction.message.reply({ embeds: [embed] });
         removeApproval(approval.messageId)

@@ -176,7 +176,7 @@ export async function getLogs(): Promise<LogLine[]> {
     ]
 }
 
-export async function runCommandOnServer(command: string): Promise<{ success: boolean, message: string }> {
+export async function runCommandOnServer(command: string): Promise<boolean> {
     //todo: call api to run command on server
-    return { success: true, message: 'Command executed successfully' }
+    return true;
 }
