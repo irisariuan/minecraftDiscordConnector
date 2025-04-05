@@ -1,9 +1,10 @@
-import type { ChatInputCommandInteraction, Client, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction, Client, MessageReaction, PartialMessageReaction, PartialUser, SlashCommandBuilder, User } from "discord.js";
 import { join } from 'node:path'
 
 export interface CommandFile {
     command: SlashCommandBuilder
     execute: (interaction: ChatInputCommandInteraction, client: Client) => void | Promise<void>
+    executeReaction?: (interaction: MessageReaction | PartialMessageReaction, user: User | PartialUser, client: Client) => void | Promise<void>
 }
 
 export function loadCommands() {

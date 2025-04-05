@@ -29,8 +29,7 @@ export class CacheItem<T> {
 
     async update() {
         if (this.updateMethod) {
-            this.liveTime = Date.now();
-            this.data = await this.updateMethod();
+            this.setData(await this.updateMethod())
             return true
         }
         return false
@@ -40,7 +39,7 @@ export class CacheItem<T> {
         if (this.ttl <= 0) return false;
         if (!this.data) return true;
         if (this.liveTime + this.ttl < Date.now()) {
-            this.data = null;
+            this.resetData()
             return true;
         }
         return false;
@@ -51,5 +50,12 @@ export class CacheItem<T> {
             this.update();
         }
         return this.data;
+    }
+    setData(data: T) {
+        this.data = data;
+        this.liveTime = Date.now();
+    }
+    resetData() {
+        this.data = null;
     }
 }
