@@ -107,8 +107,8 @@ export function createEmbed(result: LogLine[], page: number) {
 
 export const pageSize = 20
 
-export async function sendPaginationMessage(getResult: () => Promise<LogLine[] | undefined>, interaction: ChatInputCommandInteraction) {
-    const result = await getResult()
+export async function sendPaginationMessage(getResult: () => Promise<LogLine[] | undefined>, interaction: ChatInputCommandInteraction, filter?: string) {
+    const result = (await getResult())?.filter(v => filter ? v.type === filter : true)
     let interactionResponse: Message
     let page = 0
     if (!result || result.length <= 0) {
@@ -118,7 +118,7 @@ export async function sendPaginationMessage(getResult: () => Promise<LogLine[] |
             components: createButtons(0, 0)
         })
     } else {
-        interactionResponse = await editInteraction(result, interaction, page)
+        interactionResponse = await editInteraction(result, interaction, page, filter)
     }
 
     interactionResponse.createMessageComponentCollector({ componentType: ComponentType.Button }).on('collect', async i => {
@@ -131,7 +131,7 @@ export async function sendPaginationMessage(getResult: () => Promise<LogLine[] |
             page = (Number(reply.fields.getTextInputValue(ModalAction.INPUT)) || page + 1) - 1
             if (oldPage === page) return
             const maxPage = calculateMaxPage(result?.length || 0)
-            return editInteraction(result || [], interaction, Math.max(Math.min(page, maxPage), 0))
+            return editInteraction(result || [], interaction, Math.max(Math.min(page, maxPage), 0), filter)
         }
 
         i.deferUpdate()
@@ -153,12 +153,13 @@ export async function sendPaginationMessage(getResult: () => Promise<LogLine[] |
             components: createButtons(0, 0)
         })
 
-        editInteraction(reloadResult, interaction, page)
+        editInteraction(reloadResult, interaction, page, filter)
     })
 }
 
-async function editInteraction(result: LogLine[], interaction: ChatInputCommandInteraction, page: number) {
-    const embed = createEmbed(result, page)
-    const buttonRow = createButtons(page, result.length)
-    return await interaction.editReply({ embeds: [embed], components: buttonRow, content: `Page ${page + 1}/${Math.ceil(result.length / pageSize)}`.trim() })
+async function editInteraction(result: LogLine[], interaction: ChatInputCommandInteraction, page: number, filter?: string) {
+    const filteredResult = result.filter(v => filter ? v.type === filter : true)
+    const embed = createEmbed(filteredResult, page)
+    const buttonRow = createButtons(page, filteredResult.length)
+    return await interaction.editReply({ embeds: [embed], components: buttonRow, content: `Page ${page + 1}/${Math.ceil(filteredResult.length / pageSize)}`.trim() })
 }
