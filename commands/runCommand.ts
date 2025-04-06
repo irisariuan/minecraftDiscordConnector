@@ -1,7 +1,7 @@
 import { EmbedBuilder, MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
-import { newApproval } from "../lib/approval";
+import { createEmbed, newApproval } from "../lib/approval";
 import { runCommandOnServer } from "../lib/request";
 
 export default {
@@ -18,13 +18,12 @@ export default {
 
         if (!comparePermission(await readPermission(interaction.user.id), [PermissionFlags.runCommand])) {
             const validTill = Date.now() + 1000 * 60 * 60 * 2 // 2 hours
-            const embed = new EmbedBuilder()
-                .setColor(0x0099FF)
-                .setTitle('Require Approval')
-                .setDescription(`This command requires approval, valid until ${time(new Date(validTill))}`)
-                .addFields(
-                    { name: 'Command', value: command },
-                )
+            const embed = createEmbed({
+                command,
+                validTill,
+                approvalCount: 0,
+                disapprovalCount: 0,
+            }, 0x0099FF, 'Pending')
             const message = await interaction.reply({ embeds: [embed], withResponse: true })
             if (!message.resource?.message?.id) {
                 return interaction.editReply({ content: "Unknown error occurred" })

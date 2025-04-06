@@ -12,11 +12,13 @@ export const disapprovalCount = Number(process.env.DISAPPROVAL_COUNT) || 1
 export const approvalCount = Number(process.env.APPROVAL_COUNT) || 1
 
 export function newApproval(approval: Omit<Approval, 'approvalCount' | 'disapprovalCount'>) {
-    approvalList.set(approval.messageId, {
+    const newApproval = {
         ...approval,
         approvalCount: 0,
         disapprovalCount: 0,
-    });
+    }
+    approvalList.set(approval.messageId, newApproval);
+    return newApproval;
 }
 
 export function approve(messageId: string) {
@@ -60,59 +62,33 @@ export function getApproval(messageId: string): Approval | null {
     return approval;
 }
 
+export function createEmbed(approval: Omit<Approval, 'messageId'>, color: number, title: string) {
+    return new EmbedBuilder()
+        .setColor(color)
+        .setTitle(title)
+        .setDescription(`Command: ${approval.command}`)
+        .addFields(
+            { name: 'Approval Count', value: `${approval.approvalCount}/${approvalCount}` },
+            { name: 'Disapproval Count', value: `${approval.disapprovalCount}/${disapprovalCount}` },
+            { name: 'Valid Till', value: time(new Date(approval.validTill)) },
+        )
+        .setTimestamp(Date.now())
+        .setFooter({ text: 'Approval System' });
+}
+
 export function createApprovalEmbed(approval: Approval) {
     switch (checkApprovalStatus(approval)) {
         case 'pending': {
-            return new EmbedBuilder()
-                .setColor(0x0099FF)
-                .setTitle('Pending')
-                .setDescription(`Command: ${approval.command}`)
-                .addFields(
-                    { name: 'Approval Count', value: `${approval.approvalCount}/${approvalCount}` },
-                    { name: 'Disapproval Count', value: `${approval.disapprovalCount}/${disapprovalCount}` },
-                    { name: 'Valid Till', value: time(new Date(approval.validTill)) },
-                )
-                .setTimestamp(Date.now())
-                .setFooter({ text: 'Approval System' });
+            return createEmbed(approval, 0x0099FF, 'Pending')
         }
         case 'approved': {
-            return new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle('Approved')
-                .setDescription(`Command: ${approval.command}`)
-                .addFields(
-                    { name: 'Approval Count', value: `${approval.approvalCount}/${approvalCount}` },
-                    { name: 'Disapproval Count', value: `${approval.disapprovalCount}/${disapprovalCount}` },
-                    { name: 'Valid Till', value: time(new Date(approval.validTill)) },
-                )
-                .setTimestamp(Date.now())
-                .setFooter({ text: 'Approval System' });
+            return createEmbed(approval, 0x00FF00, 'Approved')
         }
         case 'disapproved': {
-            return new EmbedBuilder()
-                .setColor(0xFF0000)
-                .setTitle('Disapproved')
-                .setDescription(`Command: ${approval.command}`)
-                .addFields(
-                    { name: 'Approval Count', value: `${approval.approvalCount}/${approvalCount}` },
-                    { name: 'Disapproval Count', value: `${approval.disapprovalCount}/${disapprovalCount}` },
-                    { name: 'Valid Till', value: time(new Date(approval.validTill)) },
-                )
-                .setTimestamp(Date.now())
-                .setFooter({ text: 'Approval System' });
+            return createEmbed(approval, 0xFF0000, 'Disapproved');
         }
         case 'timeout': {
-            return new EmbedBuilder()
-                .setColor(0xFF0000)
-                .setTitle('Timeout')
-                .setDescription(`Command: ${approval.command}`)
-                .addFields(
-                    { name: 'Approval Count', value: `${approval.approvalCount}/${approvalCount}` },
-                    { name: 'Disapproval Count', value: `${approval.disapprovalCount}/${disapprovalCount}` },
-                    { name: 'Valid Till', value: time(new Date(approval.validTill)) },
-                )
-                .setTimestamp(Date.now())
-                .setFooter({ text: 'Approval System' });
+            return createEmbed(approval, 0xFF0000, 'Timeout');
         }
     }
 }
