@@ -23,7 +23,7 @@ export default {
         const force = interaction.options.getBoolean("poll") === false
         const canRunCommand = compareAllPermissions(await readPermission(interaction.user.id), [PermissionFlags.runCommand])
 
-        if (!canRunCommand && !force) {
+        if (!canRunCommand || !force) {
             const validTill = Date.now() + (Number(process.env.APPROVAL_TIMEOUT) || 1000 * 60 * 60 * 2) // 2 hours
             const embed = createEmbed({
                 command,
