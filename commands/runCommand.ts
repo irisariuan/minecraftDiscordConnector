@@ -12,11 +12,18 @@ export default {
             option.setName("command")
                 .setDescription("The command to run")
                 .setRequired(true)
+        )
+        .addBooleanOption(option =>
+            option.setName("force")
+                .setDescription("Force run the command without approval (requires permission)")
+                .setRequired(false)
         ),
     async execute(interaction, client) {
         const command = interaction.options.getString("command", true)
+        const force = interaction.options.getBoolean("force") || false
+        const canRunCommand = compareAllPermissions(await readPermission(interaction.user.id), [PermissionFlags.runCommand])
 
-        if (!compareAllPermissions(await readPermission(interaction.user.id), [PermissionFlags.runCommand])) {
+        if (!canRunCommand && !force) {
             const validTill = Date.now() + (Number(process.env.APPROVAL_TIMEOUT) || 1000 * 60 * 60 * 2) // 2 hours
             const embed = createEmbed({
                 command,
