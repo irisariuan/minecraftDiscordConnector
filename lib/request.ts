@@ -14,6 +14,7 @@ export async function getLogs(): Promise<LogLine[]> {
     if (!Array.isArray(data)) {
         throw new Error('Invalid logs format')
     }
+    return data
 }
 
 export async function runCommandOnServer(command: string): Promise<boolean> {
@@ -35,7 +36,7 @@ interface Player {
 }
 
 export async function fetchOnlinePlayers(): Promise<Player[]> {
-    const res = await fetch('http://localhost:6001/onlinePlayers', {
+    const res = await fetch('http://localhost:6001/players', {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json'
