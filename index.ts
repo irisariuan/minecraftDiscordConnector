@@ -42,19 +42,20 @@ client.on('messageReactionAdd', async (reaction, user) => {
     const disapproving = reaction.emoji.name === '❌' || reaction.emoji.name === '🏳️'
     const canceling = reaction.emoji.name === '📤'
     const superApprove = reaction.emoji.name === '🏁' || reaction.emoji.name === '🏳️'
+    const isValidReaction = ['✅', '❌', '🏁', '🏳️', '📤'].includes(reaction.emoji.name || '')
     const canSuperApprove = comparePermission(userPerm, PermissionFlags.superApprove)
-
+    
     const userReactions = reaction.message.reactions.cache.filter(r => r.users.cache.has(user.id))
     for (const userReaction of userReactions.values()) {
         await userReaction.users.remove(user.id).catch(console.error);
     }
-    if (!compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
+    if (!isValidReaction || !compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
     if (canceling) {
         const prevCount = approval.approvalCount.length + approval.disapprovalCount.length
         approval.approvalCount = approval.approvalCount.filter(id => id !== user.id)
         approval.disapprovalCount = approval.disapprovalCount.filter(id => id !== user.id)
         if (prevCount === approval.approvalCount.length + approval.disapprovalCount.length) {
-            return reaction.message.reply({ content: 'You have not approved or disapproved this command' }).catch(console.error)
+            return reaction.message.reply({ content: 'You have not approved or disapproved this command', flags: [MessageFlags.SuppressNotifications] }).catch(console.error)
         }
         if (reaction.message.editable) {
             await reaction.message.edit({
@@ -63,13 +64,14 @@ client.on('messageReactionAdd', async (reaction, user) => {
         }
         return await reaction.message.reply({
             content: `Command approval canceled by ${userMention(user.id)}`,
+            flags: [MessageFlags.SuppressNotifications]
         }).catch(console.error)
     }
     if (approving && approval.approvalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
-        return await reaction.message.reply({ content: 'You have already approved this command' }).catch(console.error)
+        return await reaction.message.reply({ content: 'You have already approved this command', flags: [MessageFlags.SuppressNotifications] }).catch(console.error)
     }
     if (disapproving && approval.disapprovalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
-        return await reaction.message.reply({ content: 'You have already disapproved this command' }).catch(console.error)
+        return await reaction.message.reply({ content: 'You have already disapproved this command', flags: [MessageFlags.SuppressNotifications] }).catch(console.error)
     }
 
     // Check if the user is already in the opposite list and remove them
