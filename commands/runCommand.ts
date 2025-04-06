@@ -1,7 +1,7 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
-import { createEmbed, newApproval } from "../lib/approval";
+import { createApprovalEmbed, createEmbed, getApproval, newApproval, removeApproval } from "../lib/approval";
 import { runCommandOnServer } from "../lib/request";
 
 export default {
@@ -31,7 +31,13 @@ export default {
             newApproval({
                 command,
                 messageId: message.resource?.message?.id,
-                validTill,
+                validTill
+            }, async () => {
+                if (!message.resource?.message?.id) return
+                const approval = getApproval(message.resource?.message?.id, false)
+                if (!approval) return
+                await interaction.editReply({ embeds: [createApprovalEmbed(approval)] })
+                removeApproval(message.resource?.message?.id)
             })
             console.log(`Approval added for command ${command} with message id ${message.resource?.message?.id}`)
             await message.resource.message.react('✅')

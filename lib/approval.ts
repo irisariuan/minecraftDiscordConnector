@@ -6,16 +6,21 @@ export interface Approval {
     validTill: number,
     approvalCount: string[],
     disapprovalCount: string[],
+    timeout: NodeJS.Timeout,
 }
 export const approvalList: Map<string, Approval> = new Map()
 export const disapprovalCount = Number(process.env.DISAPPROVAL_COUNT) || 1
 export const approvalCount = Number(process.env.APPROVAL_COUNT) || 1
 
-export function newApproval(approval: Omit<Approval, 'approvalCount' | 'disapprovalCount'>) {
+export function newApproval(approval: Omit<Approval, 'approvalCount' | 'disapprovalCount' | 'timeout'>, cleanUp: () => void | Promise<void>) {
     const newApproval = {
         ...approval,
         approvalCount: [],
         disapprovalCount: [],
+        timeout: setTimeout(() => {
+            removeApproval(approval.messageId);
+            cleanUp();
+        }, approval.validTill - Date.now()),
     }
     approvalList.set(approval.messageId, newApproval);
     return newApproval;
@@ -34,35 +39,34 @@ export function disapprove(messageId: string, userId: string) {
     return checkApprovalStatus(approval);
 }
 
-function removeApproval(messageId: string) {
+export function removeApproval(messageId: string) {
+    const approval = approvalList.get(messageId);
+    if (!approval) return;
+    clearTimeout(approval.timeout);
     approvalList.delete(messageId);
 }
 
 type ApprovalStatus = 'approved' | 'disapproved' | 'pending' | 'timeout';
 
-function checkApprovalStatus(approval: Approval): ApprovalStatus {
-    if (approval.validTill < Date.now()) {
-        removeApproval(approval.messageId);
-        return 'timeout';
-    }
-    const status = approval.approvalCount.length >= approvalCount ? 'approved' : approval.disapprovalCount.length >= disapprovalCount ? 'disapproved' : 'pending';
-    if (status !== 'pending') {
+function checkApprovalStatus(approval: Approval, autoRemoval = true): ApprovalStatus {
+    const status = approval.validTill < Date.now() ? 'timeout' : approval.approvalCount.length >= approvalCount ? 'approved' : approval.disapprovalCount.length >= disapprovalCount ? 'disapproved' : 'pending';
+    if (autoRemoval && status !== 'pending') {
         removeApproval(approval.messageId);
     }
     return status;
 }
 
-export function getApproval(messageId: string): Approval | null {
+export function getApproval(messageId: string, autoRemoval = true): Approval | null {
     const approval = approvalList.get(messageId);
     if (!approval) return null;
-    if (approval.validTill < Date.now()) {
+    if (autoRemoval && checkApprovalStatus(approval) !== 'pending') {
         removeApproval(messageId);
         return null;
     }
     return approval;
 }
 
-export function createEmbed(approval: Omit<Approval, 'messageId'>, color: number, title: string) {
+export function createEmbed(approval: Omit<Approval, 'messageId' | 'timeout'>, color: number, title: string) {
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
