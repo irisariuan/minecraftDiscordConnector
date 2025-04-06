@@ -17,7 +17,7 @@ export default {
         const command = interaction.options.getString("command", true)
 
         if (!comparePermission(await readPermission(interaction.user.id), [PermissionFlags.runCommand])) {
-            const validTill = Date.now() + 1000 * 60 * 10 // 10 minutes
+            const validTill = Date.now() + 1000 * 60 * 60 * 2 // 2 hours
             const embed = new EmbedBuilder()
                 .setColor(0x0099FF)
                 .setTitle('Require Approval')
