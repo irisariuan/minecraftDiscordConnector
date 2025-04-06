@@ -3,7 +3,7 @@ import { Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js
 import { loadCommands } from './lib/commands'
 import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
-import { approve, createApprovalEmbed, disapprove, getApproval } from './lib/approval'
+import { approvalCount, approve, createApprovalEmbed, disapprovalCount, disapprove, getApproval } from './lib/approval'
 import { parseCommandOutput, runCommandOnServer } from './lib/request'
 
 const commands = loadCommands()
@@ -44,7 +44,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
     const superApprove = reaction.emoji.name === '🏁' || reaction.emoji.name === '🏳️'
     const isValidReaction = ['✅', '❌', '🏁', '🏳️', '📤'].includes(reaction.emoji.name || '')
     const canSuperApprove = comparePermission(userPerm, PermissionFlags.superApprove)
-    
+
     const userReactions = reaction.message.reactions.cache.filter(r => r.users.cache.has(user.id))
     for (const userReaction of userReactions.values()) {
         await userReaction.users.remove(user.id).catch(console.error);
@@ -89,8 +89,10 @@ client.on('messageReactionAdd', async (reaction, user) => {
         }).catch(console.error)
     }
 
+    const countStr = approving ? `${approval.approvalCount.length}/${approvalCount}` : `${approval.disapprovalCount.length}/${disapprovalCount}`
+
     await reaction.message.reply({
-        content: `Command ${approving ? 'approved' : 'disapproved'} by ${userMention(user.id)}${canSuperApprove && superApprove ? ' (forced)' : ''}`,
+        content: `Command ${approving ? 'approved' : 'disapproved'} by ${userMention(user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,
     }).catch(console.error)
 
     if (status !== 'pending') {
