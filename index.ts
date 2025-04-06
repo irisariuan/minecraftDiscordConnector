@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
 import { loadCommands } from './lib/commands'
 import { comparePermission, PermissionFlags, readPermission } from './lib/permission'
