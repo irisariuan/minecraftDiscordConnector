@@ -40,11 +40,11 @@ export default {
                 removeApproval(message.resource?.message?.id)
             })
             console.log(`Approval added for command ${command} with message id ${message.resource?.message?.id}`)
-            await message.resource.message.react(formatEmoji('white_check_mark'))
-            await message.resource.message.react(formatEmoji('cross_mark'))
-            await message.resource.message.react(formatEmoji('outbox_tray'))
-            await message.resource.message.react(formatEmoji('checkered_flag'))
-            await message.resource.message.react(formatEmoji('flag_white'))
+            await message.resource.message.react('✅')
+            await message.resource.message.react('❌')
+            await message.resource.message.react('📤')
+            await message.resource.message.react('🏁')
+            await message.resource.message.react('🏳️')
             return
         }
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })

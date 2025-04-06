@@ -38,9 +38,10 @@ client.on('messageReactionAdd', async (reaction, user) => {
     const approval = getApproval(reaction.message.id)
     if (!approval) return
     const userPerm = await readPermission(user.id)
-    const approving = reaction.emoji.identifier === 'white_check_mark' || reaction.emoji.identifier === 'checkered_flag'
-    const canceling = reaction.emoji.identifier === 'outbox_tray'
-    const superApprove = reaction.emoji.identifier === 'checkered_flag' || reaction.emoji.identifier === 'flag_white'
+    const approving = reaction.emoji.name === '✅' || reaction.emoji.name === '🏁'
+    const disapproving = reaction.emoji.name === '❌' || reaction.emoji.name === '🏳️'
+    const canceling = reaction.emoji.name === '📤'
+    const superApprove = reaction.emoji.name === '🏁' || reaction.emoji.name === '🏳️'
     const canSuperApprove = comparePermission(userPerm, PermissionFlags.superApprove)
 
     const userReactions = reaction.message.reactions.cache.filter(r => r.users.cache.has(user.id))
@@ -60,21 +61,21 @@ client.on('messageReactionAdd', async (reaction, user) => {
                 embeds: [createApprovalEmbed(approval)]
             }).catch(console.error)
         }
-        await reaction.message.reply({
+        return await reaction.message.reply({
             content: `Command approval canceled by ${userMention(user.id)}`,
         }).catch(console.error)
     }
-    if (approving && approval.approvalCount.includes(user.id)) {
-        return reaction.message.reply({ content: 'You have already approved this command' }).catch(console.error)
+    if (approving && approval.approvalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
+        return await reaction.message.reply({ content: 'You have already approved this command' }).catch(console.error)
     }
-    if (!approving && approval.disapprovalCount.includes(user.id)) {
-        return reaction.message.reply({ content: 'You have already disapproved this command' }).catch(console.error)
+    if (disapproving && approval.disapprovalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
+        return await reaction.message.reply({ content: 'You have already disapproved this command' }).catch(console.error)
     }
 
     // Check if the user is already in the opposite list and remove them
-    if (!approving && approval.approvalCount.includes(user.id)) {
+    if (disapproving && approval.approvalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
         approval.approvalCount = approval.approvalCount.filter(id => id !== user.id)
-    } else if (approving && approval.disapprovalCount.includes(user.id)) {
+    } else if (approving && approval.disapprovalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
         approval.disapprovalCount = approval.disapprovalCount.filter(id => id !== user.id);
     }
 
@@ -92,6 +93,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
     if (status !== 'pending') {
         await reaction.message.reactions.removeAll()
+    } else {
+        return
     }
 
     if (status === 'approved') {
