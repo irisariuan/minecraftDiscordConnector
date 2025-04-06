@@ -18,8 +18,8 @@ export function newApproval(approval: Omit<Approval, 'approvalCount' | 'disappro
         approvalCount: [],
         disapprovalCount: [],
         timeout: setTimeout(() => {
-            removeApproval(approval.messageId);
             cleanUp();
+            removeApproval(approval.messageId);
         }, approval.validTill - Date.now()),
     }
     approvalList.set(approval.messageId, newApproval);
