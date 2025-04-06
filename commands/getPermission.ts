@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { parsePermission, readPermission } from "../lib/permission";
 
@@ -16,12 +16,12 @@ export default {
         const permission = await readPermission(user.id);
         if (permission) {
             await interaction.reply({
-                content: `Permission for user ${user.username} is ${parsePermission(permission).join(", ")}`,
+                content: `Permission for user ${userMention(user.id)} is \`${parsePermission(permission).join(", ")}\``,
                 flags: [MessageFlags.Ephemeral],
             });
         } else {
             await interaction.reply({
-                content: `User ${user.username} not found`,
+                content: `User ${userMention(user.id)} not found`,
                 flags: [MessageFlags.Ephemeral],
             });
         }
