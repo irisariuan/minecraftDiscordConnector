@@ -17,8 +17,8 @@ export async function getLogs(): Promise<LogLine[]> {
     return data
 }
 
-export async function runCommandOnServer(command: string): Promise<boolean> {
-    await fetch('http://localhost:6001/runCommand', {
+export async function runCommandOnServer(command: string): Promise<{ success: boolean, output: string | null }> {
+    const res = await fetch('http://localhost:6001/runCommand', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -27,7 +27,11 @@ export async function runCommandOnServer(command: string): Promise<boolean> {
             command
         })
     })
-    return true;
+    if (!res.ok) {
+        return { success: false, output: null }
+    }
+    const data = await res.json() as { success: boolean, output: string };
+    return data;
 }
 
 export interface Player {

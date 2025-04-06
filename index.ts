@@ -77,10 +77,13 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
 
     if (status === 'approved') {
-        await runCommandOnServer(approval.command)
+        const { output, success } = await runCommandOnServer(approval.command)
+        if (!success) {
+            return reaction.message.reply({ content: 'An error occurred while running the command on the server', embeds: [] }).catch(console.error)
+        }
         console.log(`Command \`${approval.command}\` has been executed successfully.`)
         await reaction.message.reply({
-            content: `The command \`${approval.command}\` has been executed.`,
+            content: `The command \`${approval.command}\` has been executed.\nOutput: \`${output}\``,
             embeds: [],
         }).catch(console.error)
     } else if (status === 'disapproved') {

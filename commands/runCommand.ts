@@ -45,10 +45,10 @@ export default {
             return
         }
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
-        const success = await runCommandOnServer(command)
+        const { success, output } = await runCommandOnServer(command)
         if (!success) {
             return interaction.editReply("An error occurred while running the command on the server")
         }
-        await interaction.editReply("Command executed successfully")
+        await interaction.editReply(`Command executed successfully\nOutput: \`${output}\``)
     },
 } as CommandFile
