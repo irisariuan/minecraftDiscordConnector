@@ -32,7 +32,7 @@ export async function runCommandOnServer(command: string): Promise<boolean> {
 
 export interface Player {
     name: string;
-    id: string;
+    uuid: string;
 }
 
 export async function fetchOnlinePlayers(): Promise<Player[]> {
