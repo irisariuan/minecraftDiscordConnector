@@ -4,8 +4,8 @@ export interface Approval {
     command: string,
     messageId: string,
     validTill: number,
-    approvalCount: number,
-    disapprovalCount: number,
+    approvalCount: string[],
+    disapprovalCount: string[],
 }
 export const approvalList: Map<string, Approval> = new Map()
 export const disapprovalCount = Number(process.env.DISAPPROVAL_COUNT) || 1
@@ -14,23 +14,23 @@ export const approvalCount = Number(process.env.APPROVAL_COUNT) || 1
 export function newApproval(approval: Omit<Approval, 'approvalCount' | 'disapprovalCount'>) {
     const newApproval = {
         ...approval,
-        approvalCount: 0,
-        disapprovalCount: 0,
+        approvalCount: [],
+        disapprovalCount: [],
     }
     approvalList.set(approval.messageId, newApproval);
     return newApproval;
 }
 
-export function approve(messageId: string) {
+export function approve(messageId: string, userId: string) {
     const approval = approvalList.get(messageId);
     if (!approval) return;
-    approval.approvalCount++;
+    approval.approvalCount.push(userId);
     return checkApprovalStatus(approval);
 }
-export function disapprove(messageId: string) {
+export function disapprove(messageId: string, userId: string) {
     const approval = approvalList.get(messageId);
     if (!approval) return;
-    approval.disapprovalCount++;
+    approval.disapprovalCount.push(userId);
     return checkApprovalStatus(approval);
 }
 
@@ -45,7 +45,7 @@ function checkApprovalStatus(approval: Approval): ApprovalStatus {
         removeApproval(approval.messageId);
         return 'timeout';
     }
-    const status = approval.approvalCount >= approvalCount ? 'approved' : approval.disapprovalCount >= disapprovalCount ? 'disapproved' : 'pending';
+    const status = approval.approvalCount.length >= approvalCount ? 'approved' : approval.disapprovalCount.length >= disapprovalCount ? 'disapproved' : 'pending';
     if (status !== 'pending') {
         removeApproval(approval.messageId);
     }
@@ -68,8 +68,8 @@ export function createEmbed(approval: Omit<Approval, 'messageId'>, color: number
         .setTitle(title)
         .setDescription(`Command: ${approval.command}`)
         .addFields(
-            { name: 'Approval Count', value: `${approval.approvalCount}/${approvalCount}` },
-            { name: 'Disapproval Count', value: `${approval.disapprovalCount}/${disapprovalCount}` },
+            { name: 'Approval Count', value: `${approval.approvalCount.length}/${approvalCount} (${approval.approvalCount.join(', ')})` },
+            { name: 'Disapproval Count', value: `${approval.disapprovalCount.length}/${disapprovalCount} (${approval.disapprovalCount.join(', ')})` },
             { name: 'Valid Till', value: time(new Date(approval.validTill)) },
         )
         .setTimestamp(Date.now())

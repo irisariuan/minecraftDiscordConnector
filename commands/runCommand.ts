@@ -21,8 +21,8 @@ export default {
             const embed = createEmbed({
                 command,
                 validTill,
-                approvalCount: 0,
-                disapprovalCount: 0,
+                approvalCount: [],
+                disapprovalCount: [],
             }, 0x0099FF, 'Pending')
             const message = await interaction.reply({ embeds: [embed], withResponse: true })
             if (!message.resource?.message?.id) {

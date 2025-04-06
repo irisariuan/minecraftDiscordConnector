@@ -43,8 +43,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
     if (!comparePermission(await readPermission(user.id), [PermissionFlags.approve])) return
     await reaction.message.reactions.removeAll()
     
-    if (approving) approve(reaction.message.id)
-    else disapprove(reaction.message.id)
+    if (approving) approve(reaction.message.id, user.id)
+    else disapprove(reaction.message.id, user.id)
     
     if (reaction.message.editable) {
         await reaction.message.edit({
