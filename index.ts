@@ -4,7 +4,8 @@ import { loadCommands } from './lib/commands'
 import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
 import { approvalCount, approve, createApprovalEmbed, disapprovalCount, disapprove, getApproval } from './lib/approval'
-import { parseCommandOutput, runCommandOnServer } from './lib/request'
+
+const DELETE_AFTER_MS = 3 * 1000
 
 const commands = loadCommands()
 
@@ -57,7 +58,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
         if (prevCount === approval.approvalCount.length + approval.disapprovalCount.length) {
             return reaction.message.reply({ content: 'You have not approved or disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
                 .catch(console.error)
-                .then(msg => setTimeout(() => msg?.delete().catch(console.error), 10 * 1000))
+                .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
         }
         if (reaction.message.editable) {
             await reaction.message.edit({
@@ -65,21 +66,21 @@ client.on('messageReactionAdd', async (reaction, user) => {
             }).catch(console.error)
         }
         return await reaction.message.reply({
-            content: `Approval/disapproval revoked by ${userMention(user.id)}`,
+            content: `Cancelled by ${userMention(user.id)}`,
             flags: [MessageFlags.SuppressNotifications]
         })
             .catch(console.error)
-            .then(msg => setTimeout(() => msg?.delete().catch(console.error), 10 * 1000))
+            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
     if (approving && approval.approvalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
         return await reaction.message.reply({ content: 'You have already approved this poll', flags: [MessageFlags.SuppressNotifications] })
             .catch(console.error)
-            .then(msg => setTimeout(() => msg?.delete().catch(console.error), 10 * 1000))
+            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
     if (disapproving && approval.disapprovalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
         return await reaction.message.reply({ content: 'You have already disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
             .catch(console.error)
-            .then(msg => setTimeout(() => msg?.delete().catch(console.error), 10 * 1000))
+            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
 
     // Check if the user is already in the opposite list and remove them
