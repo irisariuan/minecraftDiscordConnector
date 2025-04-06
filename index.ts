@@ -43,38 +43,38 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
     if (!comparePermission(await readPermission(user.id), [PermissionFlags.approve])) return
     await reaction.message.reactions.removeAll()
-    
+
     const status = approving ? approve(reaction.message.id, user.id) : disapprove(reaction.message.id, user.id)
-    
+
     if (reaction.message.editable) {
         await reaction.message.edit({
             embeds: [createApprovalEmbed(approval)]
         }).catch(console.error)
     }
 
-    if (status === 'approved') {
-        await runCommandOnServer(approval.command)
-        console.log(`Command ${approval.command} has been executed successfully.`)
-        await reaction.message.reply({
-            content: `The command ${approval.command} has been executed.`,
-            embeds: [],
-        }).catch(console.error)
-    } else if (status === 'disapproved') {
-        await reaction.message.reply({
-            content: `The command ${approval.command} has been disapproved.`,
-            embeds: [],
-        }).catch(console.error)
-    } else if (status === 'timeout') {
-        await reaction.message.reply({
-            content: `The command ${approval.command} has timed out.`,
-            embeds: [],
-        }).catch(console.error)
-    }
-    
     await reaction.message.reply({
         content: `Command ${approving ? 'approved' : 'disapproved'} by ${userMention(user.id)}`,
         embeds: [],
     }).catch(console.error)
+
+    if (status === 'approved') {
+        await runCommandOnServer(approval.command)
+        console.log(`Command \`${approval.command}\` has been executed successfully.`)
+        await reaction.message.reply({
+            content: `The command \`${approval.command}\` has been executed.`,
+            embeds: [],
+        }).catch(console.error)
+    } else if (status === 'disapproved') {
+        await reaction.message.reply({
+            content: `The command \`${approval.command}\` has been disapproved.`,
+            embeds: [],
+        }).catch(console.error)
+    } else if (status === 'timeout') {
+        await reaction.message.reply({
+            content: `The command \`${approval.command}\` has timed out.`,
+            embeds: [],
+        }).catch(console.error)
+    }
 })
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
