@@ -44,7 +44,6 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
     const userPerm = await readPermission(user.id)
     if (!compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
-    await reaction.message.reactions.removeAll()
 
     if (approving && approval.approvalCount.includes(user.id)) {
         return reaction.message.reply({ content: 'You have already approved this command' }).catch(console.error)
@@ -52,7 +51,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
     if (!approving && approval.disapprovalCount.includes(user.id)) {
         return reaction.message.reply({ content: 'You have already disapproved this command' }).catch(console.error)
     }
-    
+
     // Check if the user is already in the opposite list and remove them
     if (!approving && approval.approvalCount.includes(user.id)) {
         approval.approvalCount = approval.approvalCount.filter(id => id !== user.id)
@@ -72,6 +71,10 @@ client.on('messageReactionAdd', async (reaction, user) => {
         content: `Command ${approving ? 'approved' : 'disapproved'} by ${userMention(user.id)}`,
         embeds: [],
     }).catch(console.error)
+
+    if (status !== 'pending') {
+        await reaction.message.reactions.removeAll()
+    }
 
     if (status === 'approved') {
         await runCommandOnServer(approval.command)
