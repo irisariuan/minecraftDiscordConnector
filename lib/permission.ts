@@ -6,6 +6,7 @@ export const PermissionFlags = {
     runCommand: 1 << 2,
     approve: 1 << 3,
     upload: 1 << 4,
+    superApprove: 1 << 5,
 } as const
 
 export const PERMISSION = `${process.cwd()}/data/permissions.json`
@@ -13,11 +14,16 @@ export const PERMISSION = `${process.cwd()}/data/permissions.json`
 export type Permission = typeof PermissionFlags[keyof typeof PermissionFlags]
 const permissionCache = new Map<string, CacheItem<Permission>>()
 
-export function comparePermission(a: Permission, b: Permission | Permission[]) {
-    if (Array.isArray(b)) {
-        return b.every(v => (a & v) === v)
-    }
+export function comparePermission(a: Permission, b: Permission) {
     return (a & b) === b
+}
+
+export function compareAnyPermissions(a: Permission, b: Permission[]) {
+    return b.some(v => comparePermission(a, v))
+}
+
+export function compareAllPermissions(a: Permission, b: Permission[]) {
+    return b.every(v => comparePermission(a, v))
 }
 
 export function createPermission(permissions: Permission[]) {

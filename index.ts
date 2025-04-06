@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
 import { loadCommands } from './lib/commands'
-import { comparePermission, PermissionFlags, readPermission } from './lib/permission'
+import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
 import { approve, createApprovalEmbed, disapprove, getApproval } from './lib/approval'
 import { runCommandOnServer } from './lib/request'
@@ -16,7 +16,7 @@ client.once('ready', () => {
 
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
-        if (!comparePermission(await readPermission(interaction.user.id), [PermissionFlags.use])) {
+        if (!compareAllPermissions(await readPermission(interaction.user.id), [PermissionFlags.use])) {
             return interaction.reply({ content: 'You do not have permission to use this command', flags: [MessageFlags.Ephemeral] })
         }
         const { commandName } = interaction
@@ -42,10 +42,25 @@ client.on('messageReactionAdd', async (reaction, user) => {
     for (const userReaction of userReactions.values()) {
         await userReaction.users.remove(user.id).catch(console.error);
     }
-    if (!comparePermission(await readPermission(user.id), [PermissionFlags.approve])) return
+    const userPerm = await readPermission(user.id)
+    if (!compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
     await reaction.message.reactions.removeAll()
 
-    const status = approving ? approve(reaction.message.id, user.id) : disapprove(reaction.message.id, user.id)
+    if (approving && approval.approvalCount.includes(user.id)) {
+        return reaction.message.reply({ content: 'You have already approved this command' }).catch(console.error)
+    }
+    if (!approving && approval.disapprovalCount.includes(user.id)) {
+        return reaction.message.reply({ content: 'You have already disapproved this command' }).catch(console.error)
+    }
+    
+    // Check if the user is already in the opposite list and remove them
+    if (!approving && approval.approvalCount.includes(user.id)) {
+        approval.approvalCount = approval.approvalCount.filter(id => id !== user.id)
+    } else if (approving && approval.disapprovalCount.includes(user.id)) {
+        approval.disapprovalCount = approval.disapprovalCount.filter(id => id !== user.id);
+    }
+
+    const status = approving ? approve(reaction.message.id, user.id, comparePermission(userPerm, PermissionFlags.superApprove)) : disapprove(reaction.message.id, user.id, comparePermission(userPerm, PermissionFlags.superApprove))
 
     if (reaction.message.editable) {
         await reaction.message.edit({

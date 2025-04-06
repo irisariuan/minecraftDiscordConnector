@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
-import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
+import { compareAllPermissions, PermissionFlags, readPermission } from "../lib/permission";
 import { createApprovalEmbed, createEmbed, getApproval, newApproval, removeApproval } from "../lib/approval";
 import { runCommandOnServer } from "../lib/request";
 
@@ -16,7 +16,7 @@ export default {
     async execute(interaction, client) {
         const command = interaction.options.getString("command", true)
 
-        if (!comparePermission(await readPermission(interaction.user.id), [PermissionFlags.runCommand])) {
+        if (!compareAllPermissions(await readPermission(interaction.user.id), [PermissionFlags.runCommand])) {
             const validTill = Date.now() + (Number(process.env.APPROVAL_TIMEOUT) || 1000 * 60 * 60 * 2) // 2 hours
             const embed = createEmbed({
                 command,
