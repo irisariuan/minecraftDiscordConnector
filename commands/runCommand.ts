@@ -14,13 +14,13 @@ export default {
                 .setRequired(true)
         )
         .addBooleanOption(option =>
-            option.setName("force")
-                .setDescription("Force run the command without approval (requires permission)")
+            option.setName("poll")
+                .setDescription("Use poll")
                 .setRequired(false)
         ),
     async execute(interaction, client) {
         const command = interaction.options.getString("command", true)
-        const force = interaction.options.getBoolean("force") || false
+        const force = interaction.options.getBoolean("poll") === false
         const canRunCommand = compareAllPermissions(await readPermission(interaction.user.id), [PermissionFlags.runCommand])
 
         if (!canRunCommand && !force) {
