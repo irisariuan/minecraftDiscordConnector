@@ -17,7 +17,7 @@ export async function getLogs(): Promise<LogLine[]> {
     return data
 }
 
-export async function runCommandOnServer(command: string): Promise<{ success: boolean, output: string | null }> {
+export async function runCommandOnServer(command: string) {
     const res = await fetch('http://localhost:6001/runCommand', {
         method: 'POST',
         headers: {
@@ -28,9 +28,9 @@ export async function runCommandOnServer(command: string): Promise<{ success: bo
         })
     })
     if (!res.ok) {
-        return { success: false, output: null }
+        return { success: false, output: null, logger: null }
     }
-    const data = await res.json() as { success: boolean, output: string };
+    const data = await res.json() as { success: boolean, output: string, logger: string };
     return data;
 }
 
@@ -51,4 +51,11 @@ export async function fetchOnlinePlayers(): Promise<Player[]> {
     }
     const data = await res.json() as Player[];
     return data;
+}
+
+export function parseCommandOutput(output: string | null, success: boolean) {
+    if (!success) {
+        return 'Command execution failed';
+    }
+    return output ? `Command executed successfully\nOutput: \`${output}\`` : 'No output returned from the command.'
 }

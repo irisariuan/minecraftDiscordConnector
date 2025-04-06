@@ -4,7 +4,7 @@ import { loadCommands } from './lib/commands'
 import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
 import { approve, createApprovalEmbed, disapprove, getApproval } from './lib/approval'
-import { runCommandOnServer } from './lib/request'
+import { parseCommandOutput, runCommandOnServer } from './lib/request'
 
 const commands = loadCommands()
 
@@ -37,14 +37,33 @@ client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return
     const approval = getApproval(reaction.message.id)
     if (!approval) return
-    const approving = reaction.emoji.name === '✅'
+    const userPerm = await readPermission(user.id)
+    const approving = reaction.emoji.identifier === 'white_check_mark' || reaction.emoji.identifier === 'checkered_flag'
+    const canceling = reaction.emoji.identifier === 'outbox_tray'
+    const superApprove = reaction.emoji.identifier === 'checkered_flag' || reaction.emoji.identifier === 'flag_white'
+    const canSuperApprove = comparePermission(userPerm, PermissionFlags.superApprove)
+
     const userReactions = reaction.message.reactions.cache.filter(r => r.users.cache.has(user.id))
     for (const userReaction of userReactions.values()) {
         await userReaction.users.remove(user.id).catch(console.error);
     }
-    const userPerm = await readPermission(user.id)
     if (!compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
-
+    if (canceling) {
+        const prevCount = approval.approvalCount.length + approval.disapprovalCount.length
+        approval.approvalCount = approval.approvalCount.filter(id => id !== user.id)
+        approval.disapprovalCount = approval.disapprovalCount.filter(id => id !== user.id)
+        if (prevCount === approval.approvalCount.length + approval.disapprovalCount.length) {
+            return reaction.message.reply({ content: 'You have not approved or disapproved this command' }).catch(console.error)
+        }
+        if (reaction.message.editable) {
+            await reaction.message.edit({
+                embeds: [createApprovalEmbed(approval)]
+            }).catch(console.error)
+        }
+        await reaction.message.reply({
+            content: `Command approval canceled by ${userMention(user.id)}`,
+        }).catch(console.error)
+    }
     if (approving && approval.approvalCount.includes(user.id)) {
         return reaction.message.reply({ content: 'You have already approved this command' }).catch(console.error)
     }
@@ -59,7 +78,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
         approval.disapprovalCount = approval.disapprovalCount.filter(id => id !== user.id);
     }
 
-    const status = approving ? approve(reaction.message.id, user.id, comparePermission(userPerm, PermissionFlags.superApprove)) : disapprove(reaction.message.id, user.id, comparePermission(userPerm, PermissionFlags.superApprove))
+    const status = approving ? approve(reaction.message.id, user.id, canSuperApprove && superApprove) : disapprove(reaction.message.id, user.id, canSuperApprove && superApprove)
 
     if (reaction.message.editable) {
         await reaction.message.edit({
@@ -68,8 +87,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
 
     await reaction.message.reply({
-        content: `Command ${approving ? 'approved' : 'disapproved'} by ${userMention(user.id)}`,
-        embeds: [],
+        content: `Command ${approving ? 'approved' : 'disapproved'} by ${userMention(user.id)}${canSuperApprove && superApprove ? ' (forced)' : ''}`,
     }).catch(console.error)
 
     if (status !== 'pending') {
@@ -78,25 +96,18 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
     if (status === 'approved') {
         const { output, success } = await runCommandOnServer(approval.command)
-        if (!success) {
-            return reaction.message.reply({ content: 'An error occurred while running the command on the server', embeds: [] }).catch(console.error)
-        }
-        console.log(`Command \`${approval.command}\` has been executed successfully.`)
-        await reaction.message.reply({
-            content: `The command \`${approval.command}\` has been executed.\nOutput: \`${output}\``,
-            embeds: [],
-        }).catch(console.error)
-    } else if (status === 'disapproved') {
-        await reaction.message.reply({
+        return await reaction.message.reply({
+            content: parseCommandOutput(output, success),
+        })
+    }
+    if (status === 'disapproved') {
+        return await reaction.message.reply({
             content: `The command \`${approval.command}\` has been disapproved.`,
-            embeds: [],
-        }).catch(console.error)
-    } else if (status === 'timeout') {
-        await reaction.message.reply({
-            content: `The command \`${approval.command}\` has timed out.`,
-            embeds: [],
         }).catch(console.error)
     }
+    await reaction.message.reply({
+        content: `The command \`${approval.command}\` has timed out.`,
+    }).catch(console.error)
 })
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);

@@ -1,8 +1,8 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { formatEmoji, MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { compareAllPermissions, PermissionFlags, readPermission } from "../lib/permission";
 import { createApprovalEmbed, createEmbed, getApproval, newApproval, removeApproval } from "../lib/approval";
-import { runCommandOnServer } from "../lib/request";
+import { parseCommandOutput, runCommandOnServer } from "../lib/request";
 
 export default {
     command: new SlashCommandBuilder()
@@ -40,15 +40,15 @@ export default {
                 removeApproval(message.resource?.message?.id)
             })
             console.log(`Approval added for command ${command} with message id ${message.resource?.message?.id}`)
-            await message.resource.message.react('✅')
-            await message.resource.message.react('❌')
+            await message.resource.message.react(formatEmoji('white_check_mark'))
+            await message.resource.message.react(formatEmoji('cross_mark'))
+            await message.resource.message.react(formatEmoji('outbox_tray'))
+            await message.resource.message.react(formatEmoji('checkered_flag'))
+            await message.resource.message.react(formatEmoji('flag_white'))
             return
         }
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
         const { success, output } = await runCommandOnServer(command)
-        if (!success) {
-            return interaction.editReply("An error occurred while running the command on the server")
-        }
-        await interaction.editReply(`Command executed successfully\nOutput: \`${output}\``)
+        await interaction.editReply(parseCommandOutput(output, success))
     },
 } as CommandFile
