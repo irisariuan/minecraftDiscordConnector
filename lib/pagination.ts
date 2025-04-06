@@ -132,7 +132,7 @@ export function createEmbed<T>({ result, page, options, formatter }: CreateEmbed
                 page * pageSize, (page + 1) * pageSize
             )
         )
-        .setFooter({ text: `Showing logs ${page * pageSize + 1}-${Math.min((page + 1) * pageSize, result.length)} of ${result.length}` })
+        .setFooter({ text: `Showing results ${page * pageSize + 1}-${Math.min((page + 1) * pageSize, result.length)} of ${result.length}` })
 }
 
 export const pageSize = 20

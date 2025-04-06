@@ -21,6 +21,10 @@ export default {
 
         sendPaginationMessage<Player>({
             interaction,
+            options: {
+                notFoundMessage: "No players found",
+                title: "Online Players",
+            },
             getResult: async () => {
                 return await onlinePlayers.getData() || []
             },
