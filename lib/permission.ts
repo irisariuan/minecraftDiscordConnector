@@ -51,6 +51,11 @@ export async function readPermission(user: string) {
     const permissions = await readPermissionJson()
     return permissions[user] || 0
 }
+
+export function parsePermission(permission: Permission): string[] {
+    return Object.entries(PermissionFlags).filter(([_, value]) => comparePermission(permission, value)).map(([key]) => key)
+}
+
 export async function appendPermission(user: string, permission: Permission[] | Permission) {
     const currentPermission = await readPermission(user)
     const newPermission = Array.isArray(permission) ? createPermission(permission) : permission
