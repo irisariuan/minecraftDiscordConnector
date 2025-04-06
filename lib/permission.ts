@@ -44,7 +44,7 @@ export async function writePermission(user: string, permission: Permission) {
 }
 
 export async function readPermission(user: string) {
-    const cache = permissionCache.get(user)?.getData()
+    const cache = await permissionCache.get(user)?.getData()
     if (cache) {
         return cache
     }

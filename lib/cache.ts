@@ -45,9 +45,9 @@ export class CacheItem<T> {
         return false;
     }
 
-    getData(): T | null {
+    async getData(): Promise<T | null> {
         if (this.checkExpired()) {
-            this.update();
+            await this.update();
         }
         return this.data;
     }

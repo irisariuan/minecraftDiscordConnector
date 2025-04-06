@@ -1,5 +1,4 @@
-import { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, time, ComponentType, type Message, type ChatInputCommandInteraction, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, type ModalActionRowComponentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, type Client } from "discord.js"
-import type { LogLine } from "./request"
+import { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, time, ComponentType, type Message, type ChatInputCommandInteraction, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, type ModalActionRowComponentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, type Client, type ColorResolvable } from "discord.js"
 
 export enum PageAction {
     PREVIOUS = 'prev',
@@ -7,24 +6,27 @@ export enum PageAction {
     REFRESH = 'refresh',
     FIRST = 'first',
     LAST = 'last',
-    SET_PAGE = 'setpage'
+    SET_PAGE = 'setpage',
+    SET_FILTER = 'setfilter',
 }
 
 export enum ModalAction {
-    MODAL_ID = 'setpage',
-    INPUT = 'page',
+    MODAL_PAGE_ID = 'setpage',
+    PAGE_INPUT = 'page',
+    MODAL_FILTER_ID = 'filterpage',
+    FILTER_INPUT = 'filterinput',
 }
 
 function calculateMaxPage(resultLength: number) {
     return Math.ceil(resultLength / pageSize) - 1
 }
 
-export function createModal() {
+export function createPageModal() {
     const modal = new ModalBuilder()
-        .setCustomId(ModalAction.MODAL_ID)
+        .setCustomId(ModalAction.MODAL_PAGE_ID)
         .setTitle('Set Page')
     const pageInput = new TextInputBuilder()
-        .setCustomId(ModalAction.INPUT)
+        .setCustomId(ModalAction.PAGE_INPUT)
         .setLabel('Page')
         .setPlaceholder('Enter page number')
         .setRequired(true)
@@ -34,7 +36,27 @@ export function createModal() {
     return modal
 }
 
-export function createButtons(page: number, contentLength: number, maxPage: number = calculateMaxPage(contentLength)) {
+export function createFilterModal() {
+    const modal = new ModalBuilder()
+        .setCustomId(ModalAction.MODAL_FILTER_ID)
+        .setTitle('Filter');
+    const filterInput = new TextInputBuilder()
+        .setCustomId(ModalAction.FILTER_INPUT)
+        .setLabel('Filter')
+        .setPlaceholder('Enter filter keyword')
+        .setRequired(false)
+        .setStyle(TextInputStyle.Short);
+    const firstRow = new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(filterInput);
+    modal.addComponents(firstRow);
+    return modal;
+}
+
+interface CreateButtonsProps {
+    page: number,
+    contentLength: number,
+    maxPage?: number
+}
+export function createButtons({ page, contentLength, maxPage = calculateMaxPage(contentLength) }: CreateButtonsProps) {
     const prevBtn = new ButtonBuilder()
         .setCustomId(PageAction.PREVIOUS)
         .setLabel('Previous Page')
@@ -55,9 +77,13 @@ export function createButtons(page: number, contentLength: number, maxPage: numb
         .setCustomId(PageAction.LAST)
         .setLabel('Last Page')
         .setStyle(ButtonStyle.Secondary)
-    const modalBtn = new ButtonBuilder()
+    const pageModalBtn = new ButtonBuilder()
         .setCustomId(PageAction.SET_PAGE)
         .setLabel('Set Page')
+        .setStyle(ButtonStyle.Secondary)
+    const filterModalBtn = new ButtonBuilder()
+        .setCustomId(PageAction.SET_FILTER)
+        .setLabel('Set Filter')
         .setStyle(ButtonStyle.Secondary)
 
     const firstRow = new ActionRowBuilder<ButtonBuilder>()
@@ -72,32 +98,36 @@ export function createButtons(page: number, contentLength: number, maxPage: numb
         lastBtn.setDisabled(true)
     }
     firstRow.addComponents(prevBtn, nextBtn)
-    secondRow.addComponents(refreshBtn, modalBtn)
+    secondRow.addComponents(refreshBtn, pageModalBtn, filterModalBtn)
     if (maxPage > 1) {
         secondRow.addComponents(firstBtn, lastBtn)
     }
     return [firstRow, secondRow]
 }
 
-export function getPage(page: number, maxPage: number, pageAction: PageAction) {
+interface GetPageProps {
+    page: number,
+    maxPage: number,
+    pageAction: PageAction
+}
+export function getPage({ page, maxPage, pageAction }: GetPageProps) {
     return Math.max(Math.min(pageAction === PageAction.PREVIOUS ? page - 1 : pageAction === PageAction.NEXT ? page + 1 : pageAction === PageAction.FIRST ? 0 : pageAction === PageAction.LAST ? maxPage : page, maxPage), 0)
 }
 
-export function createEmbed(result: LogLine[], page: number) {
+interface CreateEmbedProps<T> {
+    result: T[],
+    page: number,
+    formatter: (v: T, i: number) => { name: string, value: string },
+    options?: Pick<PaginationOptions, 'title' | 'mainColor'>
+}
+
+export function createEmbed<T>({ result, page, options, formatter }: CreateEmbedProps<T>) {
     return new EmbedBuilder()
-        .setTitle('Logs')
+        .setTitle(options?.title || 'Logs')
         .setTimestamp(Date.now())
-        .setColor('Green')
+        .setColor(options?.mainColor || 'Green')
         .addFields(...result
-            .map(
-                v => ({
-                    name: v.type,
-                    value: [
-                        time(new Date(v.timestamp)),
-                        v.message
-                    ].join('\n')
-                })
-            )
+            .map(formatter)
             .slice(
                 page * pageSize, (page + 1) * pageSize
             )
@@ -107,31 +137,59 @@ export function createEmbed(result: LogLine[], page: number) {
 
 export const pageSize = 20
 
-export async function sendPaginationMessage(getResult: () => Promise<LogLine[] | undefined>, interaction: ChatInputCommandInteraction, filter?: string) {
-    const result = (await getResult())?.filter(v => filter ? v.type === filter : true)
+interface PaginationOptions {
+    filter?: string,
+    notFoundMessage?: string,
+    title?: string,
+    mainColor?: ColorResolvable,
+}
+
+interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
+    getResult: () => Promise<T[] | undefined>
+}
+
+export async function sendPaginationMessage<T>({ getResult, interaction, options, filterFunc, formatter }: SendPaginationMessageProps<T>) {
+    const result = (await getResult())?.filter(filterFunc(options?.filter))
     let interactionResponse: Message
     let page = 0
     if (!result || result.length <= 0) {
         interactionResponse = await interaction.editReply({
-            content: 'No log found',
+            content: options?.notFoundMessage || 'No results',
             embeds: [],
-            components: createButtons(0, 0)
+            components: createButtons({ page: 0, contentLength: 0 })
         })
     } else {
-        interactionResponse = await editInteraction(result, interaction, page, filter)
+        interactionResponse = await editInteraction({ result, interaction, page, options, filterFunc, formatter })
     }
 
     interactionResponse.createMessageComponentCollector({ componentType: ComponentType.Button }).on('collect', async i => {
         if (i.customId === PageAction.SET_PAGE && !i.deferred) {
-            const modal = createModal()
+            const modal = createPageModal()
             await i.showModal(modal).catch(() => { })
-            const reply = await i.awaitModalSubmit({ time: 1000 * 60 * 5, filter: (i) => i.customId === ModalAction.MODAL_ID })
+            const reply = await i.awaitModalSubmit({ time: 1000 * 60 * 5, filter: (i) => i.customId === ModalAction.MODAL_PAGE_ID })
             await reply.deferUpdate()
             const oldPage = page
-            page = (Number(reply.fields.getTextInputValue(ModalAction.INPUT)) || page + 1) - 1
+            page = (Number(reply.fields.getTextInputValue(ModalAction.PAGE_INPUT)) || page + 1) - 1
             if (oldPage === page) return
             const maxPage = calculateMaxPage(result?.length || 0)
-            return editInteraction(result || [], interaction, Math.max(Math.min(page, maxPage), 0), filter)
+            return editInteraction({ result: result || [], interaction, page: Math.max(Math.min(page, maxPage), 0), options, filterFunc, formatter })
+        }
+
+        if (i.customId === PageAction.SET_FILTER && !i.deferred) {
+            const modal = createFilterModal()
+            await i.showModal(modal).catch(() => { })
+            const reply = await i.awaitModalSubmit({ time: 1000 * 60 * 5, filter: (i) => i.customId === ModalAction.MODAL_FILTER_ID })
+            await reply.deferUpdate()
+            const filter = reply.fields.getTextInputValue(ModalAction.FILTER_INPUT)
+            const filteredResult = result?.filter(filterFunc(filter))
+            if (!filteredResult || filteredResult.length <= 0) return await interaction.editReply({
+                content: options?.notFoundMessage || 'No results',
+                embeds: [],
+                components: createButtons({ page: 0, contentLength: 0 })
+            })
+            const maxPage = calculateMaxPage(filteredResult.length)
+            page = getPage({ page, maxPage, pageAction: PageAction.SET_FILTER })
+            return editInteraction({ result: filteredResult, interaction, page: Math.max(Math.min(page, maxPage), 0), options, filterFunc, formatter })
         }
 
         i.deferUpdate()
@@ -139,27 +197,39 @@ export async function sendPaginationMessage(getResult: () => Promise<LogLine[] |
         const reloadResult = i.customId === PageAction.REFRESH ? await getResult() : result
 
         if (!reloadResult || reloadResult.length <= 0) return interaction.editReply({
-            content: 'No log found',
+            content: options?.notFoundMessage || 'No results',
             embeds: [],
-            components: createButtons(0, 0)
+            components: createButtons({ page: 0, contentLength: 0 })
         })
 
         const maxPage = calculateMaxPage(reloadResult.length)
-        page = getPage(page, maxPage, i.customId as PageAction)
+        page = getPage({ page, maxPage, pageAction: i.customId as PageAction })
 
         if (!reloadResult) return await interaction.editReply({
-            content: 'No log found',
+            content: options?.notFoundMessage || 'No results',
             embeds: [],
-            components: createButtons(0, 0)
+            components: createButtons({ page: 0, contentLength: 0 })
         })
 
-        editInteraction(reloadResult, interaction, page, filter)
+        await editInteraction({ result: reloadResult, interaction, page, options, filterFunc, formatter })
     })
 }
 
-async function editInteraction(result: LogLine[], interaction: ChatInputCommandInteraction, page: number, filter?: string) {
-    const filteredResult = result.filter(v => filter ? v.type === filter : true)
-    const embed = createEmbed(filteredResult, page)
-    const buttonRow = createButtons(page, filteredResult.length)
+interface BasePaginationProps<T> {
+    interaction: ChatInputCommandInteraction,
+    filterFunc: (filter?: string) => ((v: T) => boolean),
+    formatter: (v: T, i: number) => { name: string, value: string },
+    options?: PaginationOptions,
+}
+
+interface EditInteractionProps<T> extends BasePaginationProps<T> {
+    result: T[],
+    page: number,
+}
+
+async function editInteraction<T>({ result, interaction, page, options, filterFunc, formatter }: EditInteractionProps<T>) {
+    const filteredResult = result.filter(filterFunc(options?.filter))
+    const embed = createEmbed({ result: filteredResult, page, options, formatter })
+    const buttonRow = createButtons({ page, contentLength: filteredResult.length })
     return await interaction.editReply({ embeds: [embed], components: buttonRow, content: `Page ${page + 1}/${Math.ceil(filteredResult.length / pageSize)}`.trim() })
 }

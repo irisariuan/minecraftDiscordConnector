@@ -1,20 +1,37 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
-import { fetchOnlinePlayers } from "../lib/request";
+import { fetchOnlinePlayers, type Player } from "../lib/request";
+import { sendPaginationMessage } from "../lib/pagination";
+import { CacheItem } from "../lib/cache";
+
+const onlinePlayers = new CacheItem<Player[]>(null, {
+    ttl: 1000 * 60 * 5,
+    async updateMethod() {
+        return await fetchOnlinePlayers()
+    },
+})
 
 export default {
     command: new SlashCommandBuilder()
         .setName("onlineplayers")
         .setDescription("Get a list of online players"),
     async execute(interaction, client) {
-        
+
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
 
-        const onlinePlayers = await fetchOnlinePlayers()
-        if (!onlinePlayers || onlinePlayers.length === 0) {
-            return interaction.editReply("No players are currently online.")
-        }
-        const playerList = onlinePlayers.join(", ")
-        await interaction.editReply(`Online players: ${playerList}`)
+        sendPaginationMessage<Player>({
+            interaction,
+            getResult: async () => {
+                return await onlinePlayers.getData() || []
+            },
+            filterFunc: (filter) => (player => {
+                if (!filter) return true
+                return player.name.toLowerCase().includes(filter.toLowerCase())
+            }),
+            formatter: (player) => ({
+                name: player.name,
+                value: `ID: ${player.id}`,
+            }),
+        })
     },
 } as CommandFile

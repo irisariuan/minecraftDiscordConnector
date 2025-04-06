@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { sendPaginationMessage } from "../lib/pagination";
 import { getLogs } from "../lib/request";
@@ -14,11 +14,27 @@ export default {
         ),
     async execute(interaction, client) {
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
-        
+
         const filter = interaction.options.getString("filter");
-        
-        sendPaginationMessage(() => {
-            return getLogs()
-        }, interaction, filter || undefined)
+
+        sendPaginationMessage({
+            interaction,
+            options: {
+                filter: filter || undefined
+            },
+            getResult: () => {
+                return getLogs();
+            },
+            filterFunc: (filter) => ((log) => {
+                if (!filter) return true;
+                return log.type.includes(filter) || log.message.includes(filter);
+            }),
+            formatter: (log) => {
+                return {
+                    name: log.type.toUpperCase(),
+                    value: `${time(new Date(log.timestamp))}\n${log.message}`,
+                }
+            }
+        })
     }
 } as CommandFile

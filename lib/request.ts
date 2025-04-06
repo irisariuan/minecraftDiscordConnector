@@ -30,7 +30,7 @@ export async function runCommandOnServer(command: string): Promise<boolean> {
     return true;
 }
 
-interface Player {
+export interface Player {
     name: string;
     id: string;
 }
