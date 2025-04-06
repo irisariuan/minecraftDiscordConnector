@@ -1,4 +1,4 @@
-import { GuildMember, MessageFlags, Role, SlashCommandBuilder, User, userMention } from "discord.js";
+import { GuildMember, MessageFlags, Role, roleMention, SlashCommandBuilder, User, userMention } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { appendPermission, PermissionFlags, removePermission } from "../lib/permission";
 
@@ -48,7 +48,7 @@ export default {
                 }
             }
             await interaction.reply({
-                content: `Permission ${addPerm ? "added" : "removed"} for role ${userMention(users.id)}`,
+                content: `Permission ${addPerm ? "added" : "removed"} for role ${roleMention(users.id)}`,
                 flags: [MessageFlags.Ephemeral]
             });
         }
