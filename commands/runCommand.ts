@@ -1,4 +1,4 @@
-import { EmbedBuilder, MessageFlags, SlashCommandBuilder, time } from "discord.js";
+import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
 import { createEmbed, newApproval } from "../lib/approval";
