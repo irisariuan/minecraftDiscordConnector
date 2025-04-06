@@ -24,7 +24,10 @@ client.on('interactionCreate', async (interaction) => {
         await Promise.try(() => command.execute(interaction, client))
             .catch(err => {
                 console.error(err)
-                interaction.reply({ content: 'An error occurred while executing the command', flags: [MessageFlags.Ephemeral] }).catch(console.error)
+                interaction.reply({ content: 'An error occurred while executing the command', flags: [MessageFlags.Ephemeral] }).catch(err => {
+                    console.error(err)
+                    interaction.editReply({ content: 'An error occurred while executing the command' }).catch(console.error)
+                })
             })
     }
 })
