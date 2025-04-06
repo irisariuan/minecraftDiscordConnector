@@ -70,7 +70,7 @@ export function createEmbed(approval: Omit<Approval, 'messageId' | 'timeout'>, c
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
-        .setDescription(`Command: ${approval.command}`)
+        .setDescription(`Command: \`${approval.command}\``)
         .addFields(
             { name: 'Approval Count', value: `${approval.approvalCount.length}/${approvalCount} (${approval.approvalCount.join(', ')})` },
             { name: 'Disapproval Count', value: `${approval.disapprovalCount.length}/${disapprovalCount} (${approval.disapprovalCount.join(', ')})` },
