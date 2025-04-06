@@ -1,7 +1,7 @@
 import { EmbedBuilder, MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
-import { addApproval } from "../lib/approval";
+import { newApproval } from "../lib/approval";
 import { runCommandOnServer } from "../lib/request";
 
 export default {
@@ -29,14 +29,14 @@ export default {
             if (!message.resource?.message?.id) {
                 return interaction.editReply({ content: "Unknown error occurred" })
             }
-            addApproval({
+            newApproval({
                 command,
                 messageId: message.resource?.message?.id,
-                validTill
+                validTill,
             })
             console.log(`Approval added for command ${command} with message id ${message.resource?.message?.id}`)
-            message.resource.message.react('✅')
-            message.resource.message.react('❌')
+            await message.resource.message.react('✅')
+            await message.resource.message.react('❌')
             return
         }
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })

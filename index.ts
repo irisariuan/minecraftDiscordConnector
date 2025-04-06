@@ -1,9 +1,8 @@
-import { Client, EmbedBuilder, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
+import { Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
 import { loadCommands } from './lib/commands'
 import { comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
-import { getApproval, removeApproval } from './lib/approval'
-import { runCommandOnServer } from './lib/request'
+import { approve, createApprovalEmbed, disapprove, getApproval } from './lib/approval'
 
 const commands = loadCommands()
 
@@ -42,34 +41,20 @@ client.on('messageReactionAdd', async (reaction, user) => {
         await userReaction.users.remove(user.id).catch(console.error);
     }
     if (!comparePermission(await readPermission(user.id), [PermissionFlags.approve])) return
-    if (approving) {
-        const success = await runCommandOnServer(approval.command)
-        if (!success) {
-            return reaction.message.reply("An error occurred while running the command on the server")
-        }
-        const embed = new EmbedBuilder()
-        .setTitle('Success')
-        .setColor(0x00FF00)
-        .setDescription("Command executed successfully")
-        .addFields(
-            { name: 'Command', value: approval.command },
-            { name: 'Execution', value: 'Command executed successfully' },
-        )
-        await reaction.message.reply({ embeds: [embed] });
-        removeApproval(approval.messageId)
-    } else {
-        const embed = new EmbedBuilder()
-        .setTitle('Rejected')
-        .setColor(0xFF0000)
-        .setDescription("Command rejected")
-        .addFields(
-            { name: 'Command', value: approval.command },
-            { name: 'Rejection', value: `${userMention(user.id)} has rejected the command!` },
-        )
-        await reaction.message.reply({ embeds: [embed] });
-        removeApproval(approval.messageId)
-    }
     await reaction.message.reactions.removeAll()
+    
+    if (approving) approve(reaction.message.id)
+    else disapprove(reaction.message.id)
+    
+    if (reaction.message.editable) {
+        await reaction.message.edit({
+            embeds: [createApprovalEmbed(approval)]
+        }).catch(console.error)
+    }
+    await reaction.message.reply({
+        content: `Command ${approving ? 'approved' : 'disapproved'} by ${userMention(user.id)}`,
+        embeds: [],
+    }).catch(console.error)
 })
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
