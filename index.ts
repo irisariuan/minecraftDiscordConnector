@@ -3,11 +3,11 @@ import { Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js
 import { loadCommands } from './lib/commands'
 import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
-import { approvalCount, approve, createApprovalEmbed, disapprovalCount, disapprove, getApproval } from './lib/approval'
+import { globalApprovalCount, approve, createApprovalEmbed, globalDisapprovalCount, disapprove, getApproval } from './lib/approval'
 
 const DELETE_AFTER_MS = 3 * 1000
 
-const commands = loadCommands()
+const commands = await loadCommands()
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions] })
 
@@ -52,10 +52,10 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
     if (!isValidReaction || !compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
     if (canceling) {
-        const prevCount = approval.approvalCount.length + approval.disapprovalCount.length
-        approval.approvalCount = approval.approvalCount.filter(id => id !== user.id)
-        approval.disapprovalCount = approval.disapprovalCount.filter(id => id !== user.id)
-        if (prevCount === approval.approvalCount.length + approval.disapprovalCount.length) {
+        const prevCount = approval.approvalIds.length + approval.disapprovalIds.length
+        approval.approvalIds = approval.approvalIds.filter(id => id !== user.id)
+        approval.disapprovalIds = approval.disapprovalIds.filter(id => id !== user.id)
+        if (prevCount === approval.approvalIds.length + approval.disapprovalIds.length) {
             return reaction.message.reply({ content: 'You have not approved or disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
                 .catch(console.error)
                 .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
@@ -72,22 +72,22 @@ client.on('messageReactionAdd', async (reaction, user) => {
             .catch(console.error)
             .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
-    if (approving && approval.approvalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
+    if (approving && approval.approvalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
         return await reaction.message.reply({ content: 'You have already approved this poll', flags: [MessageFlags.SuppressNotifications] })
             .catch(console.error)
             .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
-    if (disapproving && approval.disapprovalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
+    if (disapproving && approval.disapprovalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
         return await reaction.message.reply({ content: 'You have already disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
             .catch(console.error)
             .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
 
     // Check if the user is already in the opposite list and remove them
-    if (disapproving && approval.approvalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
-        approval.approvalCount = approval.approvalCount.filter(id => id !== user.id)
-    } else if (approving && approval.disapprovalCount.includes(user.id) && !(superApprove && canSuperApprove)) {
-        approval.disapprovalCount = approval.disapprovalCount.filter(id => id !== user.id);
+    if (disapproving && approval.approvalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
+        approval.approvalIds = approval.approvalIds.filter(id => id !== user.id)
+    } else if (approving && approval.disapprovalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
+        approval.disapprovalIds = approval.disapprovalIds.filter(id => id !== user.id);
     }
 
     const status = approving ? approve(reaction.message.id, user.id, canSuperApprove && superApprove) : disapprove(reaction.message.id, user.id, canSuperApprove && superApprove)
@@ -98,7 +98,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
         }).catch(console.error)
     }
 
-    const countStr = approving ? `${approval.approvalCount.length}/${approvalCount}` : `${approval.disapprovalCount.length}/${disapprovalCount}`
+    const countStr = approving ? `${approval.approvalIds.length}/${globalApprovalCount}` : `${approval.disapprovalIds.length}/${globalDisapprovalCount}`
 
     await reaction.message.reply({
         content: `${approving ? 'Approved' : 'Disapproved'} by ${userMention(user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,

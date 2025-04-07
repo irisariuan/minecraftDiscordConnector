@@ -22,8 +22,8 @@ export default {
             options: {
                 filter: filter || undefined
             },
-            getResult: () => {
-                return getLogs();
+            async getResult() {
+                return await getLogs() || [];
             },
             filterFunc: (filter) => ((log) => {
                 if (!filter) return true;

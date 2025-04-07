@@ -7,12 +7,12 @@ export interface CommandFile {
     executeReaction?: (interaction: MessageReaction | PartialMessageReaction, user: User | PartialUser, client: Client) => void | Promise<void>
 }
 
-export function loadCommands() {
+export async function loadCommands() {
     const glob = new Bun.Glob("commands/**/*.ts")
     const commands: CommandFile[] = [];
 
     for (const path of glob.scanSync(process.cwd())) {
-        const commandFile = require(join(process.cwd(), path)).default;
+        const commandFile = (await import(join(process.cwd(), path))).default;
         if (!commandFile) continue
         commands.push(commandFile);
     }

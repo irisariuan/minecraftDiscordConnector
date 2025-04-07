@@ -1,9 +1,10 @@
 import { spawn, type Subprocess } from "bun"
 import { CacheItem } from "./cache"
 import { isServerAlive } from "./request"
-import { createLoggerWritableStream } from "./utils"
+import { join } from "node:path"
+import { createLoggerWritableStream, safeFetch } from "./utils"
 
-if (!process.env.SERVER_DIR) throw new Error('SERVER_DIR environment variable is not set')
+if (!process.env.SERVER_DIR || !(await Bun.file(join(process.env.SERVER_DIR, 'start.sh')).exists())) throw new Error('SERVER_DIR environment variable is not set')
 
 export const serverOnline = new CacheItem<boolean>(false, {
     interval: 1000 * 5,
@@ -13,26 +14,34 @@ export const serverOnline = new CacheItem<boolean>(false, {
 export let shuttingDown = false
 let childProcess: Subprocess<'ignore', 'pipe', 'inherit'> | null = null
 
-export async function shutdown(tick: number) {
-    if (!serverOnline || shuttingDown) return false
+function killProcessTimeout(tick: number) {
+    return new Promise<void>(r => setTimeout(async () => {
+        childProcess?.kill('SIGKILL')
+        await childProcess?.exited
+        shuttingDown = false;
+        r()
+    }, tick / 20 * 1000));
+}
+
+export async function initShutdown(tick: number) {
+    await serverOnline.update()
+    if (!serverOnline) return { ok: false, promise: Promise.resolve() }
+    if (shuttingDown) return { ok: false, promise: killProcessTimeout(tick) }
     shuttingDown = true
-    const response = await fetch('https://localhost:6001/shutdown', {
+    const response = await safeFetch('http://localhost:6001/shutdown', {
         body: JSON.stringify({ tick }),
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         }
     })
-    setTimeout(() => {
-        shuttingDown = false;
-
-    }, 1000 * 30 + tick / 20 * 1000);
-    return response.ok
+    return { ok: response ? response.ok : false, promise: killProcessTimeout(tick) }
 }
 
 export async function startServer() {
+    await serverOnline.update()
     if (await serverOnline.getData()) return null
-    childProcess = spawn(['./start.sh'], {
+    childProcess = spawn(['sh', './start.sh'], {
         cwd: process.env.SERVER_DIR,
         detached: true,
         stdin: 'ignore',
@@ -46,9 +55,37 @@ export async function startServer() {
             childProcess = null
         },
     })
-    
+
     childProcess.stdout.pipeTo(createLoggerWritableStream({ formatter: chunk => `[SERVER] ${chunk}` }))
     serverOnline.setData(true)
 
     return childProcess.pid
 }
+
+export async function completeShutdown() {
+    const { ok, promise } = await initShutdown(0)
+    console.log(`Shutdown ${ok ? 'successful' : 'failed'}`)
+    await promise
+    console.log('Shutdown complete')
+    if (childProcess) {
+        childProcess = null
+    }
+    serverOnline.setData(false)
+    shuttingDown = false
+}
+
+process.on('SIGINT', async () => {
+    await completeShutdown()
+    process.exit(64)
+})
+
+process.on('beforeExit', async code => {
+    if (code === 64) return
+    await completeShutdown()
+    process.exit(code)
+})
+
+process.on('exit', async code => {
+    console.log(`Process exited with code ${code}`)
+    process.exit(code)
+})

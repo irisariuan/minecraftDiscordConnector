@@ -5,8 +5,8 @@ export interface BaseApproval {
     content: string,
     validTill: number,
     duration: number,
-    approvalCount: string[],
-    disapprovalCount: string[],
+    approvalIds: string[],
+    disapprovalIds: string[],
 }
 
 export interface Approval extends BaseApproval {
@@ -18,20 +18,22 @@ export interface Approval extends BaseApproval {
 
 export interface ApprovalOptions {
     description: string,
+    approvalCount?: number,
+    disapprovalCount?: number,
     onSuccess: (approval: Approval, message: Message | PartialMessage) => Promise<void>,
     onFailure?: (approval: Approval, message: Message | PartialMessage) => Promise<void>,
     onTimeout?: (approval: Approval, message: Message | PartialMessage) => Promise<void>,
 }
 
 export const approvalList: Map<string, Approval> = new Map()
-export const disapprovalCount = Number(process.env.DISAPPROVAL_COUNT) || 1
-export const approvalCount = Number(process.env.APPROVAL_COUNT) || 1
+export const globalDisapprovalCount = Number(process.env.DISAPPROVAL_COUNT) || 1
+export const globalApprovalCount = Number(process.env.APPROVAL_COUNT) || 1
 
-export function newApproval(approval: Omit<Approval, 'approvalCount' | 'disapprovalCount' | 'timeout' | 'superStatus'>, cleanUp: () => void | Promise<void>) {
-    const newApproval = {
+export function newApproval(approval: Omit<Approval, 'approvalIds' | 'disapprovalIds' | 'timeout' | 'superStatus'>, cleanUp: () => void | Promise<void>) {
+    const newApproval: Approval = {
         ...approval,
-        approvalCount: [],
-        disapprovalCount: [],
+        approvalIds: [],
+        disapprovalIds: [],
         timeout: setTimeout(() => {
             cleanUp();
             removeApproval(approval.messageId);
@@ -45,7 +47,7 @@ export function newApproval(approval: Omit<Approval, 'approvalCount' | 'disappro
 export function approve(messageId: string, userId: string, force = false) {
     const approval = approvalList.get(messageId);
     if (!approval) return;
-    approval.approvalCount.push(userId);
+    approval.approvalIds.push(userId);
     if (force) {
         approval.superStatus = 'approved';
     }
@@ -54,7 +56,7 @@ export function approve(messageId: string, userId: string, force = false) {
 export function disapprove(messageId: string, userId: string, force = false) {
     const approval = approvalList.get(messageId);
     if (!approval) return;
-    approval.disapprovalCount.push(userId);
+    approval.disapprovalIds.push(userId);
     if (force) {
         approval.superStatus = 'disapproved';
     }
@@ -71,7 +73,13 @@ export function removeApproval(messageId: string) {
 type ApprovalStatus = 'approved' | 'disapproved' | 'pending' | 'timeout';
 
 function checkApprovalStatus(approval: Approval, autoRemoval = true): ApprovalStatus {
-    const status = approval.validTill < Date.now() ? 'timeout' : approval.superStatus === null ? approval.approvalCount.length >= approvalCount ? 'approved' : approval.disapprovalCount.length >= disapprovalCount ? 'disapproved' : 'pending' : approval.superStatus;
+    const approvalCount = approval.options.approvalCount || globalApprovalCount;
+    const disapprovalCount = approval.options.disapprovalCount || globalDisapprovalCount;
+    const status =
+        approval.validTill < Date.now() ? 'timeout' :
+            approval.superStatus === null ? approval.approvalIds.length >= approvalCount ? 'approved' :
+                approval.disapprovalIds.length >= disapprovalCount ? 'disapproved' : 'pending' : approval.superStatus;
+
     if (autoRemoval && status !== 'pending') {
         removeApproval(approval.messageId);
     }
@@ -94,8 +102,8 @@ export function createEmbed(approval: BaseApproval & { options: Pick<ApprovalOpt
         .setTitle(title)
         .setDescription(approval.options.description)
         .addFields(
-            { name: 'Approval Count', value: `${approval.approvalCount.length}/${approvalCount} (${approval.approvalCount.map(v => userMention(v)).join(', ')})` },
-            { name: 'Disapproval Count', value: `${approval.disapprovalCount.length}/${disapprovalCount} (${approval.disapprovalCount.map(v => userMention(v)).join(', ')})` },
+            { name: 'Approval Count', value: `${approval.approvalIds.length}/${globalApprovalCount} (${approval.approvalIds.map(v => userMention(v)).join(', ')})` },
+            { name: 'Disapproval Count', value: `${approval.disapprovalIds.length}/${globalDisapprovalCount} (${approval.disapprovalIds.map(v => userMention(v)).join(', ')})` },
             { name: 'Valid Till', value: time(new Date(approval.validTill)) },
         )
         .setTimestamp(Date.now())
@@ -127,8 +135,8 @@ export async function sendApprovalPoll(interaction: CommandInteraction, approval
         content,
         duration,
         validTill,
-        approvalCount: [],
-        disapprovalCount: [],
+        approvalIds: [],
+        disapprovalIds: [],
         options
     }, 0x0099FF, 'Pending')
     const message = await interaction.reply({ embeds: [embed], withResponse: true })

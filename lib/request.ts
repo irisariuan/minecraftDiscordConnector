@@ -1,4 +1,4 @@
-import { newTimeoutSignal } from "./utils";
+import { newTimeoutSignal, safeFetch } from "./utils";
 
 export type LogType = 'info' | 'warn' | 'error';
 export interface LogLine {
@@ -7,10 +7,10 @@ export interface LogLine {
     message: string;
 }
 
-export async function getLogs(): Promise<LogLine[]> {
-    const res = await fetch('http://localhost:6001/logs')
-    if (!res.ok) {
-        throw new Error('Failed to fetch logs')
+export async function getLogs(): Promise<LogLine[] | null> {
+    const res = await safeFetch('http://localhost:6001/logs')
+    if (!res?.ok) {
+        return null
     }
     const data = await res.json()
     if (!Array.isArray(data)) {
@@ -20,7 +20,7 @@ export async function getLogs(): Promise<LogLine[]> {
 }
 
 export async function runCommandOnServer(command: string) {
-    const res = await fetch('http://localhost:6001/runCommand', {
+    const res = await safeFetch('http://localhost:6001/runCommand', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -29,7 +29,7 @@ export async function runCommandOnServer(command: string) {
             command
         })
     })
-    if (!res.ok) {
+    if (!res?.ok) {
         return { success: false, output: null, logger: null }
     }
     const data = await res.json() as { success: boolean, output: string, logger: string };
@@ -41,15 +41,15 @@ export interface Player {
     uuid: string;
 }
 
-export async function fetchOnlinePlayers(): Promise<Player[]> {
-    const res = await fetch('http://localhost:6001/players', {
+export async function fetchOnlinePlayers(): Promise<Player[] | null> {
+    const res = await safeFetch('http://localhost:6001/players', {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json'
         }
     });
-    if (!res.ok) {
-        throw new Error('Failed to fetch online players');
+    if (!res?.ok) {
+        return null
     }
     const data = await res.json() as Player[];
     return data;
@@ -63,8 +63,8 @@ export function parseCommandOutput(output: string | null, success: boolean) {
 }
 
 export async function isServerAlive() {
-    const alive = await fetch('http://localhost:6001/ping', {
+    const alive = await safeFetch('http://localhost:6001/ping', {
         signal: newTimeoutSignal(1000 * 3).signal,
     })
-    return alive.ok
+    return alive?.ok ?? false;
 }

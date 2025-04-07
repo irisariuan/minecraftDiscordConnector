@@ -21,7 +21,7 @@ export default {
             console.log(`Server started with PID ${pid}`);
             await interaction.editReply({ content: 'Server started successfully' });
         }
-        
+
         sendApprovalPoll(interaction, {
             content: "Start Server",
             options: {
@@ -34,7 +34,9 @@ export default {
                     }
                     console.log(`Server started with PID ${pid}`);
                     await interaction.followUp({ content: 'Server started successfully' });
-                }
+                },
+                approvalCount: 2,
+                disapprovalCount: 4
             }
         })
     }

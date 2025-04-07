@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
-import { shutdown } from "../lib/server";
+import { initShutdown } from "../lib/server";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
@@ -22,7 +22,7 @@ export default {
 
         if (comparePermission(await readPermission(interaction.user.id), PermissionFlags.stopServer)) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-            const pid = await shutdown(seconds)
+            const pid = await initShutdown(seconds)
             if (!pid) {
                 await interaction.editReply({ content: "Server is already offline" });
                 return
@@ -37,14 +37,16 @@ export default {
             options: {
                 description: displayString,
                 async onSuccess() {
-                    const pid = await shutdown(seconds)
+                    const pid = await initShutdown(seconds)
                     if (!pid) {
                         await interaction.followUp({ content: "Server is already offline" });
                         return
                     }
                     console.log(`Server stopped with PID ${pid}`);
                     await interaction.followUp({ content: 'Server stopped successfully' });
-                }
+                },
+                approvalCount: 4,
+                disapprovalCount: 1,
             }
         })
     }

@@ -15,10 +15,12 @@ interface LoggerWritableStreamOptions {
 }
 
 export function createLoggerWritableStream(options: LoggerWritableStreamOptions) {
-    return new WritableStream({
+    return new WritableStream<Uint8Array<ArrayBufferLike>>({
         write(chunk) {
-            console.log(options.formatter(chunk.toString()))
-            options.write?.(chunk.toString())
+            const decoder = new TextDecoder()
+            const text = decoder.decode(chunk)
+            console.log(options.formatter(text))
+            options.write?.(text)
         },
         close() {
             console.log(options.formatter('Stream closed'))
@@ -28,5 +30,12 @@ export function createLoggerWritableStream(options: LoggerWritableStreamOptions)
             console.error(options.formatter('Stream aborted'), err)
             options.abort?.(err)
         }
+    })
+}
+
+export function safeFetch(url: string, options?: RequestInit) {
+    return fetch(url, options).catch(err => {
+        console.error(`Fetch error (${url}): ${err}`)
+        return null
     })
 }
