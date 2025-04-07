@@ -22,7 +22,7 @@ export default {
 
         if (comparePermission(await readPermission(interaction.user.id), PermissionFlags.stopServer)) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-            const pid = await initShutdown(seconds)
+            const pid = await initShutdown(seconds * 20)
             if (!pid) {
                 await interaction.editReply({ content: "Server is already offline" });
                 return
@@ -37,7 +37,7 @@ export default {
             options: {
                 description: displayString,
                 async onSuccess() {
-                    const pid = await initShutdown(seconds)
+                    const pid = await initShutdown(seconds * 20)
                     if (!pid) {
                         await interaction.followUp({ content: "Server is already offline" });
                         return

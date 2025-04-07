@@ -15,20 +15,28 @@ export let shuttingDown = false
 let childProcess: Subprocess<'ignore', 'pipe', 'inherit'> | null = null
 
 function killProcessTimeout(tick: number, shutdownTime = 3000) {
-    return new Promise<void>(r => setTimeout(async () => {
-        if (childProcess?.exitCode !== null) {
+    return Promise.race([new Promise<void>(r => setTimeout(async () => {
+        if (childProcess?.exitCode === null) {
+            console.log('Forcing to shutdown')
             childProcess?.kill('SIGKILL')
             await childProcess?.exited
         }
         shuttingDown = false;
         r()
-    }, tick / 20 * 1000 + shutdownTime));
+    }, tick / 20 * 1000 + shutdownTime)), childProcess?.exited]);
+}
+
+export async function haveScheduledShutdown() {
+    if (shuttingDown) return true;
+    const response = await safeFetch('http://localhost:6001/shuttingDown').catch()
+    if (!response) return false
+    const { result } = await response.json() as { result: boolean }
+    return result
 }
 
 export async function initShutdown(tick: number) {
     await serverOnline.update()
-    if (!serverOnline) return { ok: false, promise: Promise.resolve() }
-    if (shuttingDown) return { ok: false, promise: killProcessTimeout(tick) }
+    if (!serverOnline || shuttingDown) return null
     shuttingDown = true
     const response = await safeFetch('http://localhost:6001/shutdown', {
         body: JSON.stringify({ tick }),
@@ -53,8 +61,7 @@ export async function startServer() {
             if (error) {
                 console.error(`Error: ${error}`)
             }
-            serverOnline.setData(false)
-            childProcess = null
+            resetShutdownStatus()
         },
     })
 
@@ -65,13 +72,24 @@ export async function startServer() {
 }
 
 export async function completeShutdown() {
-    const { ok, promise } = await initShutdown(0)
+    if (shuttingDown) {
+        console.log('Shutdown already in progress')
+        return
+    }
+    const data = await initShutdown(0)
+    if (!data) return
+    const { ok, promise } = data
     console.log(`Shutdown ${ok ? 'successful' : 'failed'}`)
     await promise
+    resetShutdownStatus()
     console.log('Shutdown complete')
-    if (childProcess) {
-        childProcess = null
-    }
+}
+
+/**
+ * @description Reset the shutdown status and server online status, use as a cleanup method
+ */
+export function resetShutdownStatus() {
+    childProcess = null
     serverOnline.setData(false)
     shuttingDown = false
 }

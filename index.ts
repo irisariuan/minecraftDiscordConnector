@@ -1,9 +1,10 @@
 import 'dotenv/config'
-import { Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
+import { ActivityType, Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
 import { loadCommands } from './lib/commands'
 import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
 import { globalApprovalCount, approve, createApprovalEmbed, globalDisapprovalCount, disapprove, getApproval } from './lib/approval'
+import { serverOnline } from './lib/server'
 
 const DELETE_AFTER_MS = 3 * 1000
 
@@ -123,6 +124,14 @@ client.on('messageReactionAdd', async (reaction, user) => {
     await reaction.message.reply({
         content: `The poll \`${approval.content}\` has timed out.`,
     }).catch(console.error)
+})
+
+serverOnline.cacheEvent.on('update', data => {
+    console.log('Server online status updated:', data)
+    client.user?.setActivity({
+        name: data ? 'Server Online' : 'Server Offline',
+        type: data ? ActivityType.Playing : ActivityType.Watching,
+    })
 })
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
