@@ -15,6 +15,10 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 
 client.once('ready', () => {
     console.log('Ready!')
+    client.user?.setActivity({
+        name: 'Minecraft Server Offline',
+        type: ActivityType.Watching,
+    })
 })
 
 client.on('interactionCreate', async (interaction) => {
@@ -132,7 +136,7 @@ serverManager.isOnline.cacheEvent.on('update', data => {
     lastStatus = data
     console.log('Server online status updated:', data)
     client.user?.setActivity({
-        name: data ? 'Server Online' : 'Server Offline',
+        name: data ? 'Minecraft Server Online' : 'Minecraft Server Offline',
         type: data ? ActivityType.Playing : ActivityType.Watching,
     })
 })
