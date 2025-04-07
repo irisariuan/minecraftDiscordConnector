@@ -35,7 +35,7 @@ export function createLoggerWritableStream(options: LoggerWritableStreamOptions)
 
 export function safeFetch(url: string, options?: RequestInit) {
     return fetch(url, options).catch(err => {
-        console.error(`Fetch error (${url}): ${err}`)
+        // console.error(`Fetch error (${url}): ${err}`)
         return null
     })
 }
