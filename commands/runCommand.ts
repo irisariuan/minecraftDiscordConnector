@@ -36,7 +36,7 @@ export default {
                             await message.reply("Failed to run command")
                             return
                         }
-                        await message.reply(parseCommandOutput(output, success))
+                        await message.reply(parseCommandOutput(output?.message || null, success))
                     },
                 }
             })
@@ -44,6 +44,6 @@ export default {
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
         const { success } = await runCommandOnServer(command)
         const output = await serverManager.captureLastLineOfOutput()
-        await interaction.editReply(parseCommandOutput(output, success))
+        await interaction.editReply(parseCommandOutput(output?.message || null, success))
     },
 } as CommandFile

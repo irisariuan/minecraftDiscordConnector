@@ -1,7 +1,7 @@
 import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/commands";
 import { sendPaginationMessage } from "../lib/pagination";
-import { getLogs } from "../lib/request";
+import { serverManager } from "../lib/server";
 
 export default {
     command: new SlashCommandBuilder()
@@ -23,7 +23,7 @@ export default {
                 filter: filter || undefined
             },
             async getResult() {
-                return await getLogs() || [];
+                return serverManager.outputLines
             },
             filterFunc: (filter) => ((log) => {
                 if (!filter) return true;

@@ -1,6 +1,6 @@
 import { spawn, type Subprocess } from "bun"
 import { CacheItem } from "./cache"
-import { isServerAlive } from "./request"
+import { isServerAlive, type LogLine } from "./request"
 import { join } from "node:path"
 import { createDisposableWritableStream, safeFetch } from "./utils"
 import { EventEmitter } from "node:stream"
@@ -11,6 +11,12 @@ if (!process.env.SERVER_DIR || !(await Bun.file(join(process.env.SERVER_DIR, 'st
 interface ServerManagerOptions {
     shutdownAllowedTime?: number,
 }
+
+const serverTypeRef = {
+    'INFO': 'info',
+    'WARN': 'warn',
+    'ERROR': 'error',
+} as const
 
 class ServerMessageEmitter extends EventEmitter {
     emitMessage(message: string) {
@@ -32,7 +38,7 @@ class ServerManager {
     private waitingToShutdown: boolean
     isOnline: CacheItem<boolean>
     serverMessageEmitter: ServerMessageEmitter
-    outputLines: string[]
+    outputLines: LogLine[]
     shutdownAllowedTime: number
 
     constructor({ shutdownAllowedTime }: ServerManagerOptions) {
@@ -80,7 +86,9 @@ class ServerManager {
             console.log(`[Minecraft Server] ${chunk}`)
             this.serverMessageEmitter.emitMessage(chunk)
             const unformattedChunk = stripVTControlCharacters(chunk)
-            this.outputLines.push(unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ?? unformattedChunk)
+            const [timestamp, level] = unformattedChunk.match(/(?<=\[).+?(?=\])/)?.at(0)?.split(' ') ?? [null, null]
+            const textContent = unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ?? unformattedChunk
+            this.outputLines.push({ timestamp: timestamp ?? 'UNKNOWN', type: serverTypeRef[level as keyof typeof serverTypeRef] ?? 'unknown', message: textContent })
         }))
         return this.instance.pid
     }
@@ -117,7 +125,7 @@ class ServerManager {
             this.waitingToShutdown = false
             return { success: false }
         }
-        
+
         if (tick <= 0) {
             return { success: true, promise: this.instance?.exited }
         }

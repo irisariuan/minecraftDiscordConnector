@@ -1,6 +1,6 @@
 import { newTimeoutSignal, safeFetch } from "./utils";
 
-export type LogType = 'info' | 'warn' | 'error';
+export type LogType = 'info' | 'warn' | 'error' | 'unknown';
 export interface LogLine {
     timestamp: string;
     type: LogType;
