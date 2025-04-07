@@ -71,6 +71,7 @@ class ServerManager {
                 if (error) {
                     console.error(`Error: ${error}`)
                 }
+                this.cleanup()
             },
         })
         this.isOnline.setData(true)
@@ -78,7 +79,8 @@ class ServerManager {
         this.instance.stdout.pipeTo(createDisposableWritableStream(chunk => {
             console.log(`[Minecraft Server] ${chunk}`)
             this.serverMessageEmitter.emitMessage(chunk)
-            this.outputLines.push(stripVTControlCharacters(chunk))
+            const unformattedChunk = stripVTControlCharacters(chunk)
+            this.outputLines.push(unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ?? unformattedChunk)
         }))
         this.instance.exited.then(() => {
             this.cleanup()
