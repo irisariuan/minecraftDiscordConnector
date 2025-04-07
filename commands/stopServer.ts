@@ -28,7 +28,7 @@ export default {
                 return
             }
             console.log(`Server stopped with PID ${pid}`);
-            await interaction.editReply({ content: 'Server stopped successfully' });
+            await interaction.editReply({ content: 'Stopping server is scheduled' });
         }
         const displayString = seconds > 0 ? `Stop Server in ${seconds} seconds` : 'Stop Server'
 
@@ -43,7 +43,7 @@ export default {
                         return
                     }
                     console.log(`Server stopped with PID ${pid}`);
-                    await interaction.followUp({ content: 'Server stopped successfully' });
+                    await interaction.followUp({ content: 'Stopping server is scheduled' });
                 },
                 approvalCount: 4,
                 disapprovalCount: 1,

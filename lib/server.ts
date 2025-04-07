@@ -14,13 +14,15 @@ export const serverOnline = new CacheItem<boolean>(false, {
 export let shuttingDown = false
 let childProcess: Subprocess<'ignore', 'pipe', 'inherit'> | null = null
 
-function killProcessTimeout(tick: number) {
+function killProcessTimeout(tick: number, shutdownTime = 3000) {
     return new Promise<void>(r => setTimeout(async () => {
-        childProcess?.kill('SIGKILL')
-        await childProcess?.exited
+        if (childProcess?.exitCode !== null) {
+            childProcess?.kill('SIGKILL')
+            await childProcess?.exited
+        }
         shuttingDown = false;
         r()
-    }, tick / 20 * 1000));
+    }, tick / 20 * 1000 + shutdownTime));
 }
 
 export async function initShutdown(tick: number) {
