@@ -9,6 +9,9 @@ export const PermissionFlags = {
     superApprove: 1 << 5,
     startServer: 1 << 6,
     stopServer: 1 << 7,
+    downloadPlugin: 1 << 8,
+    deletePlugin: 1 << 9,
+    
 } as const
 
 export const PERMISSION = `${process.cwd()}/data/permissions.json`

@@ -3,8 +3,8 @@ import { join } from 'node:path'
 
 export interface CommandFile {
     command: SlashCommandBuilder
-    execute: (interaction: ChatInputCommandInteraction, client: Client) => void | Promise<void>
-    executeReaction?: (interaction: MessageReaction | PartialMessageReaction, user: User | PartialUser, client: Client) => void | Promise<void>
+    execute: (interaction: ChatInputCommandInteraction, client: Client) => unknown | Promise<unknown>
+    executeReaction?: (interaction: MessageReaction | PartialMessageReaction, user: User | PartialUser, client: Client) => unknown | Promise<unknown>
 }
 
 export async function loadCommands() {

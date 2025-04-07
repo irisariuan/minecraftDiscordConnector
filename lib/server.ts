@@ -40,10 +40,12 @@ class ServerManager {
     serverMessageEmitter: ServerMessageEmitter
     outputLines: LogLine[]
     shutdownAllowedTime: number
+    timeouts: NodeJS.Timeout[]
 
     constructor({ shutdownAllowedTime }: ServerManagerOptions) {
         this.instance = null
         this.outputLines = []
+        this.timeouts = []
         this.serverMessageEmitter = new ServerMessageEmitter()
         this.isOnline = new CacheItem<boolean>(false, {
             interval: 1000 * 5,
@@ -135,14 +137,23 @@ class ServerManager {
     }
 
     async raceShutdown(ms: number) {
-        return Promise.race([
-            this.instance?.exited,
-            new Promise<void>(r => setTimeout(async () => {
+        const promise = new Promise<void>(r => {
+            const timeout = setTimeout(async () => {
                 if (await this.forceStop()) {
                     console.log('Server process forcefully stopped')
                 }
+                const index = this.timeouts.findIndex(t => t === timeout)
+                if (index !== -1) {
+                    this.timeouts.splice(index, 1)
+                }
                 r()
-            }, ms))])
+            }, ms)
+            this.timeouts.push(timeout)
+        })
+        return Promise.race([
+            promise,
+            this.instance?.exited,
+        ])
     }
 
     async haveServerSideScheduledShutdown() {
@@ -150,6 +161,13 @@ class ServerManager {
         if (!response) return false
         const { result } = await response.json() as { result: boolean }
         return result
+    }
+
+    cancelLocalScheduledShutdown() {
+        for (const timeout of this.timeouts) {
+            clearTimeout(timeout)
+        }
+        this.timeouts = []
     }
 
     async cancelServerSideShutdown() {

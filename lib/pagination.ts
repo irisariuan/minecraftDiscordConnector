@@ -145,13 +145,13 @@ interface PaginationOptions {
 }
 
 interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
-    getResult: () => Promise<T[] | undefined>
+    getResult: (pageNumber: number) => Promise<T[] | undefined>
 }
 
 export async function sendPaginationMessage<T>({ getResult, interaction, options, filterFunc, formatter }: SendPaginationMessageProps<T>) {
-    const result = (await getResult())?.filter(filterFunc(options?.filter))
-    let interactionResponse: Message
     let page = 0
+    const result = (await getResult(page))?.filter(filterFunc(options?.filter))
+    let interactionResponse: Message
     if (!result || result.length <= 0) {
         interactionResponse = await interaction.editReply({
             content: options?.notFoundMessage || 'No results',
@@ -172,7 +172,7 @@ export async function sendPaginationMessage<T>({ getResult, interaction, options
             page = (Number(reply.fields.getTextInputValue(ModalAction.PAGE_INPUT)) || page + 1) - 1
             if (oldPage === page) return
             const maxPage = calculateMaxPage(result?.length || 0)
-            return editInteraction({ result: result || [], interaction, page: Math.max(Math.min(page, maxPage), 0), options, filterFunc, formatter })
+            return editInteraction({ result: await getResult(page) || result || [], interaction, page: Math.max(Math.min(page, maxPage), 0), options, filterFunc, formatter })
         }
 
         if (i.customId === PageAction.SET_FILTER && !i.deferred) {
@@ -181,7 +181,7 @@ export async function sendPaginationMessage<T>({ getResult, interaction, options
             const reply = await i.awaitModalSubmit({ time: 1000 * 60 * 5, filter: (i) => i.customId === ModalAction.MODAL_FILTER_ID })
             await reply.deferUpdate()
             const filter = reply.fields.getTextInputValue(ModalAction.FILTER_INPUT)
-            const filteredResult = result?.filter(filterFunc(filter))
+            const filteredResult = (await getResult(page) || result)?.filter(filterFunc(filter))
             if (!filteredResult || filteredResult.length <= 0) return await interaction.editReply({
                 content: options?.notFoundMessage || 'No results',
                 embeds: [],
@@ -194,7 +194,7 @@ export async function sendPaginationMessage<T>({ getResult, interaction, options
 
         i.deferUpdate()
 
-        const reloadResult = i.customId === PageAction.REFRESH ? await getResult() : result
+        const reloadResult = i.customId === PageAction.REFRESH ? await getResult(page) : result
 
         if (!reloadResult || reloadResult.length <= 0) return interaction.editReply({
             content: options?.notFoundMessage || 'No results',
