@@ -7,6 +7,8 @@ export const PermissionFlags = {
     approve: 1 << 3,
     upload: 1 << 4,
     superApprove: 1 << 5,
+    startServer: 1 << 6,
+    stopServer: 1 << 7,
 } as const
 
 export const PERMISSION = `${process.cwd()}/data/permissions.json`

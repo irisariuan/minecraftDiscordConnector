@@ -1,3 +1,5 @@
+import { newTimeoutSignal } from "./utils";
+
 export type LogType = 'info' | 'warn' | 'error';
 export interface LogLine {
     timestamp: string;
@@ -58,4 +60,11 @@ export function parseCommandOutput(output: string | null, success: boolean) {
         return 'Command execution failed';
     }
     return output ? `Command executed successfully\nOutput: \`${output}\`` : 'No output returned from the command.'
+}
+
+export async function isServerAlive() {
+    const alive = await fetch('http://localhost:6001/ping', {
+        signal: newTimeoutSignal(1000 * 3).signal,
+    })
+    return alive.ok
 }

@@ -128,4 +128,12 @@ client.on('messageReactionAdd', async (reaction, user) => {
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
 updateDnsRecord()
 
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Rejection:', reason)
+})
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error)
+    process.exit(1)
+})
+
 client.login(process.env.TOKEN)

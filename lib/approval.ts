@@ -1,8 +1,10 @@
 import { EmbedBuilder, type Message, time, userMention, type PartialMessage, type CommandInteraction } from "discord.js";
+import type { PickAndOptional } from "./utils";
 
 export interface BaseApproval {
     content: string,
     validTill: number,
+    duration: number,
     approvalCount: string[],
     disapprovalCount: string[],
 }
@@ -117,11 +119,13 @@ export function createApprovalEmbed(approval: Approval) {
     }
 }
 
-export async function sendApprovalPoll(interaction: CommandInteraction, approvalOptions: Pick<Approval, 'content' | 'options'>) {
+export async function sendApprovalPoll(interaction: CommandInteraction, approvalOptions: PickAndOptional<Approval, 'content' | 'options', 'duration'>) {
     const { content, options } = approvalOptions
-    const validTill = Date.now() + (Number(process.env.APPROVAL_TIMEOUT) || 1000 * 60 * 60 * 2) // 2 hours
+    const duration = approvalOptions.duration || Number(process.env.APPROVAL_TIMEOUT) || 1000 * 60 * 60 * 2
+    const validTill = Date.now() + duration // 2 hours
     const embed = createEmbed({
         content,
+        duration,
         validTill,
         approvalCount: [],
         disapprovalCount: [],
@@ -135,6 +139,7 @@ export async function sendApprovalPoll(interaction: CommandInteraction, approval
         content,
         messageId: message.resource?.message?.id,
         validTill,
+        duration,
         options
     }, async () => {
         if (!message.resource?.message?.id) return
