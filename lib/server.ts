@@ -6,102 +6,148 @@ import { createLoggerWritableStream, safeFetch } from "./utils"
 
 if (!process.env.SERVER_DIR || !(await Bun.file(join(process.env.SERVER_DIR, 'start.sh')).exists())) throw new Error('SERVER_DIR environment variable is not set')
 
-export const serverOnline = new CacheItem<boolean>(false, {
-    interval: 1000 * 5,
-    ttl: 1000 * 5,
-    updateMethod: isServerAlive
-})
-export let shuttingDown = false
-let childProcess: Subprocess<'ignore', 'pipe', 'inherit'> | null = null
-
-function killProcessTimeout(tick: number, shutdownTime = 3000) {
-    return Promise.race([new Promise<void>(r => setTimeout(async () => {
-        if (childProcess?.exitCode === null) {
-            console.log('Forcing to shutdown')
-            childProcess?.kill('SIGKILL')
-            await childProcess?.exited
-        }
-        shuttingDown = false;
-        r()
-    }, tick / 20 * 1000 + shutdownTime)), childProcess?.exited]);
+interface ServerManagerOptions {
+    shutdownAllowedTime?: number,
 }
 
-export async function haveScheduledShutdown() {
-    if (shuttingDown) return true;
-    const response = await safeFetch('http://localhost:6001/shuttingDown').catch()
-    if (!response) return false
-    const { result } = await response.json() as { result: boolean }
-    return result
-}
+class ServerManager {
+    private instance: Subprocess<'ignore', 'pipe', 'inherit'> | null
+    private waitingToShutdown: boolean
+    isOnline: CacheItem<boolean>
+    shutdownAllowedTime: number
 
-export async function initShutdown(tick: number) {
-    await serverOnline.update()
-    if (!serverOnline || shuttingDown) return null
-    shuttingDown = true
-    const response = await safeFetch('http://localhost:6001/shutdown', {
-        body: JSON.stringify({ tick }),
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    return { ok: response ? response.ok : false, promise: killProcessTimeout(tick) }
-}
-
-export async function startServer() {
-    await serverOnline.update()
-    if (await serverOnline.getData()) return null
-    childProcess = spawn(['sh', './start.sh'], {
-        cwd: process.env.SERVER_DIR,
-        detached: true,
-        stdin: 'ignore',
-        stdout: 'pipe',
-        onExit(subprocess, exitCode, signalCode, error) {
-            console.log(`Server process exited with code ${exitCode} and signal ${signalCode}`)
-            if (error) {
-                console.error(`Error: ${error}`)
-            }
-            resetShutdownStatus()
-        },
-    })
-
-    childProcess.stdout.pipeTo(createLoggerWritableStream({ formatter: chunk => `[SERVER] ${chunk}` }))
-    serverOnline.setData(true)
-
-    return childProcess.pid
-}
-
-export async function completeShutdown() {
-    if (shuttingDown) {
-        console.log('Shutdown already in progress')
-        return
+    constructor({ shutdownAllowedTime }: ServerManagerOptions) {
+        this.instance = null
+        this.isOnline = new CacheItem<boolean>(false, {
+            interval: 1000 * 5,
+            ttl: 1000 * 5,
+            updateMethod: isServerAlive
+        })
+        this.waitingToShutdown = false
+        this.shutdownAllowedTime = shutdownAllowedTime ?? 3000
     }
-    const data = await initShutdown(0)
-    if (!data) return
-    const { ok, promise } = data
-    console.log(`Shutdown ${ok ? 'successful' : 'failed'}`)
-    await promise
-    resetShutdownStatus()
-    console.log('Shutdown complete')
+
+    async captureNextLineOfOutput() {
+        if (!this.instance) throw new Error('No server instance')
+        const decoder = new TextDecoder()
+        const reader = this.instance.stdout.getReader()
+        const { done, value } = await reader.read()
+        if (done) {
+            throw new Error('Stream closed')
+        }
+        const text = decoder.decode(value)
+        return text
+    }
+
+    async start() {
+        if (this.instance || await this.isOnline.getData(true)) return null
+        this.instance = spawn(['sh', './start.sh'], {
+            cwd: process.env.SERVER_DIR,
+            detached: true,
+            stdin: 'ignore',
+            stdout: 'pipe',
+            onExit: (subprocess, exitCode, signalCode, error) => {
+                console.log(`Server process exited with code ${exitCode} and signal ${signalCode}`)
+                if (error) {
+                    console.error(`Error: ${error}`)
+                }
+            },
+        })
+        this.isOnline.setData(true)
+        this.instance.stdout.pipeTo(createLoggerWritableStream({ formatter: chunk => `[SERVER] ${chunk}` }))
+        this.instance.exited.then(() => {
+            this.cleanup()
+        })
+        return this.instance.pid
+    }
+
+    async forceStop() {
+        if (this.instance?.exitCode === null) {
+            this.instance?.kill('SIGKILL')
+            await this.instance?.exited
+            return true
+        }
+        return false
+    }
+
+    async stop(tick: number) {
+        if (this.waitingToShutdown || !await this.isOnline.getData(true)) return { success: false }
+        this.waitingToShutdown = true
+        const response = await safeFetch('http://localhost:6001/shutdown', {
+            body: JSON.stringify({ tick }),
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        if (!response) return { success: false }
+        const { success } = await response.json() as { success: boolean }
+        if (!success) {
+            this.waitingToShutdown = false
+            return { success: false }
+        }
+        const promise = this.raceShutdown(tick / 20 * 1000 + this.shutdownAllowedTime)
+        return { promise, success }
+    }
+
+    async raceShutdown(ms: number) {
+        return Promise.race([
+            this.instance?.exited,
+            new Promise<void>(r => setTimeout(async () => {
+                if (await this.forceStop()) {
+                    console.log('Server process forcefully stopped')
+                }
+                r()
+            }, ms))])
+    }
+
+    async haveServerSideScheduledShutdown() {
+        const response = await safeFetch('http://localhost:6001/shuttingDown').catch()
+        if (!response) return false
+        const { result } = await response.json() as { result: boolean }
+        return result
+    }
+
+    async cancelServerSideShutdown() {
+        if (!await this.haveServerSideScheduledShutdown()) return false
+        const response = await safeFetch('http://localhost:6001/cancelShutdown', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        if (!response) return false
+        const { success } = await response.json() as { success: boolean }
+        return success
+    }
+
+    cleanup() {
+        this.instance = null
+        this.isOnline.setData(false)
+        this.waitingToShutdown = false
+    }
 }
 
-/**
- * @description Reset the shutdown status and server online status, use as a cleanup method
- */
-export function resetShutdownStatus() {
-    childProcess = null
-    serverOnline.setData(false)
-    shuttingDown = false
-}
+export const serverManager = new ServerManager({})
 
 process.on('SIGINT', async () => {
-    await completeShutdown()
+    const { success, promise } = await serverManager.stop(0)
+    if (success) {
+        console.log('Server process shutting down')
+        await promise
+        console.log('Server process stopped')
+    }
     process.exit(64)
 })
 
 process.on('beforeExit', async code => {
     if (code === 64) return
-    await completeShutdown()
+    const { success, promise } = await serverManager.stop(0)
+    if (success) {
+        console.log('Server process shutting down')
+        await promise
+        console.log('Server process stopped')
+    }
     process.exit(code)
 })
 

@@ -4,7 +4,7 @@ import { loadCommands } from './lib/commands'
 import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
 import { globalApprovalCount, approve, createApprovalEmbed, globalDisapprovalCount, disapprove, getApproval } from './lib/approval'
-import { serverOnline } from './lib/server'
+import { serverManager } from './lib/server'
 
 const DELETE_AFTER_MS = 3 * 1000
 
@@ -126,7 +126,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }).catch(console.error)
 })
 
-serverOnline.cacheEvent.on('update', data => {
+serverManager.isOnline.cacheEvent.on('update', data => {
     console.log('Server online status updated:', data)
     client.user?.setActivity({
         name: data ? 'Server Online' : 'Server Offline',

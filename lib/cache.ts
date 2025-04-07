@@ -63,7 +63,10 @@ export class CacheItem<T> {
         return false;
     }
 
-    async getData(): Promise<T | null> {
+    async getData(forceUpdate = false): Promise<T | null> {
+        if (forceUpdate) {
+            await this.update();
+        }
         if (this.checkExpired()) {
             await this.update();
         }

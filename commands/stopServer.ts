@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
-import { initShutdown } from "../lib/server";
+import { serverManager } from "../lib/server";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
@@ -22,13 +22,18 @@ export default {
 
         if (comparePermission(await readPermission(interaction.user.id), PermissionFlags.stopServer)) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-            const pid = await initShutdown(seconds * 20)
-            if (!pid) {
-                await interaction.editReply({ content: "Server is already offline" });
+            const { success, promise } = await serverManager.stop(seconds * 20)
+            if (!success) {
+                await interaction.editReply({ content: "Failed to shutdown" });
                 return
             }
-            console.log(`Server stopped with PID ${pid}`);
-            await interaction.editReply({ content: 'Stopping server is scheduled' });
+            if (seconds > 0) {
+                promise?.then(() => {
+                    interaction.followUp({ content: 'Server stopped successfully' }).catch(console.error);
+                })
+                return await interaction.editReply({ content: 'Stopping server is scheduled' });
+            }
+            return await interaction.editReply({ content: 'Server stopped successfully' });
         }
         const displayString = seconds > 0 ? `Stop Server in ${seconds} seconds` : 'Stop Server'
 
@@ -36,14 +41,20 @@ export default {
             content: displayString,
             options: {
                 description: displayString,
-                async onSuccess() {
-                    const pid = await initShutdown(seconds * 20)
-                    if (!pid) {
-                        await interaction.followUp({ content: "Server is already offline" });
+                async onSuccess(approval, message) {
+                    const { success, promise } = await serverManager.stop(seconds * 20)
+                    if (!success) {
+                        await interaction.editReply({ content: "Failed to shutdown" });
                         return
                     }
-                    console.log(`Server stopped with PID ${pid}`);
-                    await interaction.followUp({ content: 'Stopping server is scheduled' });
+                    if (seconds > 0) {
+                        promise?.then(() => {
+                            interaction.followUp({ content: 'Server stopped successfully' }).catch(console.error);
+                        })
+                        await interaction.editReply({ content: 'Stopping server is scheduled' });
+                        return
+                    }
+                    await interaction.editReply({ content: 'Server stopped successfully' });
                 },
                 approvalCount: 4,
                 disapprovalCount: 1,

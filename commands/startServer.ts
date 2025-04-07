@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commands";
-import { startServer } from "../lib/server";
+import { serverManager } from "../lib/server";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
@@ -14,7 +14,7 @@ export default {
 
         if (comparePermission(await readPermission(interaction.user.id), PermissionFlags.startServer)) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-            const pid = await startServer()
+            const pid = await serverManager.start()
             if (!pid) {
                 return await interaction.editReply({ content: "Server is already online" });
             }
@@ -27,7 +27,7 @@ export default {
             options: {
                 description: 'Start Server',
                 async onSuccess() {
-                    const pid = await startServer()
+                    const pid = await serverManager.start()
                     if (!pid) {
                         await interaction.followUp({ content: "Server is already online" });
                         return
