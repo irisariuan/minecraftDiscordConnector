@@ -31,10 +31,12 @@ class ServerManager {
     private waitingToShutdown: boolean
     isOnline: CacheItem<boolean>
     serverMessageEmitter: ServerMessageEmitter
+    outputLines: string[]
     shutdownAllowedTime: number
 
     constructor({ shutdownAllowedTime }: ServerManagerOptions) {
         this.instance = null
+        this.outputLines = []
         this.serverMessageEmitter = new ServerMessageEmitter()
         this.isOnline = new CacheItem<boolean>(false, {
             interval: 1000 * 5,
@@ -50,6 +52,10 @@ class ServerManager {
         return new Promise<string>(r => {
             this.serverMessageEmitter.onceMessage(message => r(message))
         })
+    }
+    captureLastLineOfOutput() {
+        if (!this.instance) return null
+        return this.outputLines.at(-1) ?? null
     }
 
     async start() {
@@ -71,6 +77,7 @@ class ServerManager {
         this.instance.stdout.pipeTo(createDisposableWritableStream(chunk => {
             console.log(`[Minecraft Server] ${chunk}`)
             this.serverMessageEmitter.emitMessage(chunk)
+            this.outputLines.push(chunk)
         }))
         this.instance.exited.then(() => {
             this.cleanup()
@@ -142,6 +149,7 @@ class ServerManager {
         this.instance = null
         this.isOnline.setData(false)
         this.waitingToShutdown = false
+        this.outputLines = []
     }
 }
 

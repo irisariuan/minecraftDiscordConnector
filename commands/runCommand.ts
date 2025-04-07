@@ -31,9 +31,9 @@ export default {
                     description: `Command: \`${command}\``,
                     async onSuccess(approval, message) {
                         const { success } = await runCommandOnServer(approval.content)
-                        const output = await serverManager.captureNextLineOfOutput()
+                        const output = await serverManager.captureLastLineOfOutput()
                         if (!success) {
-                            await message.reply("Failed to capture output")
+                            await message.reply("Failed to run command")
                             return
                         }
                         await message.reply(parseCommandOutput(output, success))
