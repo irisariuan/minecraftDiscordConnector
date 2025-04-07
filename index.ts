@@ -9,6 +9,7 @@ import { serverManager } from './lib/server'
 const DELETE_AFTER_MS = 3 * 1000
 
 const commands = await loadCommands()
+let lastStatus: boolean | null = null
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions] })
 
@@ -127,6 +128,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
 })
 
 serverManager.isOnline.cacheEvent.on('update', data => {
+    if (lastStatus === data) return
+    lastStatus = data
     console.log('Server online status updated:', data)
     client.user?.setActivity({
         name: data ? 'Server Online' : 'Server Offline',

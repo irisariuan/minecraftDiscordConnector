@@ -3,6 +3,7 @@ import type { CommandFile } from "../lib/commands";
 import { compareAllPermissions, PermissionFlags, readPermission } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { parseCommandOutput, runCommandOnServer } from "../lib/request";
+import { serverManager } from "../lib/server";
 
 export default {
     command: new SlashCommandBuilder()
@@ -29,7 +30,8 @@ export default {
                 options: {
                     description: `Command: \`${command}\``,
                     async onSuccess(approval, message) {
-                        const { success, output } = await runCommandOnServer(approval.content)
+                        const { success } = await runCommandOnServer(approval.content)
+                        const output = await serverManager.captureNextLineOfOutput()
                         await message.reply(parseCommandOutput(output, success))
                     },
                 }
