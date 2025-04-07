@@ -7,28 +7,18 @@ export function newTimeoutSignal(time: number) {
     return { signal: controller.signal, abort: controller.abort, cancel: () => clearTimeout(timeout) }
 }
 
-interface LoggerWritableStreamOptions {
-    formatter: (chunk: string) => string
-    write?: (chunk: string) => void
-    close?: () => void
-    abort?: (err: Error) => void
-}
-
-export function createLoggerWritableStream(options: LoggerWritableStreamOptions) {
+export function createDisposableWritableStream(onData: (chunk: string) => void, onClose?: () => void, onAbort?: (err: Error) => void) {
     return new WritableStream<Uint8Array<ArrayBufferLike>>({
         write(chunk) {
             const decoder = new TextDecoder()
             const text = decoder.decode(chunk)
-            console.log(options.formatter(text))
-            options.write?.(text)
+            onData(text)
         },
         close() {
-            console.log(options.formatter('Stream closed'))
-            options.close?.()
+            onClose?.()
         },
         abort(err) {
-            console.error(options.formatter('Stream aborted'), err)
-            options.abort?.(err)
+            onAbort?.(err)
         }
     })
 }

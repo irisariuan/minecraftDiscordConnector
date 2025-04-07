@@ -32,6 +32,10 @@ export default {
                     async onSuccess(approval, message) {
                         const { success } = await runCommandOnServer(approval.content)
                         const output = await serverManager.captureNextLineOfOutput()
+                        if (!success) {
+                            await message.reply("Failed to capture output")
+                            return
+                        }
                         await message.reply(parseCommandOutput(output, success))
                     },
                 }

@@ -2,7 +2,8 @@ import { spawn, type Subprocess } from "bun"
 import { CacheItem } from "./cache"
 import { isServerAlive } from "./request"
 import { join } from "node:path"
-import { createLoggerWritableStream, safeFetch } from "./utils"
+import { createDisposableWritableStream, safeFetch } from "./utils"
+import { EventEmitter, type Readable } from "node:stream"
 
 if (!process.env.SERVER_DIR || !(await Bun.file(join(process.env.SERVER_DIR, 'start.sh')).exists())) throw new Error('SERVER_DIR environment variable is not set')
 
@@ -10,14 +11,31 @@ interface ServerManagerOptions {
     shutdownAllowedTime?: number,
 }
 
+class ServerMessageEmitter extends EventEmitter {
+    emitMessage(message: string) {
+        this.emit('message', message)
+    }
+    onMessage(listener: (message: string) => void) {
+        this.on('message', listener)
+    }
+    onceMessage(listener: (message: string) => void) {
+        this.once('message', listener)
+    }
+    removeMessageListener(listener: (message: string) => void) {
+        this.off('message', listener)
+    }
+}
+
 class ServerManager {
     private instance: Subprocess<'ignore', 'pipe', 'inherit'> | null
     private waitingToShutdown: boolean
     isOnline: CacheItem<boolean>
+    serverMessageEmitter: ServerMessageEmitter
     shutdownAllowedTime: number
 
     constructor({ shutdownAllowedTime }: ServerManagerOptions) {
         this.instance = null
+        this.serverMessageEmitter = new ServerMessageEmitter()
         this.isOnline = new CacheItem<boolean>(false, {
             interval: 1000 * 5,
             ttl: 1000 * 5,
@@ -27,16 +45,11 @@ class ServerManager {
         this.shutdownAllowedTime = shutdownAllowedTime ?? 3000
     }
 
-    async captureNextLineOfOutput() {
-        if (!this.instance) throw new Error('No server instance')
-        const decoder = new TextDecoder()
-        const reader = this.instance.stdout.getReader()
-        const { done, value } = await reader.read()
-        if (done) {
-            throw new Error('Stream closed')
-        }
-        const text = decoder.decode(value)
-        return text
+    captureNextLineOfOutput() {
+        if (!this.instance) return null
+        return new Promise<string>(r => {
+            this.serverMessageEmitter.onceMessage(message => r(message))
+        })
     }
 
     async start() {
@@ -54,7 +67,11 @@ class ServerManager {
             },
         })
         this.isOnline.setData(true)
-        this.instance.stdout.pipeTo(createLoggerWritableStream({ formatter: chunk => `[SERVER] ${chunk}` }))
+
+        this.instance.stdout.pipeTo(createDisposableWritableStream(chunk => {
+            console.log(`[Minecraft Server] ${chunk}`)
+            this.serverMessageEmitter.emitMessage(chunk)
+        }))
         this.instance.exited.then(() => {
             this.cleanup()
         })
