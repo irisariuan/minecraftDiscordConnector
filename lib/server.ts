@@ -83,6 +83,7 @@ class ServerManager {
             this.outputLines.push(unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ?? unformattedChunk)
         }))
         this.instance.exited.then(() => {
+            console.log('Server process exited')
             this.cleanup()
         })
         return this.instance.pid
@@ -130,6 +131,7 @@ class ServerManager {
             new Promise<void>(r => setTimeout(async () => {
                 if (await this.forceStop()) {
                     console.log('Server process forcefully stopped')
+                    this.cleanup()
                 }
                 r()
             }, ms))])
