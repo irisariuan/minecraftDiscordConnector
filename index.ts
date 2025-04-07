@@ -98,7 +98,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
         }).catch(console.error)
     }
 
-    const countStr = approving ? `${approval.approvalIds.length}/${globalApprovalCount}` : `${approval.disapprovalIds.length}/${globalDisapprovalCount}`
+    const countStr = approving ? `${approval.approvalIds.length}/${approval.options.approvalCount || globalApprovalCount}` : `${approval.disapprovalIds.length}/${approval.options.disapprovalCount || globalDisapprovalCount}`
 
     await reaction.message.reply({
         content: `${approving ? 'Approved' : 'Disapproved'} by ${userMention(user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,

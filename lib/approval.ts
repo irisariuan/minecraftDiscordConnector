@@ -96,14 +96,16 @@ export function getApproval(messageId: string, autoRemoval = true): Approval | n
     return approval;
 }
 
-export function createEmbed(approval: BaseApproval & { options: Pick<ApprovalOptions, 'description'> }, color: number, title: string) {
+export function createEmbed(approval: BaseApproval & { options: Pick<ApprovalOptions, 'description' | 'approvalCount' | 'disapprovalCount'> }, color: number, title: string) {
+    const approvalCount = approval.options.approvalCount || globalApprovalCount;
+    const disapprovalCount = approval.options.disapprovalCount || globalDisapprovalCount;
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
         .setDescription(approval.options.description)
         .addFields(
-            { name: 'Approval Count', value: `${approval.approvalIds.length}/${globalApprovalCount} (${approval.approvalIds.map(v => userMention(v)).join(', ')})` },
-            { name: 'Disapproval Count', value: `${approval.disapprovalIds.length}/${globalDisapprovalCount} (${approval.disapprovalIds.map(v => userMention(v)).join(', ')})` },
+            { name: 'Approval Count', value: `${approval.approvalIds.length}/${approvalCount} (${approval.approvalIds.map(v => userMention(v)).join(', ')})` },
+            { name: 'Disapproval Count', value: `${approval.disapprovalIds.length}/${disapprovalCount} (${approval.disapprovalIds.map(v => userMention(v)).join(', ')})` },
             { name: 'Valid Till', value: time(new Date(approval.validTill)) },
         )
         .setTimestamp(Date.now())
