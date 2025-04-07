@@ -117,6 +117,11 @@ class ServerManager {
             this.waitingToShutdown = false
             return { success: false }
         }
+        
+        if (tick <= 0) {
+            return { success: true, promise: this.instance?.exited }
+        }
+
         const promise = this.raceShutdown(tick / 20 * 1000 + this.shutdownAllowedTime)
         return { promise, success }
     }
