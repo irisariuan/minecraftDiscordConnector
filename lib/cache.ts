@@ -64,14 +64,12 @@ export class CacheItem<T> {
     }
 
     async getData(forceUpdate = false): Promise<T | null> {
-        if (forceUpdate) {
-            await this.update();
-        }
-        if (this.checkExpired()) {
+        if (forceUpdate || this.checkExpired()) {
             await this.update();
         }
         return this.data;
     }
+    
     setData(data: T) {
         this.data = data;
         this.liveTime = Date.now();

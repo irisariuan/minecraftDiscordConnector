@@ -3,7 +3,8 @@ import { CacheItem } from "./cache"
 import { isServerAlive } from "./request"
 import { join } from "node:path"
 import { createDisposableWritableStream, safeFetch } from "./utils"
-import { EventEmitter, type Readable } from "node:stream"
+import { EventEmitter } from "node:stream"
+import { stripVTControlCharacters } from "node:util"
 
 if (!process.env.SERVER_DIR || !(await Bun.file(join(process.env.SERVER_DIR, 'start.sh')).exists())) throw new Error('SERVER_DIR environment variable is not set')
 
@@ -77,7 +78,7 @@ class ServerManager {
         this.instance.stdout.pipeTo(createDisposableWritableStream(chunk => {
             console.log(`[Minecraft Server] ${chunk}`)
             this.serverMessageEmitter.emitMessage(chunk)
-            this.outputLines.push(chunk)
+            this.outputLines.push(stripVTControlCharacters(chunk))
         }))
         this.instance.exited.then(() => {
             this.cleanup()
@@ -95,7 +96,10 @@ class ServerManager {
     }
 
     async stop(tick: number) {
-        if (this.waitingToShutdown || !await this.isOnline.getData(true)) return { success: false }
+        if (this.waitingToShutdown || !(await this.isOnline.getData(true))) {
+            console.log(this.waitingToShutdown ? 'Already waiting to shutdown' : 'Server is already offline')
+            return { success: false }
+        }
         this.waitingToShutdown = true
         const response = await safeFetch('http://localhost:6001/shutdown', {
             body: JSON.stringify({ tick }),
@@ -104,9 +108,13 @@ class ServerManager {
                 'Content-Type': 'application/json'
             }
         })
-        if (!response) return { success: false }
+        if (!response) {
+            console.error('Failed to fetch shutdown response')
+            return { success: false }
+        }
         const { success } = await response.json() as { success: boolean }
         if (!success) {
+            console.error('Failed to schedule shutdown')
             this.waitingToShutdown = false
             return { success: false }
         }

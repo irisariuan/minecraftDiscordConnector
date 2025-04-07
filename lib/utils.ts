@@ -23,9 +23,9 @@ export function createDisposableWritableStream(onData: (chunk: string) => void, 
     })
 }
 
-export function safeFetch(url: string, options?: RequestInit) {
+export function safeFetch(url: string, options?: RequestInit, logError = true) {
     return fetch(url, options).catch(err => {
-        // console.error(`Fetch error (${url}): ${err}`)
+        if (logError) console.error(`Fetch error (${url}): ${err}`)
         return null
     })
 }

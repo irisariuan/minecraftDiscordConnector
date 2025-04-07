@@ -8,7 +8,7 @@ export interface LogLine {
 }
 
 export async function getLogs(): Promise<LogLine[] | null> {
-    const res = await safeFetch('http://localhost:6001/logs')
+    const res = await safeFetch('http://localhost:6001/logs', {}, false)
     if (!res?.ok) {
         return null
     }
@@ -47,7 +47,7 @@ export async function fetchOnlinePlayers(): Promise<Player[] | null> {
         headers: {
             'Content-Type': 'application/json'
         }
-    });
+    }, false);
     if (!res?.ok) {
         return null
     }
@@ -63,8 +63,10 @@ export function parseCommandOutput(output: string | null, success: boolean) {
 }
 
 export async function isServerAlive() {
+    const { signal, cancel } = newTimeoutSignal(1000 * 3)
     const alive = await safeFetch('http://localhost:6001/ping', {
-        signal: newTimeoutSignal(1000 * 3).signal,
-    })
+        signal,
+    }, false)
+    if (alive?.ok) cancel()
     return alive?.ok ?? false;
 }
