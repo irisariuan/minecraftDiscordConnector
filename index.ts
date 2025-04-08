@@ -149,7 +149,6 @@ process.on('unhandledRejection', (reason) => {
 })
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error)
-    process.exit(1)
 })
 
 client.login(process.env.TOKEN)

@@ -69,7 +69,11 @@ export class CacheItem<T> {
         }
         return this.data;
     }
-    
+
+    setUpdateMethod(updateMethod: () => T | Promise<T>) {
+        this.updateMethod = updateMethod;
+    }
+
     setData(data: T) {
         this.data = data;
         this.liveTime = Date.now();
