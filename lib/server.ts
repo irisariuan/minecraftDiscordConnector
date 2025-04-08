@@ -62,9 +62,30 @@ class ServerManager {
             this.serverMessageEmitter.onceMessage(message => r(message))
         })
     }
+
     captureLastLineOfOutput() {
         if (!this.instance) return null
         return this.outputLines.at(-1) ?? null
+    }
+
+    captureSomeOutput(ms: number, maxLines = -1) {
+        if (!this.instance) return null
+        return new Promise<string[]>(r => {
+            const timeout = setTimeout(() => {
+                this.serverMessageEmitter.removeMessageListener(listener)
+                r(result)
+            }, ms)
+            const result: string[] = []
+            const listener = (message: string) => {
+                result.push(message)
+                if (maxLines > 0 && result.length >= maxLines) {
+                    this.serverMessageEmitter.removeMessageListener(listener)
+                    clearTimeout(timeout)
+                    r(result)
+                }
+            }
+            this.serverMessageEmitter.onMessage(listener)
+        })
     }
 
     async start() {
@@ -90,7 +111,7 @@ class ServerManager {
             const unformattedChunk = stripVTControlCharacters(chunk)
             const [timestamp, level] = unformattedChunk.match(/(?<=\[).+?(?=\])/)?.at(0)?.split(' ') ?? [null, null]
             const textContent = unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ?? unformattedChunk
-            this.outputLines.push({ timestamp: timestamp ?? 'UNKNOWN', type: serverTypeRef[level as keyof typeof serverTypeRef] ?? 'unknown', message: textContent })
+            this.outputLines.push({ timestamp: timestamp || null, type: serverTypeRef[level as keyof typeof serverTypeRef] ?? 'unknown', message: textContent })
         }))
         return this.instance.pid
     }

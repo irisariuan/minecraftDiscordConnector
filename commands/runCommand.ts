@@ -31,12 +31,12 @@ export default {
                     description: `Command: \`${command}\``,
                     async onSuccess(approval, message) {
                         const { success } = await runCommandOnServer(approval.content)
-                        const output = await serverManager.captureLastLineOfOutput()
+                        const output = await serverManager.captureSomeOutput(200)
                         if (!success) {
                             await message.reply("Failed to run command")
                             return
                         }
-                        await message.reply(parseCommandOutput(output?.message || null, success))
+                        await message.reply(parseCommandOutput(output?.join('\n') || null, success))
                     },
                 }
             })

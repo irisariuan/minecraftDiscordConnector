@@ -32,7 +32,7 @@ export default {
             formatter: (log) => {
                 return {
                     name: log.type.toUpperCase(),
-                    value: `${time(new Date(log.timestamp))}\n${log.message}`,
+                    value: `${log.timestamp ? time(new Date(log.timestamp)) : 'Unknown Time'}\n${log.message}`,
                 }
             }
         })
