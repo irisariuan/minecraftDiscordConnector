@@ -14,11 +14,14 @@ export default {
                 .setDescription('Delay before stopping the server')
                 .setRequired(false)
                 .setMinValue(0)
-                .setMaxValue(60)
         ),
     async execute(interaction, client) {
         const seconds = interaction.options.getInteger('seconds') ?? 0
         if (!await isServerAlive()) return await interaction.reply({ content: "Server is already offline", flags: [MessageFlags.Ephemeral] })
+
+        if (await serverManager.haveServerSideScheduledShutdown() || await serverManager.haveLocalSideScheduledShutdown()) {
+            return await interaction.reply({ content: "Server is already scheduled to shutdown, please cancel it first", flags: [MessageFlags.Ephemeral] })
+        }
 
         if (comparePermission(await readPermission(interaction.user.id), PermissionFlags.stopServer)) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });

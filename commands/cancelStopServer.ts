@@ -11,16 +11,18 @@ export default {
         .setDescription("Cancel stop the server"),
     async execute(interaction, client) {
         if (!await isServerAlive()) return await interaction.reply({ content: "Server is offline", flags: [MessageFlags.Ephemeral] })
-        if (!await serverManager.haveServerSideScheduledShutdown()) return await interaction.reply({ content: "No scheduled shutdown found", flags: [MessageFlags.Ephemeral] })
-        
-            if (comparePermission(await readPermission(interaction.user.id), PermissionFlags.stopServer)) {
+        if (!await serverManager.haveServerSideScheduledShutdown() && !serverManager.haveLocalSideScheduledShutdown()) return await interaction.reply({ content: "No scheduled shutdown found", flags: [MessageFlags.Ephemeral] })
+        if (comparePermission(await readPermission(interaction.user.id), PermissionFlags.stopServer)) {
             await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-            const success = await serverManager.cancelServerSideShutdown()
-            if (!success) {
-                await interaction.editReply({ content: "No scheduled shutdown found" });
-                return
+            let success = false
+            if (serverManager.haveLocalSideScheduledShutdown()) {
+                serverManager.cancelLocalScheduledShutdown()
+                success = true
             }
-            serverManager.cancelLocalScheduledShutdown()
+            if (await serverManager.cancelServerSideShutdown()) {
+                success = true
+            }
+            if (!success) return await interaction.editReply({ content: "No scheduled shutdown found" });
             return await interaction.editReply({ content: 'Cancelled scheduled shutdown' })
         }
 
@@ -29,13 +31,16 @@ export default {
             options: {
                 description: "Cancel Server Shutdown",
                 async onSuccess() {
-                    const success = await serverManager.cancelServerSideShutdown()
-                    if (!success) {
-                        await interaction.editReply({ content: "No scheduled shutdown found" });
-                        return
+                    let success = false
+                    if (serverManager.haveLocalSideScheduledShutdown()) {
+                        serverManager.cancelLocalScheduledShutdown()
+                        success = true
                     }
-                    serverManager.cancelLocalScheduledShutdown()
-                    await interaction.editReply({ content: 'Cancelled scheduled shutdown' });
+                    if (await serverManager.cancelServerSideShutdown()) {
+                        success = true
+                    }
+                    if (!success) return await interaction.editReply({ content: "No scheduled shutdown found" });
+                    return await interaction.editReply({ content: 'Cancelled scheduled shutdown' })
                 },
                 approvalCount: 1,
                 disapprovalCount: 4,

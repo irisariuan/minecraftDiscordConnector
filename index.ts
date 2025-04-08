@@ -149,4 +149,30 @@ process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error)
 })
 
+process.on('SIGINT', async () => {
+    const { success, promise } = await serverManager.stop(0)
+    if (success) {
+        console.log('Server process shutting down')
+        await promise
+        console.log('Server process stopped')
+    }
+    process.exit(64)
+})
+
+process.on('beforeExit', async code => {
+    if (code === 64) return
+    const { success, promise } = await serverManager.stop(0)
+    if (success) {
+        console.log('Server process shutting down')
+        await promise
+        console.log('Server process stopped')
+    }
+    process.exit(code)
+})
+
+process.on('exit', async code => {
+    console.log(`Process exited with code ${code}`)
+    process.exit(code)
+})
+
 client.login(process.env.TOKEN)

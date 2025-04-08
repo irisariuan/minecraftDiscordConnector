@@ -20,16 +20,16 @@ export interface ApprovalOptions {
     description: string,
     approvalCount?: number,
     disapprovalCount?: number,
-    onSuccess: (approval: Approval, message: Message | PartialMessage) => Promise<void>,
-    onFailure?: (approval: Approval, message: Message | PartialMessage) => Promise<void>,
-    onTimeout?: (approval: Approval, message: Message | PartialMessage) => Promise<void>,
+    onSuccess: (approval: Approval, message: Message | PartialMessage) => Promise<unknown>,
+    onFailure?: (approval: Approval, message: Message | PartialMessage) => Promise<unknown>,
+    onTimeout?: (approval: Approval, message: Message | PartialMessage) => Promise<unknown>,
 }
 
 export const approvalList: Map<string, Approval> = new Map()
 export const globalDisapprovalCount = Number(process.env.DISAPPROVAL_COUNT) || 1
 export const globalApprovalCount = Number(process.env.APPROVAL_COUNT) || 1
 
-export function newApproval(approval: Omit<Approval, 'approvalIds' | 'disapprovalIds' | 'timeout' | 'superStatus'>, cleanUp: () => void | Promise<void>) {
+export function newApproval(approval: Omit<Approval, 'approvalIds' | 'disapprovalIds' | 'timeout' | 'superStatus'>, cleanUp: () => unknown | Promise<unknown>) {
     const newApproval: Approval = {
         ...approval,
         approvalIds: [],
