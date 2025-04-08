@@ -5,11 +5,11 @@ import { compareAllPermissions, compareAnyPermissions, comparePermission, Permis
 import { updateDnsRecord } from './lib/dnsRecord'
 import { globalApprovalCount, approve, createApprovalEmbed, globalDisapprovalCount, disapprove, getApproval } from './lib/approval'
 import { serverManager } from './lib/server'
+import { MINECRAFT_VERSION } from './lib/plugin'
 
 const DELETE_AFTER_MS = 3 * 1000
 
 const commands = await loadCommands()
-let lastStatus: boolean | null = null
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions] })
 
@@ -132,13 +132,11 @@ client.on('messageReactionAdd', async (reaction, user) => {
 })
 
 serverManager.isOnline.cacheEvent.on('update', data => {
-    if (lastStatus === data) return
-    lastStatus = data
     console.log('Server online status updated:', data)
-    client.user?.setActivity({
-        name: data ? 'Minecraft Server Online' : 'Minecraft Server Offline',
-        type: data ? ActivityType.Playing : ActivityType.Watching,
-    })
+    if (!data) {
+        return client.user?.setActivity({ name: 'Minecraft Server Offline', type: ActivityType.Watching })
+    }
+    client.user?.setActivity({ name: `Minecraft ${MINECRAFT_VERSION} Server`, type: ActivityType.Playing })
 })
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
