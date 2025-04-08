@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { ActivityType, Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
-import { loadCommands } from './lib/commands'
+import { loadCommands } from './lib/discordCommands'
 import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
 import { globalApprovalCount, approve, createApprovalEmbed, globalDisapprovalCount, disapprove, getApproval } from './lib/approval'

@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/commands";
+import type { CommandFile } from "../lib/discordCommands";
 import { downloadLatestPlugin, getPlugin, LOADER_TYPE, MINECRAFT_VERSION } from "../lib/plugin";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
 

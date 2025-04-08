@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from "discord.js";
 import { getPlugin, LOADER_TYPE, MINECRAFT_VERSION, searchPlugins, type PluginSearchQueryItem, type PluginSearchQueryResponse } from "../lib/plugin";
-import type { CommandFile } from "../lib/commands";
+import type { CommandFile } from "../lib/discordCommands";
 import { sendPaginationMessage } from "../lib/pagination";
 
 export default {

@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
-import type { CommandFile } from "../lib/commands";
+import type { CommandFile } from "../lib/discordCommands";
 import { sendPaginationMessage } from "../lib/pagination";
 import { serverManager } from "../lib/server";
 

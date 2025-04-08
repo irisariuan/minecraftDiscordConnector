@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/commands";
+import type { CommandFile } from "../lib/discordCommands";
 import { compareAllPermissions, PermissionFlags, readPermission } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { parseCommandOutput, runCommandOnServer } from "../lib/request";

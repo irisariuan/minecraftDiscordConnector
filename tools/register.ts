@@ -1,5 +1,5 @@
 import { REST, Routes } from "discord.js";
-import { loadCommands } from "../lib/commands";
+import { loadCommands } from "../lib/discordCommands";
 
 if (!process.env.TOKEN || !process.env.CLIENT_ID) throw new Error("No token provided");
 

@@ -156,7 +156,7 @@ export async function sendPaginationMessage<T>({ getResult, interaction, options
         interval: 1000 * 60 * 5,
         ttl: 1000 * 60 * 3,
     })
-    
+
     const interactionResponse = await editInteraction({ result, interaction, page, options, filterFunc, formatter })
 
     interactionResponse.createMessageComponentCollector({ componentType: ComponentType.Button }).on('collect', async i => {
@@ -226,5 +226,5 @@ async function editInteraction<T>({ result, interaction, page, options, filterFu
     const embed = createEmbed({ result: filteredResult, page, options, formatter })
     const maxPage = calculateMaxPage(filteredResult.length)
     const buttonRow = createButtons({ page, contentLength: filteredResult.length })
-    return await interaction.editReply({ embeds: [embed], components: buttonRow, content: `Page ${page + 1}/${maxPage}`.trim() })
+    return await interaction.editReply({ embeds: [embed], components: buttonRow, content: `Page ${page + 1}/${maxPage + 1}`.trim() })
 }

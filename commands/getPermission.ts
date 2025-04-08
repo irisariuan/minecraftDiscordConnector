@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
-import type { CommandFile } from "../lib/commands";
+import type { CommandFile } from "../lib/discordCommands";
 import { parsePermission, readPermission } from "../lib/permission";
 
 export default {
