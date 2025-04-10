@@ -188,6 +188,7 @@ class ServerManager {
     }
 
     cancelLocalScheduledShutdown() {
+        this.waitingToShutdown = false
         for (const timeout of this.timeouts) {
             clearTimeout(timeout)
         }
@@ -199,6 +200,7 @@ class ServerManager {
         const response = await safeFetch('http://localhost:6001/cancelShutdown')
         if (!response) return false
         const { success } = await response.json() as { success: boolean }
+        if (success) this.waitingToShutdown = false
         return success
     }
 
