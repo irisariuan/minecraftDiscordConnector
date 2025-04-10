@@ -19,7 +19,7 @@ export default {
                 return await interaction.editReply({ content: "Server is already online" });
             }
             console.log(`Server started with PID ${pid}`);
-            await interaction.editReply({ content: 'Server started successfully' });
+            return await interaction.editReply({ content: 'Server started successfully' });
         }
 
         sendApprovalPoll(interaction, {
