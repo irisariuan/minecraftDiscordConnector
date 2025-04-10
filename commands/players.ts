@@ -25,8 +25,8 @@ export default {
                 notFoundMessage: "No players found",
                 title: "Online Players",
             },
-            getResult: async () => {
-                return await onlinePlayers.getData() || []
+            getResult: async (page, force) => {
+                return await onlinePlayers.getData(force) || undefined
             },
             filterFunc: (filter) => (player => {
                 if (!filter) return true

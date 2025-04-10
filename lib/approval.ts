@@ -185,9 +185,8 @@ export async function sendApprovalPoll(interaction: CommandInteraction, approval
         if (!message.resource?.message?.channel.isSendable()) return
         const approval = getApproval(message.resource?.message?.id, false)
         if (!approval) return
-        if (message.resource.message.editable) {
-            message.resource.message.edit({ embeds: [createEmbed(approval, 0xb596, 'Pending (Timeout)')] })
-            message.resource.message.reactions.removeAll()
+        if (message.resource.message.deletable) {
+            message.resource.message.delete().catch(console.error)
         }
         const newMessage = await message.resource.message.channel.send({ embeds: [createApprovalEmbed(approval)] })
         transferApproval(message.resource?.message?.id, newMessage.id)

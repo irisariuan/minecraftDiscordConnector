@@ -3,21 +3,21 @@ import { EventEmitter } from "node:stream"
 interface CacheOptions<T> {
     ttl: number,
     interval: number,
-    updateMethod?: () => T | Promise<T>,
+    updateMethod?: () => T | null | Promise<T | null>,
 }
 
 class CacheEventEmitter<T> extends EventEmitter {
-    on(event: 'update', listener: (data: T) => void) {
+    on(event: 'update', listener: (data: T | null) => void) {
         return super.on(event, listener)
     }
-    emit(event: 'update', data: T) {
+    emit(event: 'update', data: T | null) {
         return super.emit(event, data)
     }
 }
 
 export class CacheItem<T> {
     private data: T | null
-    private updateMethod?: () => T | Promise<T>
+    private updateMethod?: () => T | null | Promise<T | null>
     private ttl: number
     private liveTime: number
     readonly cacheEvent: CacheEventEmitter<T>
@@ -74,7 +74,7 @@ export class CacheItem<T> {
         this.updateMethod = updateMethod;
     }
 
-    setData(data: T) {
+    setData(data: T | null) {
         this.data = data;
         this.liveTime = Date.now();
     }

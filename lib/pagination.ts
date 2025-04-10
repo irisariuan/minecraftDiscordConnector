@@ -148,13 +148,13 @@ interface PaginationOptions {
 }
 
 interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
-    getResult: (pageNumber: number) => Promise<T[] | undefined>
+    getResult: (pageNumber: number, force?: boolean) => Promise<T[] | undefined>
 }
 
 export async function sendPaginationMessage<T>({ getResult, interaction, options, filterFunc, formatter }: SendPaginationMessageProps<T>) {
     let page = 0
     const result = new CacheItem<T[]>(null, {
-        updateMethod: async () => (await getResult(page))?.filter(filterFunc(options?.filter)) || [],
+        updateMethod: async () => (await getResult(page, true))?.filter(filterFunc(options?.filter)) || [],
         interval: 1000 * 60 * 5,
         ttl: 1000 * 60 * 3,
     })
@@ -180,7 +180,7 @@ export async function sendPaginationMessage<T>({ getResult, interaction, options
             const reply = await i.awaitModalSubmit({ time: 1000 * 60 * 5, filter: (i) => i.customId === ModalAction.MODAL_FILTER_ID })
             await reply.deferUpdate()
             const filter = reply.fields.getTextInputValue(ModalAction.FILTER_INPUT)
-            result.setUpdateMethod(async () => (await getResult(page))?.filter(filterFunc(filter)) || [])
+            result.setUpdateMethod(async () => (await getResult(page, true))?.filter(filterFunc(filter)) || [])
             const maxPage = calculateMaxPage((await result.getData())?.length || 0)
             page = getPage({ page, maxPage, pageAction: PageAction.SET_FILTER })
             return editInteraction({ result, interaction, page: Math.max(Math.min(page, maxPage), 0), options, filterFunc, formatter })
