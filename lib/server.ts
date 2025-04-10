@@ -120,6 +120,7 @@ class ServerManager {
         if (this.instance?.exitCode === null) {
             this.instance?.kill('SIGKILL')
             await this.instance?.exited
+            this.waitingToShutdown = false
             return true
         }
         return false
@@ -145,10 +146,10 @@ class ServerManager {
         const { success } = await response.json() as { success: boolean }
         if (!success) {
             console.error('Failed to schedule shutdown')
-            this.waitingToShutdown = false
             return { success: false }
         }
 
+        this.waitingToShutdown = false
         if (tick <= 0) {
             return { success: true, promise: this.instance?.exited }
         }
