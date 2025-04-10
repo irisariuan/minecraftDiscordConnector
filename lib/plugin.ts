@@ -1,5 +1,6 @@
 import { createWriteStream, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { safeFetch } from './utils'
 
 if (!process.env.MINECRAFT_VERSION || !process.env.LOADER_TYPE || !process.env.MOD_TYPE) throw new Error('MINECRAFT_VERSION, LOADER_TYPE, or MOD_TYPE environment variable is not set')
 if (!process.env.SERVER_DIR || !existsSync(join(process.env.SERVER_DIR, '/plugins'))) throw new Error('SERVER_DIR environment variable is not set')
@@ -122,6 +123,13 @@ export async function searchPlugins({ offset = 0 }: { offset?: number } = {}) {
     url.searchParams.set('offset', offset.toString())
     const res = await fetch(url)
     const data = await res.json() as PluginSearchQueryResponse | ErrorResponse
+    return data
+}
+
+export async function getActivePlugins(): Promise<string[] | null> {
+    const res = await safeFetch('http://localhost:6001/plugins')
+    if (!res?.ok) return null
+    const data = await res.json() as string[]
     return data
 }
 
