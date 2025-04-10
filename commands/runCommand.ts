@@ -38,13 +38,13 @@ export default {
                 options: {
                     description: `Command: \`${command}\``,
                     async onSuccess(approval, message) {
+                        const output = serverManager.captureSomeOutput(timeout)
                         const { success } = await runCommandOnServer(approval.content)
-                        const output = await serverManager.captureSomeOutput(timeout)
                         if (!success) {
                             await message.reply("Failed to run command")
                             return
                         }
-                        await message.reply(parseCommandOutput(output?.join('\n') || null, success))
+                        await message.reply(parseCommandOutput((await output)?.join('\n') || null, success))
                     },
                 }
             })
