@@ -55,9 +55,10 @@ export function createFilterModal() {
 interface CreateButtonsProps {
     page: number,
     contentLength: number,
-    maxPage?: number
+    maxPage?: number,
+    unfixablePageNumber?: boolean
 }
-export function createButtons({ page, contentLength, maxPage = calculateMaxPage(contentLength) }: CreateButtonsProps) {
+export function createButtons({ page, contentLength, maxPage = calculateMaxPage(contentLength), unfixablePageNumber = false }: CreateButtonsProps) {
     const prevBtn = new ButtonBuilder()
         .setCustomId(PageAction.PREVIOUS)
         .setLabel('Previous Page')
@@ -100,7 +101,7 @@ export function createButtons({ page, contentLength, maxPage = calculateMaxPage(
     }
     firstRow.addComponents(prevBtn, nextBtn)
     secondRow.addComponents(refreshBtn, pageModalBtn, filterModalBtn)
-    if (maxPage > 1) {
+    if (maxPage > 1 && !unfixablePageNumber) {
         secondRow.addComponents(firstBtn, lastBtn)
     }
     return [firstRow, secondRow]
@@ -119,7 +120,7 @@ interface CreateEmbedProps<T> {
     result: T[],
     page: number,
     formatter: (v: T, i: number) => { name: string, value: string },
-    options?: Pick<PaginationOptions, 'title' | 'mainColor'>
+    options?: Pick<PaginationOptions, 'title' | 'mainColor' | 'unfixablePageNumber'>
 }
 
 export function createEmbed<T>({ result, page, options, formatter }: CreateEmbedProps<T>) {
@@ -133,7 +134,7 @@ export function createEmbed<T>({ result, page, options, formatter }: CreateEmbed
                 page * pageSize, (page + 1) * pageSize
             )
         )
-        .setFooter({ text: `Showing results ${page * pageSize + 1}-${Math.min((page + 1) * pageSize, result.length)} of ${result.length}` })
+        .setFooter({ text: `Showing results ${page * pageSize + 1}-${Math.min((page + 1) * pageSize, result.length)}${options?.unfixablePageNumber ? '' : ` of ${result.length}`}` })
 }
 
 export const pageSize = 20
@@ -143,6 +144,7 @@ interface PaginationOptions {
     notFoundMessage?: string,
     title?: string,
     mainColor?: ColorResolvable,
+    unfixablePageNumber?: boolean
 }
 
 interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
@@ -192,7 +194,7 @@ export async function sendPaginationMessage<T>({ getResult, interaction, options
         if (!data || data.length <= 0) return interaction.editReply({
             content: options?.notFoundMessage || 'No results',
             embeds: [],
-            components: createButtons({ page: 0, contentLength: 0 })
+            components: createButtons({ page: 0, contentLength: 0, unfixablePageNumber: options?.unfixablePageNumber })
         })
 
         const maxPage = calculateMaxPage(data.length)
@@ -219,12 +221,12 @@ async function editInteraction<T>({ result, interaction, page, options, filterFu
         return await interaction.editReply({
             content: options?.notFoundMessage || 'No results',
             embeds: [],
-            components: createButtons({ page: 0, contentLength: 0 })
+            components: createButtons({ page: 0, contentLength: 0, unfixablePageNumber: options?.unfixablePageNumber })
         })
     }
     const filteredResult = data.filter(filterFunc(options?.filter))
     const embed = createEmbed({ result: filteredResult, page, options, formatter })
     const maxPage = calculateMaxPage(filteredResult.length)
-    const buttonRow = createButtons({ page, contentLength: filteredResult.length })
+    const buttonRow = createButtons({ page, contentLength: filteredResult.length, unfixablePageNumber: options?.unfixablePageNumber })
     return await interaction.editReply({ embeds: [embed], components: buttonRow, content: `Page ${page + 1}/${maxPage + 1}`.trim() })
 }

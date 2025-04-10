@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from "discord.js";
-import { getPlugin, LOADER_TYPE, MINECRAFT_VERSION, searchPlugins, type PluginSearchQueryItem, type PluginSearchQueryResponse } from "../lib/plugin";
+import { LOADER_TYPE, MINECRAFT_VERSION, searchPlugins, type PluginSearchQueryItem } from "../lib/plugin";
 import type { CommandFile } from "../lib/discordCommands";
 import { sendPaginationMessage } from "../lib/pagination";
 
@@ -42,6 +42,7 @@ export default {
                 filter: pluginOption || undefined,
                 title: "Search Plugin",
                 notFoundMessage: "No plugin found",
+                unfixablePageNumber: true
             }
         })
     }

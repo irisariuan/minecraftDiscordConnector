@@ -1,5 +1,6 @@
-import { EmbedBuilder, type Message, time, userMention, type PartialMessage, type CommandInteraction } from "discord.js";
+import { EmbedBuilder, type Message, time, userMention, type PartialMessage, type CommandInteraction, type MessageReaction, type PartialMessageReaction, type User, type PartialUser, MessageFlags, type Channel } from "discord.js";
 import type { PickAndOptional } from "./utils";
+import { readPermission, comparePermission, PermissionFlags, compareAnyPermissions } from "./permission";
 
 export interface BaseApproval {
     content: string,
@@ -14,6 +15,7 @@ export interface Approval extends BaseApproval {
     options: ApprovalOptions,
     messageId: string,
     timeout: NodeJS.Timeout,
+    updateInterval?: NodeJS.Timeout,
 }
 
 export interface ApprovalOptions {
@@ -25,11 +27,15 @@ export interface ApprovalOptions {
     onTimeout?: (approval: Approval, message: Message | PartialMessage) => Promise<unknown>,
 }
 
+export const MESSAGE_VALID_TIME = 14 * 60 * 1000 // 14 minutes, since discord message valid time is 15 minutes
+export const DELETE_AFTER_MS = 3 * 1000
+
 export const approvalList: Map<string, Approval> = new Map()
 export const globalDisapprovalCount = Number(process.env.DISAPPROVAL_COUNT) || 1
 export const globalApprovalCount = Number(process.env.APPROVAL_COUNT) || 1
 
-export function newApproval(approval: Omit<Approval, 'approvalIds' | 'disapprovalIds' | 'timeout' | 'superStatus'>, cleanUp: () => unknown | Promise<unknown>) {
+export function newApproval(approval: Omit<Approval, 'approvalIds' | 'disapprovalIds' | 'timeout' | 'superStatus'>, cleanUp: () => unknown | Promise<unknown>, update: () => unknown | Promise<unknown>) {
+    removeApproval(approval.messageId)
     const newApproval: Approval = {
         ...approval,
         approvalIds: [],
@@ -40,8 +46,25 @@ export function newApproval(approval: Omit<Approval, 'approvalIds' | 'disapprova
         }, approval.validTill - Date.now()),
         superStatus: null,
     }
+    if (approval.duration > MESSAGE_VALID_TIME) {
+        approval.updateInterval = setInterval(() => {
+            update();
+            if (approval.validTill < Date.now()) {
+                clearTimeout(newApproval.timeout);
+                removeApproval(approval.messageId);
+            }
+        }, MESSAGE_VALID_TIME);
+    }
     approvalList.set(approval.messageId, newApproval);
     return newApproval;
+}
+
+export function transferApproval(oldMessageId: string, newMessageId: string) {
+    const approval = approvalList.get(oldMessageId);
+    if (!approval) return;
+    approvalList.delete(oldMessageId);
+    approval.messageId = newMessageId;
+    approvalList.set(newMessageId, approval);
 }
 
 export function approve(messageId: string, userId: string, force = false) {
@@ -67,6 +90,7 @@ export function removeApproval(messageId: string) {
     const approval = approvalList.get(messageId);
     if (!approval) return;
     clearTimeout(approval.timeout);
+    clearInterval(approval.updateInterval);
     approvalList.delete(messageId);
 }
 
@@ -157,6 +181,22 @@ export async function sendApprovalPoll(interaction: CommandInteraction, approval
         if (!approval) return
         await interaction.editReply({ embeds: [createApprovalEmbed(approval)] })
         removeApproval(message.resource?.message?.id)
+    }, async () => {
+        if (!message.resource?.message?.channel.isSendable()) return
+        const approval = getApproval(message.resource?.message?.id, false)
+        if (!approval) return
+        if (message.resource.message.editable) {
+            message.resource.message.edit({ embeds: [createEmbed(approval, 0xb596, 'Pending (Timeout)')] })
+            message.resource.message.reactions.removeAll()
+        }
+        const newMessage = await message.resource.message.channel.send({ embeds: [createApprovalEmbed(approval)] })
+        transferApproval(message.resource?.message?.id, newMessage.id)
+        console.log(`Transferring approval message from ${message.resource?.message?.id} to ${newMessage.id}`)
+        await newMessage.react('✅')
+        await newMessage.react('❌')
+        await newMessage.react('📤')
+        await newMessage.react('🏁')
+        await newMessage.react('🏳️')
     })
     console.log(`Polling for command ${interaction.commandName} with message id ${message.resource?.message?.id}`)
     await message.resource.message.react('✅')
@@ -164,4 +204,94 @@ export async function sendApprovalPoll(interaction: CommandInteraction, approval
     await message.resource.message.react('📤')
     await message.resource.message.react('🏁')
     await message.resource.message.react('🏳️')
+}
+
+export async function updateApprovalMessage(reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) {
+    const approval = getApproval(reaction.message.id)
+    if (!approval) return
+    const userPerm = await readPermission(user.id)
+    const approving = reaction.emoji.name === '✅' || reaction.emoji.name === '🏁'
+    const disapproving = reaction.emoji.name === '❌' || reaction.emoji.name === '🏳️'
+    const canceling = reaction.emoji.name === '📤'
+    const superApprove = reaction.emoji.name === '🏁' || reaction.emoji.name === '🏳️'
+    const isValidReaction = ['✅', '❌', '🏁', '🏳️', '📤'].includes(reaction.emoji.name || '')
+    const canSuperApprove = comparePermission(userPerm, PermissionFlags.superApprove)
+
+    const userReactions = reaction.message.reactions.cache.filter(r => r.users.cache.has(user.id))
+    for (const userReaction of userReactions.values()) {
+        await userReaction.users.remove(user.id).catch(console.error);
+    }
+    if (!isValidReaction || !compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
+    if (canceling) {
+        const prevCount = approval.approvalIds.length + approval.disapprovalIds.length
+        approval.approvalIds = approval.approvalIds.filter(id => id !== user.id)
+        approval.disapprovalIds = approval.disapprovalIds.filter(id => id !== user.id)
+        if (prevCount === approval.approvalIds.length + approval.disapprovalIds.length) {
+            return reaction.message.reply({ content: 'You have not approved or disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
+                .catch(console.error)
+                .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
+        }
+        if (reaction.message.editable) {
+            await reaction.message.edit({
+                embeds: [createApprovalEmbed(approval)]
+            }).catch(console.error)
+        }
+        return await reaction.message.reply({
+            content: `Cancelled by ${userMention(user.id)}`,
+            flags: [MessageFlags.SuppressNotifications]
+        })
+            .catch(console.error)
+            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
+    }
+    if (approving && approval.approvalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
+        return await reaction.message.reply({ content: 'You have already approved this poll', flags: [MessageFlags.SuppressNotifications] })
+            .catch(console.error)
+            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
+    }
+    if (disapproving && approval.disapprovalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
+        return await reaction.message.reply({ content: 'You have already disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
+            .catch(console.error)
+            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
+    }
+
+    // Check if the user is already in the opposite list and remove them
+    if (disapproving && approval.approvalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
+        approval.approvalIds = approval.approvalIds.filter(id => id !== user.id)
+    } else if (approving && approval.disapprovalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
+        approval.disapprovalIds = approval.disapprovalIds.filter(id => id !== user.id);
+    }
+
+    const status = approving ? approve(reaction.message.id, user.id, canSuperApprove && superApprove) : disapprove(reaction.message.id, user.id, canSuperApprove && superApprove)
+
+    if (reaction.message.editable) {
+        await reaction.message.edit({
+            embeds: [createApprovalEmbed(approval)]
+        }).catch(console.error)
+    }
+
+    const countStr = approving ? `${approval.approvalIds.length}/${approval.options.approvalCount || globalApprovalCount}` : `${approval.disapprovalIds.length}/${approval.options.disapprovalCount || globalDisapprovalCount}`
+
+    await reaction.message.reply({
+        content: `${approving ? 'Approved' : 'Disapproved'} by ${userMention(user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,
+    }).catch(console.error)
+
+    if (status !== 'pending') {
+        await reaction.message.reactions.removeAll()
+    } else {
+        return
+    }
+
+    if (status === 'approved') {
+        return await approval.options.onSuccess(approval, reaction.message)
+    }
+    if (status === 'disapproved') {
+        await approval.options.onFailure?.(approval, reaction.message)
+        return await reaction.message.reply({
+            content: `The poll \`${approval.content}\` has been disapproved.`,
+        }).catch(console.error)
+    }
+    await approval.options.onTimeout?.(approval, reaction.message)
+    await reaction.message.reply({
+        content: `The poll \`${approval.content}\` has timed out.`,
+    }).catch(console.error)
 }
