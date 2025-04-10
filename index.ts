@@ -1,15 +1,17 @@
 import 'dotenv/config'
-import { ActivityType, Client, GatewayIntentBits, MessageFlags, userMention } from 'discord.js'
+import { ActivityType, Client, GatewayIntentBits, MessageFlags } from 'discord.js'
 import { loadCommands } from './lib/discordCommands'
-import { compareAllPermissions, compareAnyPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
+import { compareAllPermissions, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
-import { globalApprovalCount, approve, createApprovalEmbed, globalDisapprovalCount, disapprove, getApproval, updateApprovalMessage } from './lib/approval'
+import { updateApprovalMessage } from './lib/approval'
 import { serverManager } from './lib/server'
 import { MINECRAFT_VERSION } from './lib/plugin'
 
 const commands = await loadCommands()
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions] })
+
+let lastData = false
 
 client.once('ready', () => {
     console.log('Ready!')
@@ -44,6 +46,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
 })
 
 serverManager.isOnline.cacheEvent.on('update', data => {
+    if (data === lastData) return
+    lastData = data
     console.log('Server online status updated:', data)
     if (!data) {
         return client.user?.setActivity({ name: 'Minecraft Server Offline', type: ActivityType.Watching })
