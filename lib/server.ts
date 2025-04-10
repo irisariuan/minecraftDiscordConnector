@@ -196,12 +196,7 @@ class ServerManager {
 
     async cancelServerSideShutdown() {
         if (!await this.haveServerSideScheduledShutdown()) return false
-        const response = await safeFetch('http://localhost:6001/cancelShutdown', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
+        const response = await safeFetch('http://localhost:6001/cancelShutdown')
         if (!response) return false
         const { success } = await response.json() as { success: boolean }
         return success
