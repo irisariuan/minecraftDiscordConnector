@@ -222,15 +222,22 @@ export async function updateApprovalMessage(reaction: MessageReaction | PartialM
         await userReaction.users.remove(user.id).catch(console.error);
     }
     if (!isValidReaction || !compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
-    if (isSuspending() && !comparePermission(userPerm, PermissionFlags.suspend)) return
+    if (isSuspending() && !comparePermission(userPerm, PermissionFlags.suspend)) {
+        return await reaction.message.reply({
+            content: 'The server is currently suspended, you do not have permission to approve or disapprove',
+            flags: [MessageFlags.SuppressNotifications]
+        })
+            .then(message => setTimeout(() => message.delete().catch(console.error), DELETE_AFTER_MS))
+            .catch(console.error)
+    }
     if (canceling) {
         const prevCount = approval.approvalIds.length + approval.disapprovalIds.length
         approval.approvalIds = approval.approvalIds.filter(id => id !== user.id)
         approval.disapprovalIds = approval.disapprovalIds.filter(id => id !== user.id)
         if (prevCount === approval.approvalIds.length + approval.disapprovalIds.length) {
             return reaction.message.reply({ content: 'You have not approved or disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
+                .then(message => setTimeout(() => message.delete().catch(console.error), DELETE_AFTER_MS))
                 .catch(console.error)
-                .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
         }
         if (reaction.message.editable) {
             await reaction.message.edit({
@@ -241,18 +248,18 @@ export async function updateApprovalMessage(reaction: MessageReaction | PartialM
             content: `Cancelled by ${userMention(user.id)}`,
             flags: [MessageFlags.SuppressNotifications]
         })
+            .then(message => setTimeout(() => message.delete().catch(console.error), DELETE_AFTER_MS))
             .catch(console.error)
-            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
     if (approving && approval.approvalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
         return await reaction.message.reply({ content: 'You have already approved this poll', flags: [MessageFlags.SuppressNotifications] })
+            .then(message => setTimeout(() => message.delete().catch(console.error), DELETE_AFTER_MS))
             .catch(console.error)
-            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
     if (disapproving && approval.disapprovalIds.includes(user.id) && !(superApprove && canSuperApprove)) {
         return await reaction.message.reply({ content: 'You have already disapproved this poll', flags: [MessageFlags.SuppressNotifications] })
+            .then(message => setTimeout(() => message.delete().catch(console.error), DELETE_AFTER_MS))
             .catch(console.error)
-            .then(msg => setTimeout(() => msg?.delete().catch(console.error), DELETE_AFTER_MS))
     }
 
     // Check if the user is already in the opposite list and remove them
