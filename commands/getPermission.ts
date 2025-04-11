@@ -16,7 +16,7 @@ export default {
         const permission = await readPermission(user.id);
         if (permission) {
             await interaction.reply({
-                content: `Permission for user ${userMention(user.id)} is \`${parsePermission(permission).join(", ")}\``,
+                content: `Permission for user ${userMention(user.id)} is \`${parsePermission(permission).join(", ")}\` (\`${permission}\`)`,
                 flags: [MessageFlags.Ephemeral],
             });
         } else {
