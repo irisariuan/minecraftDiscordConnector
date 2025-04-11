@@ -20,7 +20,7 @@ export default {
             interaction,
             async getResult(page) {
                 const results = []
-                for (let i = 0; i <= Math.ceil(page + 1 / 5); i++) {
+                for (let i = 0; i <= Math.ceil((page + 1) / 5); i++) {
                     const plugins = await searchPlugins({ offset: i * 20 })
                     if ('error' in plugins) {
                         continue
