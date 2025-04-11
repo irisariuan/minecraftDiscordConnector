@@ -1,6 +1,7 @@
 import { EmbedBuilder, type Message, time, userMention, type PartialMessage, type CommandInteraction, type MessageReaction, type PartialMessageReaction, type User, type PartialUser, MessageFlags, type Channel } from "discord.js";
 import type { PickAndOptional } from "./utils";
 import { readPermission, comparePermission, PermissionFlags, compareAnyPermissions } from "./permission";
+import { isSuspending } from "./suspend";
 
 export interface BaseApproval {
     content: string,
@@ -221,6 +222,7 @@ export async function updateApprovalMessage(reaction: MessageReaction | PartialM
         await userReaction.users.remove(user.id).catch(console.error);
     }
     if (!isValidReaction || !compareAnyPermissions(userPerm, [PermissionFlags.approve, PermissionFlags.superApprove])) return
+    if (isSuspending() && !comparePermission(userPerm, PermissionFlags.suspend)) return
     if (canceling) {
         const prevCount = approval.approvalIds.length + approval.disapprovalIds.length
         approval.approvalIds = approval.approvalIds.filter(id => id !== user.id)
