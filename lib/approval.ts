@@ -90,6 +90,7 @@ export function disapprove(messageId: string, userId: string, force = false) {
 export function removeApproval(messageId: string) {
     const approval = approvalList.get(messageId);
     if (!approval) return;
+    console.log(`Removing approval ${messageId}`)
     clearTimeout(approval.timeout);
     clearInterval(approval.updateInterval);
     approvalList.delete(messageId);
@@ -114,10 +115,7 @@ function checkApprovalStatus(approval: Approval, autoRemoval = true): ApprovalSt
 export function getApproval(messageId: string, autoRemoval = true): Approval | null {
     const approval = approvalList.get(messageId);
     if (!approval) return null;
-    if (autoRemoval && checkApprovalStatus(approval) !== 'pending') {
-        removeApproval(messageId);
-        return null;
-    }
+    if (checkApprovalStatus(approval) !== 'pending') return null
     return approval;
 }
 
