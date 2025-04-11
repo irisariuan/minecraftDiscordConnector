@@ -121,8 +121,8 @@ export async function searchPlugins({ offset = 0 }: { offset?: number } = {}) {
     ]))
     url.searchParams.set('limit', '100')
     url.searchParams.set('offset', offset.toString())
-    const res = await fetch(url)
-    const data = await res.json() as PluginSearchQueryResponse | ErrorResponse
+    const res = await safeFetch(url)
+    const data = await res?.json() as PluginSearchQueryResponse | ErrorResponse
     return data
 }
 
@@ -135,16 +135,16 @@ export async function getActivePlugins(): Promise<string[] | null> {
 
 export async function getPlugin(slugOrId: string) {
     const url = new URL(`https://api.modrinth.com/v2/project/${slugOrId}`)
-    const res = await fetch(url)
-    if (!res.ok) return null
+    const res = await safeFetch(url)
+    if (!res?.ok) return null
     const data = await res.json() as PluginGetQueryItem
     return data
 }
 
 export async function getPluginVersion(id: string) {
     const url = new URL(`https://api.modrinth.com/v2/version/${id}`)
-    const res = await fetch(url)
-    if (!res.ok) return null
+    const res = await safeFetch(url)
+    if (!res?.ok) return null
     const data = await res.json() as PluginGetVersionItem
     return data
 }
@@ -166,8 +166,8 @@ export async function listPluginVersions(slugOrId: string, options?: ListPluginV
     if (options?.game_versions) {
         url.searchParams.set('game_versions', JSON.stringify(options.game_versions))
     }
-    const res = await fetch(url)
-    if (!res.ok) return null
+    const res = await safeFetch(url)
+    if (!res?.ok) return null
     const data = await res.json() as PluginListVersionItem[]
     return data.map((item): PluginListVersionItem<true> => ({
         ...item,
@@ -189,8 +189,8 @@ export async function downloadPluginFile(id: string, force = false): Promise<{ f
         console.log(`File ${metadata.files[0].filename} already exists, skipping download`)
         return { filename: metadata.files[0].filename, newDownload: false }
     }
-    const res = await fetch(metadata.files[0].url)
-    if (!res.ok) return { filename: null, newDownload: false }
+    const res = await safeFetch(metadata.files[0].url)
+    if (!res?.ok) return { filename: null, newDownload: false }
     const stream = createWriteStream(createPathForPluginFile(metadata.files[0].filename))
     const data = res.body
     if (!data) return { filename: null, newDownload: false }

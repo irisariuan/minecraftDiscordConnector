@@ -11,3 +11,4 @@ await rest.put(
     { body: commands.map(v => v.command.toJSON()) },
 );
 console.log(`Successfully registered commands, total ${commands.length}`);
+process.exit(0)

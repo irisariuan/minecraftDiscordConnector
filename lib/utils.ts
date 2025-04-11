@@ -23,7 +23,18 @@ export function createDisposableWritableStream(onData: (chunk: string) => void, 
     })
 }
 
-export function safeFetch(url: string, options?: RequestInit, logError = true) {
+export function safeFetch(url: string | URL, options?: RequestInit, logError = true, timeout: null | number = null) {
+    if (timeout) {
+        const { signal, cancel } = newTimeoutSignal(timeout)
+        const opts = {
+            ...options,
+            signal
+        }
+        return fetch(url, opts).finally(() => cancel()).catch(err => {
+            if (logError) console.error(`Fetch error (${url}): ${err}`)
+            return null
+        })
+    }
     return fetch(url, options).catch(err => {
         if (logError) console.error(`Fetch error (${url}): ${err}`)
         return null

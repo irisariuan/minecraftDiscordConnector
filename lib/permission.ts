@@ -15,6 +15,8 @@ export const PermissionFlags = {
     editPerm: 1 << 11,
 } as const
 
+export const allPermission = Object.values(PermissionFlags).reduce((acc, cur) => acc | cur, 0)
+
 export const PERMISSION = `${process.cwd()}/data/permissions.json`
 
 export type Permission = typeof PermissionFlags[keyof typeof PermissionFlags]

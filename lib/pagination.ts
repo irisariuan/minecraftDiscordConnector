@@ -91,11 +91,11 @@ export function createButtons({ page, contentLength, maxPage = calculateMaxPage(
     const firstRow = new ActionRowBuilder<ButtonBuilder>()
     const secondRow = new ActionRowBuilder<ButtonBuilder>()
 
-    if (page <= 0) {
+    if (page <= 0 && !unfixablePageNumber) {
         prevBtn.setDisabled(true)
         firstBtn.setDisabled(true)
     }
-    if (contentLength - (page + 1) * pageSize <= 0) {
+    if (contentLength - (page + 1) * pageSize <= 0 && !unfixablePageNumber) {
         nextBtn.setDisabled(true)
         lastBtn.setDisabled(true)
     }
