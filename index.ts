@@ -1,17 +1,18 @@
 import 'dotenv/config'
 import { ActivityType, Client, GatewayIntentBits, MessageFlags } from 'discord.js'
 import { loadCommands } from './lib/discordCommands'
-import { compareAllPermissions, PermissionFlags, readPermission } from './lib/permission'
+import { compareAllPermissions, comparePermission, PermissionFlags, readPermission } from './lib/permission'
 import { updateDnsRecord } from './lib/dnsRecord'
 import { updateApprovalMessage } from './lib/approval'
 import { serverManager } from './lib/server'
 import { MINECRAFT_VERSION } from './lib/plugin'
+import { isSuspending } from './lib/suspend'
 
 const commands = await loadCommands()
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions] })
 
-let lastData = false
+let lastData: null | boolean = false
 
 client.once('ready', () => {
     console.log('Ready!')
@@ -29,6 +30,12 @@ client.on('interactionCreate', async (interaction) => {
         const { commandName } = interaction
         const command = commands.find(cmd => cmd.command.name === commandName)
         if (!command) return interaction.reply({ content: 'Command not found', flags: [MessageFlags.Ephemeral] })
+        if (command.permissions && !compareAllPermissions(await readPermission(interaction.user.id), command.permissions)) {
+            return interaction.reply({ content: 'You do not have permission to use this command', flags: [MessageFlags.Ephemeral] })
+        }
+        if (isSuspending() && !comparePermission(await readPermission(interaction.user.id), PermissionFlags.suspend)) {
+            return interaction.reply({ content: 'Server is suspending, you do not have permission to use this command', flags: [MessageFlags.Ephemeral] })
+        }
         await Promise.try(() => command.execute(interaction, client))
             .catch(err => {
                 console.error(err)

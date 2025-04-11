@@ -29,5 +29,6 @@ export default {
             return interaction.editReply({ content: "Plugin downloaded and appended successfully! You should restart the server to take effect" });
         }
         return interaction.editReply({ content: "Plugin already exists!" });
-    }
+    },
+    permissions: [PermissionFlags.downloadPlugin]
 } as CommandFile

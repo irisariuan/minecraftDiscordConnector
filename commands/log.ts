@@ -2,6 +2,7 @@ import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/discordCommands";
 import { sendPaginationMessage } from "../lib/pagination";
 import { serverManager } from "../lib/server";
+import { PermissionFlags } from "../lib/permission";
 
 export default {
     command: new SlashCommandBuilder()
@@ -36,5 +37,6 @@ export default {
                 }
             }
         })
-    }
+    },
+    permissions: [PermissionFlags.readLog]
 } as CommandFile

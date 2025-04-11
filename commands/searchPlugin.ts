@@ -2,6 +2,7 @@ import { SlashCommandBuilder, MessageFlags } from "discord.js";
 import { LOADER_TYPE, MINECRAFT_VERSION, searchPlugins, type PluginSearchQueryItem } from "../lib/plugin";
 import type { CommandFile } from "../lib/discordCommands";
 import { sendPaginationMessage } from "../lib/pagination";
+import { PermissionFlags } from "../lib/permission";
 
 export default {
     command: new SlashCommandBuilder()
