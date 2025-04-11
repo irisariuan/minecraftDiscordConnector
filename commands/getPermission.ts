@@ -9,10 +9,9 @@ export default {
         .addUserOption(option =>
             option.setName("user")
                 .setDescription("The user to get the permission of")
-                .setRequired(true)
         ),
     async execute(interaction, client) {
-        const user = interaction.options.getUser("user", true);
+        const user = interaction.options.getUser("user") || interaction.user
         const permission = await readPermission(user.id);
         if (permission) {
             await interaction.reply({
