@@ -40,7 +40,7 @@ export function createPermission(permissions: Permission[]) {
 
 async function readPermissionJson() {
     if (!Bun.file(PERMISSION).exists()) {
-        await Bun.write(PERMISSION, '{')
+        await Bun.write(PERMISSION, '{}')
     }
     return await Bun.file(PERMISSION).json().catch(() => ({})) as Record<string, Permission>
 }
