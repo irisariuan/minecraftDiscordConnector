@@ -19,11 +19,15 @@ export default {
         sendPaginationMessage<PluginSearchQueryItem<false>>({
             interaction,
             async getResult(page) {
-                const plugins = await searchPlugins({ offset: page * 20 })
-                if ('error' in plugins) {
-                    return []
+                const results = []
+                for (let i = 0; i < Math.ceil(page / 5); i++) {
+                    const plugins = await searchPlugins({ offset: i * 20 })
+                    if ('error' in plugins) {
+                        continue
+                    }
+                    results.push(...plugins.hits)
                 }
-                return plugins.hits
+                return results
             },
             formatter: (plugin) => {
                 const usable = plugin.versions.includes(MINECRAFT_VERSION) && plugin.categories.includes(LOADER_TYPE);
