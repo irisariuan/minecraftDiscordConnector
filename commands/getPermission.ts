@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
 import type { CommandFile } from "../lib/discordCommands";
-import { parsePermission, readPermission } from "../lib/permission";
+import { allPermission, parsePermission, readPermission } from "../lib/permission";
 
 export default {
     command: new SlashCommandBuilder()
@@ -15,7 +15,7 @@ export default {
         const permission = await readPermission(user.id);
         if (permission) {
             await interaction.reply({
-                content: `Permission for user ${userMention(user.id)} is \`${parsePermission(permission).join(", ")}\` (\`${permission}\`)`,
+                content: `Permission for user ${userMention(user.id)} is \`${parsePermission(permission).join(", ")}\` (\`${permission}\`${permission === allPermission ? " (**all**)" : ""})`,
                 flags: [MessageFlags.Ephemeral],
             });
         } else {
