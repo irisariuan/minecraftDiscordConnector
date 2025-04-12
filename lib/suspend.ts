@@ -1,4 +1,4 @@
-let suspending = false
+let suspending = true
 export function isSuspending(): boolean {
     return suspending
 }
