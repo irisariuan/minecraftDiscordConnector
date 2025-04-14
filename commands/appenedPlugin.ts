@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/discordCommands";
-import { downloadLatestPlugin, getPlugin, LOADER_TYPE, MINECRAFT_VERSION } from "../lib/plugin";
+import { downloadLatestPlugin, LOADER_TYPE, MINECRAFT_VERSION } from "../lib/plugin";
 import { comparePermission, PermissionFlags, readPermission } from "../lib/permission";
 
 export default {
@@ -21,7 +21,6 @@ export default {
         const pluginOption = interaction.options.getString("plugin", true);
 
         const { filename, newDownload } = await downloadLatestPlugin(pluginOption, { game_versions: [MINECRAFT_VERSION], loaders: [LOADER_TYPE] })
-
         if (!filename) {
             return interaction.editReply({ content: "Plugin not found" });
         }
