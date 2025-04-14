@@ -1,4 +1,5 @@
 export type PickAndOptional<T, K extends keyof T, O extends keyof T = never> = Pick<T, K> & Partial<Pick<T, O>>
+
 export function newTimeoutSignal(time: number) {
     const controller = new AbortController()
     const timeout = setTimeout(() => {
@@ -23,12 +24,13 @@ export function createDisposableWritableStream(onData: (chunk: string) => void, 
     })
 }
 
-export function safeFetch(url: string | URL, options?: RequestInit, logError = true, timeout: null | number = null) {
+export function safeFetch(url: string | URL, options?: RequestInit, logError = true, timeout: null | number = null, cache = false) {
     if (timeout) {
         const { signal, cancel } = newTimeoutSignal(timeout)
         const opts = {
             ...options,
-            signal
+            signal,
+            cache: cache ? 'force-cache' : 'default',
         }
         return fetch(url, opts).finally(() => cancel()).catch(err => {
             if (logError) console.error(`Fetch error (${url}): ${err}`)
@@ -39,4 +41,14 @@ export function safeFetch(url: string | URL, options?: RequestInit, logError = t
         if (logError) console.error(`Fetch error (${url}): ${err}`)
         return null
     })
+}
+
+export function endsWith(str: string, suffix: string) {
+    if (str.endsWith(suffix)) return str
+    return str + suffix
+}
+
+export function notEndsWith(str: string, suffix: string) {
+    if (str.endsWith(suffix)) return str.slice(0, -suffix.length)
+    return str
 }

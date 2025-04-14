@@ -26,17 +26,17 @@ export default {
             content: "Start Server",
             options: {
                 description: 'Start Server',
-                async onSuccess() {
+                async onSuccess(approval, message) {
                     const pid = await serverManager.start()
                     if (!pid) {
-                        await interaction.followUp({ content: "Server is already online" });
+                        await message.reply({ content: "Server is already online" });
                         return
                     }
                     console.log(`Server started with PID ${pid}`);
-                    await interaction.followUp({ content: 'Server started successfully' });
+                    await message.reply({ content: 'Server started successfully' });
                 },
-                approvalCount: 2,
-                disapprovalCount: 4
+                approvalCount: 3,
+                disapprovalCount: 3
             }
         })
     }

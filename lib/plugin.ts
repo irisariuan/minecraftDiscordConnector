@@ -1,6 +1,7 @@
 import { createWriteStream, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { safeFetch } from './utils'
+import { endsWith, notEndsWith, safeFetch } from './utils'
+import { readdir } from 'node:fs/promises'
 
 if (!process.env.MINECRAFT_VERSION || !process.env.LOADER_TYPE || !process.env.MOD_TYPE) throw new Error('MINECRAFT_VERSION, LOADER_TYPE, or MOD_TYPE environment variable is not set')
 if (!process.env.SERVER_DIR || !existsSync(join(process.env.SERVER_DIR, '/plugins'))) throw new Error('SERVER_DIR environment variable is not set')
@@ -122,11 +123,14 @@ export async function searchPlugins({ offset = 0 }: { offset?: number } = {}) {
     url.searchParams.set('limit', '100')
     url.searchParams.set('offset', offset.toString())
     const res = await safeFetch(url)
-    const data = await res?.json() as PluginSearchQueryResponse | ErrorResponse
+    const data = await res?.json().catch<ErrorResponse>(err => ({ error: '[CLIENT] failed to parse JSON', description: err.message })) as PluginSearchQueryResponse | ErrorResponse
     return data
 }
 
-export async function getActivePlugins(): Promise<string[] | null> {
+export async function getActivePlugins(useApi = false): Promise<string[] | null> {
+    if (useApi) {
+        return (await readdir(PLUGIN_DIR)).map(file => notEndsWith(file, '.jar'))
+    }
     const res = await safeFetch('http://localhost:6001/plugins')
     if (!res?.ok) return null
     const data = await res.json() as string[]
@@ -202,5 +206,17 @@ export async function downloadPluginFile(id: string, force = false): Promise<{ f
 }
 
 export function createPathForPluginFile(fileName: string) {
-    return `${process.env.SERVER_DIR}/plugins/${fileName}`
+    return join(PLUGIN_DIR, fileName)
+}
+
+export async function hasPlugin(slugOrId: string) {
+    const metadata = await getPlugin(slugOrId)
+    if (!metadata) return null
+    const versions = (await Promise.all(metadata.versions.map(v => getPluginVersion(v)))).filter(v => !!v)
+    const versionNames = versions.map(v => v.files[0]?.filename && notEndsWith(v.files[0].filename, '.jar')).filter(v => !!v)
+    const dir = await readdir(PLUGIN_DIR)
+    for (const file of dir) {
+        if (versionNames.includes(endsWith(file, '.jar'))) return file
+    }
+    return null
 }

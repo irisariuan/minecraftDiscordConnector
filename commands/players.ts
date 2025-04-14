@@ -34,7 +34,7 @@ export default {
             }),
             formatter: (player) => ({
                 name: player.name,
-                value: `ID: ${player.uuid}`,
+                value: `ID: \`${player.uuid}\``,
             }),
         })
     },

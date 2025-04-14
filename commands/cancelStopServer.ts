@@ -30,7 +30,7 @@ export default {
             content: "Cancel Server Shutdown",
             options: {
                 description: "Cancel Server Shutdown",
-                async onSuccess() {
+                async onSuccess(approval, message) {
                     let success = false
                     if (serverManager.haveLocalSideScheduledShutdown()) {
                         serverManager.cancelLocalScheduledShutdown()
@@ -39,11 +39,11 @@ export default {
                     if (await serverManager.cancelServerSideShutdown()) {
                         success = true
                     }
-                    if (!success) return await interaction.editReply({ content: "No scheduled shutdown found" });
-                    return await interaction.editReply({ content: 'Cancelled scheduled shutdown' })
+                    if (!success) return await message.edit({ content: "No scheduled shutdown found" });
+                    return await message.edit({ content: 'Cancelled scheduled shutdown' })
                 },
-                approvalCount: 1,
-                disapprovalCount: 4,
+                approvalCount: 2,
+                disapprovalCount: 2,
             }
         })
     }

@@ -46,21 +46,18 @@ export default {
                 description: displayString,
                 async onSuccess(approval, message) {
                     const { success, promise } = await serverManager.stop(seconds * 20)
-                    if (!success) {
-                        await interaction.editReply({ content: "Failed to shutdown" });
-                        return
-                    }
+                    if (!success) return await message.edit({ content: "Failed to shutdown" });
+                    
                     if (seconds > 0) {
                         promise?.then(() => {
-                            interaction.followUp({ content: 'Server stopped successfully' }).catch(console.error);
+                            message.reply({ content: 'Server stopped successfully' }).catch(console.error);
                         })
-                        await interaction.editReply({ content: 'Stopping server is scheduled' });
-                        return
+                        return await message.edit({ content: 'Stopping server is scheduled' });
                     }
-                    await interaction.editReply({ content: 'Server stopped successfully' });
+                    return await message.edit({ content: 'Server stopped successfully' });
                 },
-                approvalCount: 4,
-                disapprovalCount: 1,
+                approvalCount: 2,
+                disapprovalCount: 2,
             }
         })
     }
