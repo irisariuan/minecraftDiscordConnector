@@ -86,7 +86,7 @@ export function setActivity(
 			online
 				? `Running Minecraft Server ${MINECRAFT_VERSION}`
 				: "Server offline"
-		}${suspended ? " (Suspending)" : "(Running)"}`,
+		}${suspended ? " (Suspending)" : "(Public)"}`,
 		type: ActivityType.Custom,
 	});
 }

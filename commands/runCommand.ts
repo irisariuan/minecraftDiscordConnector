@@ -50,8 +50,8 @@ export default {
             })
         }
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
+        const output = serverManager.captureSomeOutput(timeout)
         const { success } = await runCommandOnServer(command)
-        const output = await serverManager.captureSomeOutput(timeout)
-        await interaction.editReply(parseCommandOutput(output?.join('\n') || null, success))
+        await interaction.editReply(parseCommandOutput((await output)?.join('\n') || null, success))
     },
 } as CommandFile

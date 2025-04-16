@@ -110,8 +110,8 @@ client.on("messageReactionAdd", async (reaction, user) => {
 	updateApprovalMessage(reaction, user);
 });
 
-serverManager.isOnline.cacheEvent.on("setData", (data) => {
-	console.log("Server online status updated:", data);
+serverManager.isOnline.cacheEvent.on("setData", (data, oldData) => {
+	if (oldData !== data) console.log("Server online status updated:", data ? 'Online' : 'Offline', isSuspending() ? '(Suspending)' : '(Public)')
 	setActivity(client, data || false, isSuspending());
 });
 
