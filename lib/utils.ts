@@ -39,7 +39,7 @@ export function createDisposableWritableStream(
 	});
 }
 
-export function safeFetch(
+export async function safeFetch(
 	url: string | URL,
 	options?: RequestInit,
 	logError = true,
@@ -53,17 +53,23 @@ export function safeFetch(
 			signal,
 			cache: cache ? "force-cache" : "default",
 		};
-		return fetch(url, opts)
-			.finally(() => cancel())
-			.catch((err) => {
-				if (logError) console.error(`Fetch error (${url}): ${err}`);
-				return null;
-			});
+		try {
+			try {
+				return await fetch(url, opts);
+			} finally {
+				return cancel();
+			}
+		} catch (err) {
+			if (logError) console.error(`Fetch error (${url}): ${err}`);
+			return null;
+		}
 	}
-	return fetch(url, options).catch((err) => {
+	try {
+		return await fetch(url, options);
+	} catch (err) {
 		if (logError) console.error(`Fetch error (${url}): ${err}`);
 		return null;
-	});
+	}
 }
 
 export function endsWith(str: string, suffix: string) {
@@ -89,4 +95,15 @@ export function setActivity(
 		}${suspended ? " (Suspending)" : "(Public)"}`,
 		type: ActivityType.Custom,
 	});
+}
+
+const trueValues = ["true", "1", "yes", "on", "enable"];
+const falseValues = ["false", "0", "no", "off", "disable"];
+
+export function isTrueValue(value: string): boolean | null {
+	return trueValues.includes(value.toLowerCase().trim())
+		? true
+		: falseValues.includes(value.toLowerCase().trim())
+			? false
+			: null;
 }

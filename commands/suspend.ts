@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/discordCommands";
+import type { CommandFile } from "../lib/commandFile";
 import { isSuspending, setSuspending } from "../lib/suspend";
 import { PermissionFlags } from "../lib/permission";
 import { serverManager } from "../lib/server";

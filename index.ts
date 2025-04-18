@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
-import { loadCommands } from "./lib/discordCommands";
+import { loadCommands } from "./lib/commandFile";
 import {
 	compareAllPermissions,
 	comparePermission,
@@ -10,9 +10,9 @@ import {
 import { updateDnsRecord } from "./lib/dnsRecord";
 import { updateApprovalMessage } from "./lib/approval";
 import { serverManager } from "./lib/server";
-import { isSuspending } from "./lib/suspend";
+import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { setActivity } from "./lib/utils";
-
+˝
 const commands = await loadCommands();
 
 const client = new Client({
@@ -114,6 +114,11 @@ serverManager.isOnline.cacheEvent.on("setData", (data, oldData) => {
 	if (oldData !== data) console.log("Server online status updated:", data ? 'Online' : 'Offline', isSuspending() ? '(Suspending)' : '(Public)')
 	setActivity(client, data || false, isSuspending());
 });
+
+suspendingEvent.on('update', async data => {
+	console.log('Server suspending status updated:', data ? 'Suspending' : 'Public')
+	setActivity(client, (await serverManager.isOnline.getData() || false), data)
+})
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
 updateDnsRecord();

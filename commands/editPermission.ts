@@ -1,5 +1,5 @@
 import { GuildMember, MessageFlags, Role, roleMention, SlashCommandBuilder, User, userMention } from "discord.js";
-import type { CommandFile } from "../lib/discordCommands";
+import type { CommandFile } from "../lib/commandFile";
 import { allPermission, appendPermission, parsePermission, PermissionFlags, removePermission, writePermission } from "../lib/permission";
 
 export default {
