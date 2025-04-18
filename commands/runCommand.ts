@@ -21,15 +21,23 @@ export default {
         )
         .addIntegerOption(option =>
             option.setName("timeout")
-                .setDescription("Timeout in milliseconds")
+                .setDescription("Approval timeout in milliseconds")
                 .setRequired(false)
                 .setMinValue(100)
                 .setMaxValue(60000)
+        )
+        .addIntegerOption(option => 
+        	option.setName("capture")
+        		.setDescription("Capture output in milliseconds")
+						.setRequired(false)
+						.setMinValue(1000)
+						.setMaxValue(60000)
         ),
     async execute(interaction, client) {
         const command = interaction.options.getString("command", true)
         const force = interaction.options.getBoolean("poll") === false
-        const timeout = interaction.options.getInteger("timeout") ?? 1000
+        const capture = interaction.options.getInteger("capture") ?? 1000
+        const timeout = interaction.options.getInteger("timeout")
         const canRunCommand = compareAllPermissions(await readPermission(interaction.user.id), [PermissionFlags.runCommand])
 
         if (!canRunCommand || !force) {
@@ -38,19 +46,20 @@ export default {
                 options: {
                     description: `Command: \`${command}\``,
                     async onSuccess(approval, message) {
-                        const output = serverManager.captureSomeOutput(timeout)
+                        const output = serverManager.captureSomeOutput(capture)
                         const { success } = await runCommandOnServer(approval.content)
                         if (!success) {
                             await message.reply("Failed to run command")
                             return
                         }
                         await message.reply(parseCommandOutput((await output)?.join('\n') || null, success))
-                    },
-                }
+                    }
+                },
+                duration: timeout || undefined
             })
         }
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] })
-        const output = serverManager.captureSomeOutput(timeout)
+        const output = serverManager.captureSomeOutput(capture)
         const { success } = await runCommandOnServer(command)
         await interaction.editReply(parseCommandOutput((await output)?.join('\n') || null, success))
     },
