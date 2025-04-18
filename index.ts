@@ -12,7 +12,7 @@ import { updateApprovalMessage } from "./lib/approval";
 import { serverManager } from "./lib/server";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { setActivity } from "./lib/utils";
-˝
+
 const commands = await loadCommands();
 
 const client = new Client({
