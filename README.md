@@ -25,10 +25,7 @@ A Discord bot for managing a Minecraft server, including plugin management, serv
 
 1. **Clone the repository:**
 
-   ```sh
-   git clone https://github.com/yourusername/ipBotDiscord.git
-   cd ipBotDiscord
-   ```
+	Follow GitHub instructions to clone the repository
 
 2. **Install dependencies:**
 
@@ -43,11 +40,11 @@ A Discord bot for managing a Minecraft server, including plugin management, serv
    TOKEN=your_discord_bot_token
    CLIENT_ID=your_discord_client_id
    SERVER_DIR=/path/to/minecraft/server
-   MINECRAFT_VERSION=1.20.4
-   LOADER_TYPE=paper
-   MOD_TYPE=plugin
-   CF_KEY=your_cloudflare_api_key
-   UPDATE_URL=https://api.cloudflare.com/client/v4/zones/ZONE_ID/dns_records/RECORD_ID
+   MINECRAFT_VERSION=1.21.4 // or your server version
+   LOADER_TYPE=paper // or your server type
+   MOD_TYPE=plugin // or your mod type
+   CF_KEY=your_cloudflare_api_key // Cloudflare API key, you may need to edit the code to fit your needs
+   UPDATE_URL=https://api.cloudflare.com/client/v4/zones/ZONE_ID/dns_records/RECORD_ID // Cloudflare DNS record update URL
    ```
 
 4. **Register Discord commands:**
@@ -61,6 +58,14 @@ A Discord bot for managing a Minecraft server, including plugin management, serv
    ```sh
    bun index.ts
    ```
+
+6. **Optional: Give permission to admin account in Discord**
+	
+	You may want to give your admin account permission to use the bot (such that you could later edit permission through Discord). You can do this by running the following command:
+	
+	```sh
+	bun tools/editPerm.ts
+	```
 
 ## Usage
 
