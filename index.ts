@@ -111,14 +111,12 @@ client.on("messageReactionAdd", async (reaction, user) => {
 });
 
 serverManager.isOnline.cacheEvent.on("setData", (data, oldData) => {
-	if (oldData !== data) console.log("Server online status updated:", data ? 'Online' : 'Offline', isSuspending() ? '(Suspending)' : '(Public)')
 	setActivity(client, data || false, isSuspending());
 });
 
-suspendingEvent.on('update', async data => {
-	console.log('Server suspending status updated:', data ? 'Suspending' : 'Public')
-	setActivity(client, (await serverManager.isOnline.getData() || false), data)
-})
+suspendingEvent.on("update", async (data) => {
+	setActivity(client, (await serverManager.isOnline.getData()) || false, data);
+});
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
 updateDnsRecord();
