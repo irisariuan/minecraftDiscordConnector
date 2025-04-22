@@ -36,8 +36,8 @@ export interface Approval extends BaseApproval {
 	timeout: NodeJS.Timeout;
 	updateInterval?: NodeJS.Timeout;
 	/**
-	* @description Run before the approval is removed
-	*/
+	 * @description Run before the approval is removed
+	 */
 	cleanUp: () => unknown | Promise<unknown>;
 }
 
@@ -59,7 +59,7 @@ export interface ApprovalOptions {
 	) => Promise<unknown>;
 }
 
-export const MESSAGE_VALID_TIME = 14 * 60 * 1000 // 14 minutes, since discord message valid time is 15 minutes
+export const MESSAGE_VALID_TIME = 14 * 60 * 1000; // 14 minutes, since discord message valid time is 15 minutes
 export const DELETE_AFTER_MS = 3 * 1000;
 
 export const approvalList: Map<string, Approval> = new Map();
@@ -81,12 +81,14 @@ export function newApproval(
 		return existingApproval;
 	}
 
-	const timeoutCleanUpFunc = () => {
-		console.log(`Removing approval ${approval.message.id} (timeout/interval)`);
+	const timeoutCleanUpFunc = async () => {
+		console.log(
+			`Removing approval ${approval.message.id} (timeout/interval)`,
+		);
 		const fetchedApproval = getApproval(approval.message.id, true);
 		if (!fetchedApproval)
 			return console.log("Approval not found (timeout/interval)");
-		removeApproval(fetchedApproval);
+		await removeApproval(fetchedApproval);
 	};
 
 	const newApproval: Approval = {
@@ -145,15 +147,17 @@ export function disapprove(messageId: string, userId: string, force = false) {
 	return checkApprovalStatus(approval);
 }
 
-export function removeApproval(approval: Approval) {
+export async function removeApproval(approval: Approval) {
 	console.log(`Removing approval ${approval.message.id}`);
 	clearTimeout(approval.timeout);
 	clearInterval(approval.updateInterval);
-	approval.cleanUp();
+	await approval.cleanUp();
 	approvalList.delete(approval.message.id);
 	for (const [id, approval] of approvalList.entries()) {
 		if (approval.originalMessageId === id) {
-			console.log(`Removing ${id}, linked to approval ${approval.message.id}`)
+			console.log(
+				`Removing ${id}, linked to approval ${approval.message.id}`,
+			);
 			approvalList.delete(id);
 		}
 	}
@@ -166,21 +170,15 @@ function checkApprovalStatus(approval: Approval): ApprovalStatus {
 	const disapprovalCount =
 		approval.options.disapprovalCount || globalDisapprovalCount;
 
-	let status: ApprovalStatus = "timeout";
 	if (approval.validTill > Date.now()) {
-		if (approval.superStatus === null) {
-			if (approval.approvalIds.length >= approvalCount) {
-				status = "approved";
-			} else if (approval.disapprovalIds.length >= disapprovalCount) {
-				status = "disapproved";
-			} else {
-				status = "pending";
-			}
-		} else {
-			status = approval.superStatus;
-		}
+		if (approval.superStatus) return approval.superStatus;
+		if (approval.approvalIds.length >= approvalCount) return "approved";
+		if (approval.disapprovalIds.length >= disapprovalCount)
+			return "disapproved";
+
+		return "pending";
 	}
-	return status;
+	return "timeout";
 }
 
 export function getApproval(
@@ -248,7 +246,9 @@ export function createApprovalEmbed(approval: Approval) {
 			return createEmbed(
 				approval,
 				0x00ff00,
-				approval.superStatus === "approved" ? "Approved (Force)" : "Approved",
+				approval.superStatus === "approved"
+					? "Approved (Force)"
+					: "Approved",
 			);
 		}
 		case "disapproved": {
@@ -268,7 +268,11 @@ export function createApprovalEmbed(approval: Approval) {
 
 export async function sendApprovalPoll(
 	interaction: CommandInteraction,
-	approvalOptions: PickAndOptional<Approval, "content" | "options", "duration">,
+	approvalOptions: PickAndOptional<
+		Approval,
+		"content" | "options",
+		"duration"
+	>,
 ) {
 	const { content, options } = approvalOptions;
 	const duration =
@@ -310,7 +314,9 @@ export async function sendApprovalPoll(
 		async () => {
 			console.log("Running user defined clean up function");
 			if (!messageId)
-				return console.error("Message ID not found, failed to clean up");
+				return console.error(
+					"Message ID not found, failed to clean up",
+				);
 			const approval = getApproval(messageId, true);
 			if (!approval)
 				return console.error("Approval not found, failed to clean up");
@@ -384,7 +390,10 @@ export async function updateApprovalMessage(
 		])
 	)
 		return;
-	if (isSuspending() && !comparePermission(userPerm, PermissionFlags.suspend)) {
+	if (
+		isSuspending() &&
+		!comparePermission(userPerm, PermissionFlags.suspend)
+	) {
 		return await reaction.message
 			.reply({
 				content:
@@ -402,7 +411,9 @@ export async function updateApprovalMessage(
 	if (canceling) {
 		const prevCount =
 			approval.approvalIds.length + approval.disapprovalIds.length;
-		approval.approvalIds = approval.approvalIds.filter((id) => id !== user.id);
+		approval.approvalIds = approval.approvalIds.filter(
+			(id) => id !== user.id,
+		);
 		approval.disapprovalIds = approval.disapprovalIds.filter(
 			(id) => id !== user.id,
 		);
@@ -486,7 +497,9 @@ export async function updateApprovalMessage(
 		approval.approvalIds.includes(user.id) &&
 		!(superApprove && canSuperApprove)
 	) {
-		approval.approvalIds = approval.approvalIds.filter((id) => id !== user.id);
+		approval.approvalIds = approval.approvalIds.filter(
+			(id) => id !== user.id,
+		);
 	} else if (
 		approving &&
 		approval.disapprovalIds.includes(user.id) &&
@@ -499,7 +512,11 @@ export async function updateApprovalMessage(
 
 	const status = approving
 		? approve(reaction.message.id, user.id, canSuperApprove && superApprove)
-		: disapprove(reaction.message.id, user.id, canSuperApprove && superApprove);
+		: disapprove(
+				reaction.message.id,
+				user.id,
+				canSuperApprove && superApprove,
+			);
 
 	if (reaction.message.editable) {
 		await reaction.message
@@ -518,13 +535,17 @@ export async function updateApprovalMessage(
 			content: `${approving ? "Approved" : "Disapproved"} by ${userMention(user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,
 		})
 		.then((message) =>
-			setTimeout(() => message.delete().catch(console.error), DELETE_AFTER_MS),
+			setTimeout(
+				() => message.delete().catch(console.error),
+				DELETE_AFTER_MS,
+			),
 		)
 		.catch(console.error);
 
 	if (status === "pending") return;
 
 	await reaction.message.reactions.removeAll();
+	await removeApproval(approval);
 
 	if (status === "approved") {
 		return await approval.options.onSuccess(approval, reaction.message);
