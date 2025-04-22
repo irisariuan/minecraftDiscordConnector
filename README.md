@@ -78,9 +78,9 @@ All commands are available as Discord slash commands. Some require specific perm
 - `/suspend` and `/unsuspend` — Suspend/resume the server (admin only)
 - `/searchplugin [plugin]` — Search for plugins
 - `/appendplugin [plugin]` — Download and add a plugin
-- `/deleteplugin [plugin]` — Delete a plugin
-- `/getactiveplugins [api]` — List active plugins
-- `/log [filter]` — View server logs
+- `/deleteplugin [plugin]` — Delete a plugin (TO BE FIXED)
+- `/getactiveplugins [api]` — List active plugins (TO BE FIXED)
+- `/log [filter]` — View server logs (When the server is running, persistant logs is WIP)
 - `/onlineplayers` — List online players
 - `/refresh` — Update DNS record
 - `/getperm [user]` — View user permissions
@@ -93,7 +93,7 @@ Permissions are managed via `/editperm` and stored in `data/permissions.json`. S
 ## Development
 
 - TypeScript project, configured for Bun and ESNext.
-- Commands are auto-loaded from the `commands/` directory.
+- Commands are auto-loaded from the `commands/` directory, following structure of `CommandFile` in `lib/commandFile.ts`.
 - See `lib/` for core logic.
 
 ## License
