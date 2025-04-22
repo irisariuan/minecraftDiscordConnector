@@ -1,4 +1,4 @@
-# Discord Minecraft Link
+# Discord Minecraft Linkage
 
 A Discord bot for managing a Minecraft server, including plugin management, server control, DNS updates, and permission-based access. Built with [discord.js](https://discord.js.org/) and [Bun](https://bun.sh/).
 
