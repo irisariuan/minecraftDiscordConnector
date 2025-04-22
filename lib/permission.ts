@@ -13,6 +13,7 @@ export const PermissionFlags = {
     deletePlugin: 1 << 9,
     suspend: 1 << 10,
     editPerm: 1 << 11,
+    repeatApproval: 1 << 12,
 } as const
 
 export const allPermission = Object.values(PermissionFlags).reduce((acc, cur) => acc | cur, 0)

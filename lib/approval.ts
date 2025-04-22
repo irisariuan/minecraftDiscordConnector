@@ -205,6 +205,26 @@ export function getApproval(
 	return null;
 }
 
+function createUserMentions(ids: string[]) {
+	const counter: Record<string, number> = {}
+	for (const id of ids) {
+		if (counter[id]) {
+			counter[id]++;
+		} else {
+			counter[id] = 1;
+		}
+	}
+	const mentions = [];
+	for (const [id, val] of Object.entries(counter)) {
+		if (val > 1) {
+			mentions.push(`${userMention(id)} x${val}`);
+		} else {
+			mentions.push(userMention(id));
+		}
+	}
+	return mentions.join(", ");
+}
+
 export function createEmbed(
 	approval: BaseApproval & {
 		options: Pick<
@@ -225,11 +245,11 @@ export function createEmbed(
 		.addFields(
 			{
 				name: "Approval Count",
-				value: `${approval.approvalIds.length}/${approvalCount} (${approval.approvalIds.map((v) => userMention(v)).join(", ")})`,
+				value: `${approval.approvalIds.length}/${approvalCount} (${createUserMentions(approval.approvalIds)})`,
 			},
 			{
 				name: "Disapproval Count",
-				value: `${approval.disapprovalIds.length}/${disapprovalCount} (${approval.disapprovalIds.map((v) => userMention(v)).join(", ")})`,
+				value: `${approval.disapprovalIds.length}/${disapprovalCount} (${createUserMentions(approval.disapprovalIds)})`,
 			},
 			{ name: "Valid Till", value: time(new Date(approval.validTill)) },
 		)
@@ -375,6 +395,10 @@ export async function updateApprovalMessage(
 		userPerm,
 		PermissionFlags.superApprove,
 	);
+	const canRepeatApprove = comparePermission(
+		userPerm,
+		PermissionFlags.repeatApproval
+	)
 
 	const userReactions = reaction.message.reactions.cache.filter((r) =>
 		r.users.cache.has(user.id),
@@ -455,6 +479,7 @@ export async function updateApprovalMessage(
 			.catch(console.error);
 	}
 	if (
+		!canRepeatApprove &&
 		approving &&
 		approval.approvalIds.includes(user.id) &&
 		!(superApprove && canSuperApprove)
@@ -473,6 +498,7 @@ export async function updateApprovalMessage(
 			.catch(console.error);
 	}
 	if (
+		!canRepeatApprove &&
 		disapproving &&
 		approval.disapprovalIds.includes(user.id) &&
 		!(superApprove && canSuperApprove)
@@ -493,6 +519,7 @@ export async function updateApprovalMessage(
 
 	// Check if the user is already in the opposite list and remove them
 	if (
+		!canRepeatApprove &&
 		disapproving &&
 		approval.approvalIds.includes(user.id) &&
 		!(superApprove && canSuperApprove)
@@ -501,6 +528,7 @@ export async function updateApprovalMessage(
 			(id) => id !== user.id,
 		);
 	} else if (
+		!canRepeatApprove &&
 		approving &&
 		approval.disapprovalIds.includes(user.id) &&
 		!(superApprove && canSuperApprove)
