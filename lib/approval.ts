@@ -153,10 +153,10 @@ export async function removeApproval(approval: Approval) {
 	clearInterval(approval.updateInterval);
 	await approval.cleanUp();
 	approvalList.delete(approval.message.id);
-	for (const [id, approval] of approvalList.entries()) {
-		if (approval.originalMessageId === id) {
+	for (const [id, fetchedApproval] of approvalList.entries()) {
+		if (approval.originalMessageId === fetchedApproval.originalMessageId) {
 			console.log(
-				`Removing ${id}, linked to approval ${approval.message.id}`,
+				`Removing ${fetchedApproval.message.id}, linked to approval ${approval.message.id} (${approval.originalMessageId})`,
 			);
 			approvalList.delete(id);
 		}
