@@ -6,9 +6,10 @@ import {
 	comparePermission,
 	PermissionFlags,
 	readPermission,
+	watchPermissionChange,
 } from "./lib/permission";
 import { updateDnsRecord } from "./lib/dnsRecord";
-import { updateApprovalMessage } from "./lib/approval";
+import { approvalList, updateApprovalMessage } from "./lib/approval";
 import { serverManager } from "./lib/server";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { setActivity } from "./lib/utils";
@@ -47,7 +48,9 @@ client.on("interactionCreate", async (interaction) => {
 			});
 		}
 		const { commandName } = interaction;
-		const command = commands.find((cmd) => cmd.command.name === commandName);
+		const command = commands.find(
+			(cmd) => cmd.command.name === commandName,
+		);
 		if (!command)
 			return interaction.reply({
 				content: "Command not found",
@@ -83,19 +86,22 @@ client.on("interactionCreate", async (interaction) => {
 				console.error(err);
 				interaction
 					.reply({
-						content: "An error occurred while executing the command",
+						content:
+							"An error occurred while executing the command",
 						flags: [MessageFlags.Ephemeral],
 					})
 					.catch((err) => {
 						console.error(err);
 						interaction
 							.editReply({
-								content: "An error occurred while executing the command",
+								content:
+									"An error occurred while executing the command",
 							})
 							.catch((err) => {
 								console.error(err);
 								interaction.followUp({
-									content: "An error occurred while executing the command",
+									content:
+										"An error occurred while executing the command",
 									flags: [MessageFlags.Ephemeral],
 								});
 							});
@@ -115,7 +121,11 @@ serverManager.isOnline.cacheEvent.on("setData", (data, oldData) => {
 });
 
 suspendingEvent.on("update", async (data) => {
-	setActivity(client, (await serverManager.isOnline.getData()) || false, data);
+	setActivity(
+		client,
+		(await serverManager.isOnline.getData()) || false,
+		data,
+	);
 });
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
@@ -146,6 +156,14 @@ process.on("beforeExit", async (code) => {
 		await promise;
 		console.log("Server process stopped");
 	}
+	for (const [id, approval] of approvalList.entries()) {
+		console.log(`Found approval ${id}, trying to clean up...`)
+		if (approval.message.deletable) {
+			await approval.message.delete().catch((err) => {
+				console.error("Failed to delete approval message", err);
+			});
+		}
+	}
 	process.exit(code);
 });
 
@@ -153,5 +171,7 @@ process.on("exit", async (code) => {
 	console.log(`Process exited with code ${code}`);
 	process.exit(code);
 });
+
+watchPermissionChange();
 
 client.login(process.env.TOKEN);

@@ -1,3 +1,4 @@
+import { watch } from "node:fs"
 import { CacheItem } from "./cache"
 
 export const PermissionFlags = {
@@ -85,4 +86,20 @@ export async function removePermission(user: string, permission: Permission[] | 
     const updatedPermission = currentPermission & ~newPermission
     await writePermission(user, updatedPermission)
     return updatedPermission
+}
+
+export function watchPermissionChange() {
+    return watch(PERMISSION, { persistent: true }, async (eventType) => {
+        if (eventType === 'change') {
+            const permissions = await readPermissionJson()
+            for (const [user, permission] of Object.entries(permissions)) {
+                const cache = permissionCache.get(user)
+                if (cache) {
+                    cache.setData(permission)
+                } else {
+                    permissionCache.set(user, new CacheItem(permission))
+                }
+            }
+        }
+    })
 }

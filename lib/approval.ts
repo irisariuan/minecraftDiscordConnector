@@ -206,7 +206,7 @@ export function getApproval(
 }
 
 function createUserMentions(ids: string[]) {
-	const counter: Record<string, number> = {}
+	const counter: Record<string, number> = {};
 	for (const id of ids) {
 		if (counter[id]) {
 			counter[id]++;
@@ -340,10 +340,12 @@ export async function sendApprovalPoll(
 			const approval = getApproval(messageId, true);
 			if (!approval)
 				return console.error("Approval not found, failed to clean up");
-			if (approval.message.editable)
+			if (approval.message.editable) {
 				await approval.message.edit({
 					embeds: [createApprovalEmbed(approval)],
 				});
+				await approval.message.reactions.removeAll();
+			}
 		},
 		// transferring function
 		async () => {
@@ -397,8 +399,8 @@ export async function updateApprovalMessage(
 	);
 	const canRepeatApprove = comparePermission(
 		userPerm,
-		PermissionFlags.repeatApproval
-	)
+		PermissionFlags.repeatApproval,
+	);
 
 	const userReactions = reaction.message.reactions.cache.filter((r) =>
 		r.users.cache.has(user.id),
