@@ -9,7 +9,10 @@ import {
 	watchPermissionChange,
 } from "./lib/permission";
 import { updateDnsRecord } from "./lib/dnsRecord";
-import { approvalList, updateApprovalMessage } from "./lib/approval";
+import {
+	approvalList,
+	updateApprovalMessage,
+} from "./lib/approval";
 import { serverManager } from "./lib/server";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { setActivity } from "./lib/utils";
@@ -131,6 +134,29 @@ suspendingEvent.on("update", async (data) => {
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
 updateDnsRecord();
 
+async function exitHandler() {
+	const { success, promise } = await serverManager.stop(0);
+	if (success) {
+		console.log("Server process shutting down");
+		await promise;
+		console.log("Server process stopped");
+	}
+	for (const [id, approval] of approvalList.entries()) {
+		console.log(`Found approval ${id}, trying to clean up...`);
+		if (approval.message.editable) {
+			await approval.message.reactions.removeAll();
+			await approval.message.edit({
+				content: "Approval Canceled",
+				embeds: [],
+			});
+			continue;
+		}
+		if (approval.message.deletable) {
+			await approval.message.delete();
+		}
+	}
+}
+
 process.on("unhandledRejection", (reason) => {
 	console.error("Unhandled Rejection:", reason);
 });
@@ -139,31 +165,17 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("SIGINT", async () => {
-	const { success, promise } = await serverManager.stop(0);
-	if (success) {
-		console.log("Server process shutting down");
-		await promise;
-		console.log("Server process stopped");
-	}
+	await exitHandler().catch((err) =>
+		console.error("Error occurred during SIGINT:", err),
+	);
 	process.exit(64);
 });
 
 process.on("beforeExit", async (code) => {
 	if (code === 64) return;
-	const { success, promise } = await serverManager.stop(0);
-	if (success) {
-		console.log("Server process shutting down");
-		await promise;
-		console.log("Server process stopped");
-	}
-	for (const [id, approval] of approvalList.entries()) {
-		console.log(`Found approval ${id}, trying to clean up...`)
-		if (approval.message.deletable) {
-			await approval.message.delete().catch((err) => {
-				console.error("Failed to delete approval message", err);
-			});
-		}
-	}
+	await exitHandler().catch((err) =>
+		console.error("Error occurred before exit:", err),
+	);
 	process.exit(code);
 });
 
