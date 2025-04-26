@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { MessageFlags, Poll, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { serverManager } from "../lib/server";
 import {
@@ -9,6 +9,8 @@ import {
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
+import { sendCreditNotification, spendCredit } from "../lib/credit";
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -51,6 +53,24 @@ export default {
 				content: "Cancelled scheduled shutdown",
 			});
 		}
+		if (
+			!(await spendCredit(
+				interaction.user.id,
+				settings.newCancelStopServerPollFee,
+				"New Cancel Stop Server Poll",
+			))
+		) {
+			return await interaction.reply({
+				content:
+					"You don't have enough credit to cancel the server shutdown",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		await sendCreditNotification(
+			interaction.user,
+			-settings.newCancelStopServerPollFee,
+			"New Cancel Stop Server Poll",
+		);
 
 		sendApprovalPoll(interaction, {
 			content: "Cancel Server Shutdown",
@@ -75,6 +95,7 @@ export default {
 				},
 				approvalCount: 2,
 				disapprovalCount: 2,
+				credit: settings.cancelStopServerVoteFee
 			},
 		});
 	},

@@ -9,6 +9,7 @@ import { sendApprovalPoll } from "../lib/approval";
 import { parseCommandOutput, runCommandOnServer } from "../lib/request";
 import { serverManager } from "../lib/server";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -56,7 +57,7 @@ export default {
 			if (
 				!(await spendCredit(
 					interaction.user.id,
-					20,
+					settings.newRunCommandPollFee,
 					"New Run Command Poll",
 				))
 			) {
@@ -65,7 +66,7 @@ export default {
 					flags: [MessageFlags.Ephemeral],
 				});
 			}
-			await sendCreditNotification(interaction.user, -20);
+			await sendCreditNotification(interaction.user, -settings.newRunCommandPollFee, "New Run Command Poll");
 			return await sendApprovalPoll(interaction, {
 				content: command,
 				options: {
@@ -86,7 +87,7 @@ export default {
 							),
 						);
 					},
-					credit: 5,
+					credit: settings.runCommandVoteFee,
 				},
 				duration: timeout || undefined,
 			});

@@ -5,8 +5,7 @@ import {
 	sendCreditNotification,
 	spendCredit,
 } from "../lib/credit";
-
-export const transferringFee = 5;
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -36,7 +35,7 @@ export default {
 		}
 		await spendCredit(
 			interaction.user.id,
-			amount + transferringFee,
+			amount + settings.transferringFee,
 			"Transfer Credit",
 		);
 		await changeCredit(user.id, amount, "Received Transfer Credit");
@@ -47,7 +46,7 @@ export default {
 		);
 		await sendCreditNotification(
 			interaction.user,
-			-transferringFee,
+			-settings.transferringFee,
 			"Transfer Credit Fee",
 		);
 		await sendCreditNotification(

@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { getCredit, sendCreditNotification, spendCredit } from "../lib/credit";
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -29,7 +30,7 @@ export default {
 			if (
 				!(await spendCredit(
 					interaction.user.id,
-					5,
+					settings.checkUserCreditFee,
 					"Check Credit of Other Users",
 				))
 			) {
@@ -38,7 +39,7 @@ export default {
 						"You don't have enough credit to check other users' credit",
 				});
 			}
-			await sendCreditNotification(interaction.user, -5, "Check Credit of Other Users")
+			await sendCreditNotification(interaction.user, -settings.checkUserCreditFee, "Check Credit of Other Users")
 		}
 
 		const creditData = await getCredit(user.id);

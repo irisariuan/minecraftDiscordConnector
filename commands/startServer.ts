@@ -9,6 +9,7 @@ import {
 import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -51,7 +52,7 @@ export default {
 		if (
 			!(await spendCredit(
 				interaction.user.id,
-				15,
+				settings.newStartServerPollFee,
 				"New Start Server Poll",
 			))
 		) {
@@ -60,7 +61,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		sendCreditNotification(interaction.user, -15, "New Start Server Poll")
+		sendCreditNotification(interaction.user, -settings.newStartServerPollFee, "New Start Server Poll")
 		
 		sendApprovalPoll(interaction, {
 			content: "Start Server",
@@ -81,7 +82,7 @@ export default {
 				},
 				approvalCount: 3,
 				disapprovalCount: 3,
-				credit: 10
+				credit: settings.startServerVoteFee,
 			},
 		});
 	},

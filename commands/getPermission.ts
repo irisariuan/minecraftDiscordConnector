@@ -6,6 +6,7 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -24,7 +25,7 @@ export default {
 			if (
 				!(await spendCredit(
 					interaction.user.id,
-					5,
+					settings.checkUserPermissionFee,
 					"Check Permission Of Other Users",
 				))
 			) {
@@ -34,7 +35,7 @@ export default {
 					flags: [MessageFlags.Ephemeral],
 				});
 			}
-			await sendCreditNotification(interaction.user, -5, "Check Permission Of Other Users");
+			await sendCreditNotification(interaction.user, -settings.checkUserPermissionFee, "Check Permission Of Other Users");
 		}
 
 		if (permission) {

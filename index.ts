@@ -47,6 +47,19 @@ const giveCredits = Number.parseInt(
 		},
 	}),
 );
+const giftAmount = Number.parseInt(
+	await input({
+		message: "Daily gift amount?",
+		required: true,
+		default: "5",
+		validate: (value) => {
+			const num = Number.parseInt(value);
+			if (isNaN(num) || num < 0)
+				return "Please enter a valid number bigger or equals to 0";
+			return true;
+		},
+	}),
+);
 
 client.once("ready", async () => {
 	console.log(`Logged in as ${client.user?.tag}`);
@@ -61,7 +74,12 @@ client.once("ready", async () => {
 			await changeCredit(userId, giveCredits, "System Gift");
 			const user = client.users.cache.get(userId);
 			if (user) {
-				await sendCreditNotification(user, giveCredits, "System Gift", true);
+				await sendCreditNotification(
+					user,
+					giveCredits,
+					"System Gift",
+					true,
+				);
 			}
 		}
 		console.log(`Gave ${giveCredits} credits to ${users.join(", ")}`);
@@ -161,7 +179,26 @@ suspendingEvent.on("update", async (data) => {
 	);
 });
 
-setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
+setInterval(
+	async () => {
+		updateDnsRecord();
+		if (giftAmount <= 0) return;
+		const users = await getUsersMatchedPermission(PermissionFlags.gift);
+		for (const userId of users) {
+			await changeCredit(userId, giftAmount, "Daily Gift");
+			const user = client.users.cache.get(userId);
+			if (user) {
+				await sendCreditNotification(
+					user,
+					giftAmount,
+					"Daily Gift",
+					true,
+				);
+			}
+		}
+	},
+	24 * 60 * 60 * 1000,
+);
 updateDnsRecord();
 
 async function exitHandler() {
@@ -184,7 +221,12 @@ async function exitHandler() {
 				);
 				const user = client.users.cache.get(id);
 				if (user) {
-					await sendCreditNotification(user, approval.options.credit, "Approval Reaction Refund", true);
+					await sendCreditNotification(
+						user,
+						approval.options.credit,
+						"Approval Reaction Refund",
+						true,
+					);
 				}
 			}
 		}

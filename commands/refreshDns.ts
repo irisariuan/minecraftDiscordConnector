@@ -2,6 +2,7 @@ import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { updateDnsRecord } from "../lib/dnsRecord";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -11,10 +12,10 @@ export default {
 		),
 	async execute(interaction, client) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		if (await spendCredit(interaction.user.id, 5, "Refresh DNS Record")) {
+		if (await spendCredit(interaction.user.id, settings.refreshDnsFee, "Refresh DNS Record")) {
 			await sendCreditNotification(
 				interaction.user,
-				-5,
+				-settings.refreshDnsFee,
 				"Refresh DNS Record",
 			);
 		}
