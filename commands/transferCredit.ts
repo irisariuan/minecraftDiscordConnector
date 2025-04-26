@@ -6,6 +6,8 @@ import {
 	spendCredit,
 } from "../lib/credit";
 
+export const transferringFee = 5;
+
 export default {
 	command: new SlashCommandBuilder()
 		.setName("transfercredit")
@@ -32,12 +34,21 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await spendCredit(interaction.user.id, amount, "Transfer Credit");
+		await spendCredit(
+			interaction.user.id,
+			amount + transferringFee,
+			"Transfer Credit",
+		);
 		await changeCredit(user.id, amount, "Received Transfer Credit");
 		await sendCreditNotification(
 			interaction.user,
 			-amount,
 			"Transfer Credit",
+		);
+		await sendCreditNotification(
+			interaction.user,
+			-transferringFee,
+			"Transfer Credit Fee",
 		);
 		await sendCreditNotification(
 			user,
