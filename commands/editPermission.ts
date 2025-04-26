@@ -79,7 +79,7 @@ export default {
 				true,
 			);
 			if (
-				!Object.keys(PermissionFlags).includes(permission) ||
+				!Object.keys(PermissionFlags).includes(permission) &&
 				permission !== "all"
 			) {
 				return interaction.reply({
