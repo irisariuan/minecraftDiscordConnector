@@ -4,18 +4,18 @@ import { loadCommands } from "./lib/commandFile";
 import {
 	compareAllPermissions,
 	comparePermission,
+	getUsersMatchedPermission,
 	PermissionFlags,
 	readPermission,
 	watchPermissionChange,
 } from "./lib/permission";
 import { updateDnsRecord } from "./lib/dnsRecord";
-import {
-	approvalList,
-	updateApprovalMessage,
-} from "./lib/approval";
+import { approvalList, updateApprovalMessage } from "./lib/approval";
 import { serverManager } from "./lib/server";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { setActivity } from "./lib/utils";
+import { input } from "@inquirer/prompts";
+import { changeCredit, sendCreditNotification } from "./lib/credit";
 
 const commands = await loadCommands();
 
@@ -24,18 +24,48 @@ const client = new Client({
 		GatewayIntentBits.Guilds,
 		GatewayIntentBits.GuildMembers,
 		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.GuildPresences,
 		GatewayIntentBits.MessageContent,
 		GatewayIntentBits.GuildMessageReactions,
+		GatewayIntentBits.DirectMessages,
+		GatewayIntentBits.DirectMessageTyping,
+		GatewayIntentBits.DirectMessagePolls,
+		GatewayIntentBits.DirectMessageReactions,
 	],
 });
 
+const giveCredits = Number.parseInt(
+	await input({
+		message: "Give credits to users?",
+		required: true,
+		default: "0",
+		validate: (value) => {
+			const num = Number.parseInt(value);
+			if (isNaN(num) || num < 0)
+				return "Please enter a valid number bigger or equals to 0";
+			return true;
+		},
+	}),
+);
+
 client.once("ready", async () => {
-	console.log("Ready!");
+	console.log(`Logged in as ${client.user?.tag}`);
 	setActivity(
 		client,
 		(await serverManager.isOnline.getData()) || false,
 		isSuspending(),
 	);
+	if (giveCredits > 0) {
+		const users = await getUsersMatchedPermission(PermissionFlags.use);
+		for (const userId of users) {
+			await changeCredit(userId, giveCredits, "System Gift");
+			const user = client.users.cache.get(userId);
+			if (user) {
+				await sendCreditNotification(user, giveCredits, "System Gift", true);
+			}
+		}
+		console.log(`Gave ${giveCredits} credits to ${users.join(", ")}`);
+	}
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -143,6 +173,21 @@ async function exitHandler() {
 	}
 	for (const [id, approval] of approvalList.entries()) {
 		console.log(`Found approval ${id}, trying to clean up...`);
+		if (approval.options.credit) {
+			for (const id of approval.approvalIds.concat(
+				approval.disapprovalIds,
+			)) {
+				await changeCredit(
+					id,
+					approval.options.credit,
+					"Approval Reaction Refund",
+				);
+				const user = client.users.cache.get(id);
+				if (user) {
+					await sendCreditNotification(user, approval.options.credit, "Approval Reaction Refund", true);
+				}
+			}
+		}
 		if (approval.message.editable) {
 			await approval.message.reactions.removeAll();
 			await approval.message.edit({

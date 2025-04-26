@@ -19,6 +19,7 @@ import {
 	compareAnyPermissions,
 } from "./permission";
 import { isSuspending } from "./suspend";
+import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
 
 export interface BaseApproval {
 	content: string;
@@ -45,6 +46,7 @@ export interface ApprovalOptions {
 	description: string;
 	approvalCount?: number;
 	disapprovalCount?: number;
+	credit?: number;
 	onSuccess: (
 		approval: Approval,
 		message: Message | PartialMessage,
@@ -401,7 +403,6 @@ export async function updateApprovalMessage(
 		userPerm,
 		PermissionFlags.repeatApproval,
 	);
-
 	const userReactions = reaction.message.reactions.cache.filter((r) =>
 		r.users.cache.has(user.id),
 	);
@@ -466,6 +467,14 @@ export async function updateApprovalMessage(
 					embeds: [createApprovalEmbed(approval)],
 				})
 				.catch(console.error);
+		}
+		if (approval.options.credit) {
+			await changeCredit(
+				user.id,
+				approval.options.credit,
+				"Approval Reaction Refund",
+			);
+			sendCreditNotification(user, approval.options.credit, "Approval Reaction Refund", true);
 		}
 		return await reaction.message
 			.reply({
@@ -537,6 +546,32 @@ export async function updateApprovalMessage(
 	) {
 		approval.disapprovalIds = approval.disapprovalIds.filter(
 			(id) => id !== user.id,
+		);
+		// Check if need to spend credit
+	} else if (approval.options.credit) {
+		const success = await spendCredit(
+			user.id,
+			approval.options.credit,
+			"Approval Reaction",
+		);
+		if (!success) {
+			return await reaction.message
+				.reply({
+					content: `You do not have enough credit to approve this poll`,
+					flags: [MessageFlags.SuppressNotifications],
+				})
+				.then((message) =>
+					setTimeout(
+						() => message.delete().catch(console.error),
+						DELETE_AFTER_MS,
+					),
+				)
+				.catch(console.error);
+		}
+		await sendCreditNotification(
+			user,
+			-approval.options.credit,
+			"Approval Reaction",
 		);
 	}
 

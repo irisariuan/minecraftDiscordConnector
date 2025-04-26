@@ -8,6 +8,7 @@ import {
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
+import { sendCreditNotification, spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -47,6 +48,20 @@ export default {
 			});
 		}
 
+		if (
+			!(await spendCredit(
+				interaction.user.id,
+				15,
+				"New Start Server Poll",
+			))
+		) {
+			return await interaction.reply({
+				content: "You don't have enough credit to start the server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		sendCreditNotification(interaction.user, -15, "New Start Server Poll")
+		
 		sendApprovalPoll(interaction, {
 			content: "Start Server",
 			options: {
@@ -54,14 +69,19 @@ export default {
 				async onSuccess(approval, message) {
 					const pid = await serverManager.start();
 					if (!pid) {
-						await message.reply({ content: "Server is already online" });
+						await message.reply({
+							content: "Server is already online",
+						});
 						return;
 					}
 					console.log(`Server started with PID ${pid}`);
-					await message.reply({ content: "Server started successfully" });
+					await message.reply({
+						content: "Server started successfully",
+					});
 				},
 				approvalCount: 3,
 				disapprovalCount: 3,
+				credit: 10
 			},
 		});
 	},

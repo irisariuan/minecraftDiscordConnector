@@ -8,6 +8,7 @@ import {
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
+import { sendCreditNotification, spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -76,26 +77,47 @@ export default {
 		const displayString =
 			seconds > 0 ? `Stop Server in ${seconds} seconds` : "Stop Server";
 
+		if (
+			!(await spendCredit(
+				interaction.user.id,
+				25,
+				"New Stop Server Poll",
+			))
+		) {
+			return await interaction.reply({
+				content: "You don't have enough credit to stop the server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		await sendCreditNotification(interaction.user, -25);
 		sendApprovalPoll(interaction, {
 			content: displayString,
 			options: {
 				description: displayString,
 				async onSuccess(approval, message) {
-					const { success, promise } = await serverManager.stop(seconds * 20);
+					const { success, promise } = await serverManager.stop(
+						seconds * 20,
+					);
 					if (!success)
-						return await message.edit({ content: "Failed to shutdown" });
+						return await message.edit({
+							content: "Failed to shutdown",
+						});
 
 					if (seconds > 0) {
 						promise?.then(() => {
 							message
-								.reply({ content: "Server stopped successfully" })
+								.reply({
+									content: "Server stopped successfully",
+								})
 								.catch(console.error);
 						});
 						return await message.edit({
 							content: "Stopping server is scheduled",
 						});
 					}
-					return await message.edit({ content: "Server stopped successfully" });
+					return await message.edit({
+						content: "Server stopped successfully",
+					});
 				},
 				approvalCount: 2,
 				disapprovalCount: 2,

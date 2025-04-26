@@ -15,6 +15,8 @@ export const PermissionFlags = {
     suspend: 1 << 10,
     editPerm: 1 << 11,
     repeatApproval: 1 << 12,
+    creditFree: 1 << 13,
+    creditEdit: 1 << 14,
 } as const
 
 export const allPermission = Object.values(PermissionFlags).reduce((acc, cur) => acc | cur, 0)
@@ -57,6 +59,11 @@ export async function writePermission(user: string, permission: Permission) {
     const permissions = await readPermissionJson()
     permissions[user] = permission
     await Bun.write(PERMISSION, JSON.stringify(permissions, null, 4))
+}
+
+export async function getUsersMatchedPermission(permission: Permission) {
+	const allPerm = await readPermissionJson()
+	return Object.entries(allPerm).filter(([_, perm]) => comparePermission(perm, permission)).map(([user]) => user)
 }
 
 export async function readPermission(user: string) {
