@@ -1,6 +1,7 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { changeSettings, settings } from "../lib/settings";
+import { PermissionFlags } from "../lib/permission";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -33,4 +34,5 @@ export default {
 			flags: [MessageFlags.Ephemeral],
 		});
 	},
+	permissions: [PermissionFlags.editSetting],
 } as CommandFile;

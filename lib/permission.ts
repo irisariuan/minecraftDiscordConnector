@@ -18,6 +18,7 @@ export const PermissionFlags = {
     creditFree: 1 << 13,
     creditEdit: 1 << 14,
     gift: 1 << 15,
+    editSetting: 1 << 16,
 } as const
 
 export const allPermission = Object.values(PermissionFlags).reduce((acc, cur) => acc | cur, 0)
