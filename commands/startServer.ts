@@ -22,6 +22,13 @@ export default {
 				.setRequired(false),
 		),
 	async execute(interaction, client) {
+		if (!interaction.guild) {
+			return await interaction.reply({
+				content: "This command can only be used in a server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+
 		const force = interaction.options.getBoolean("force") || false;
 		if (await isServerAlive())
 			return await interaction.reply({
@@ -61,8 +68,12 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		sendCreditNotification(interaction.user, -settings.newStartServerPollFee, "New Start Server Poll")
-		
+		sendCreditNotification(
+			interaction.user,
+			-settings.newStartServerPollFee,
+			"New Start Server Poll",
+		);
+
 		sendApprovalPoll(interaction, {
 			content: "Start Server",
 			options: {

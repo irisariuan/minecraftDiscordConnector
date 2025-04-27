@@ -15,7 +15,7 @@ import { serverManager } from "./lib/server";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { setActivity } from "./lib/utils";
 import { input } from "@inquirer/prompts";
-import { changeCredit, sendCreditNotification } from "./lib/credit";
+import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { changeCreditSettings, settings } from "./lib/settings";
 import { getNextTimestamp } from "./lib/time";
 
@@ -59,6 +59,18 @@ changeCreditSettings({
 				const num = Number.parseInt(value);
 				if (isNaN(num) || num < 0)
 					return "Please enter a valid number bigger or equals to 0";
+				return true;
+			},
+		}),
+	),
+	giftMax: Number.parseInt(
+		await input({
+			message: "Gift users below this amount? (negative to disable)",
+			required: true,
+			default: "100",
+			validate: (value) => {
+				const num = Number.parseInt(value);
+				if (isNaN(num)) return "Please enter a valid number";
 				return true;
 			},
 		}),
@@ -195,6 +207,11 @@ setTimeout(async () => {
 		if (giftAmount <= 0) return;
 		const users = await getUsersMatchedPermission(PermissionFlags.gift);
 		for (const userId of users) {
+			if (settings.giftMax > 0) {
+				const credit = await getCredit(userId);
+				if (credit.currentCredit > settings.giftMax) continue;
+			}
+
 			console.log(`Gifted ${userId} ${giftAmount} credits`);
 			await changeCredit(userId, giftAmount, "Daily Gift");
 			const user = client.users.cache.get(userId);

@@ -29,6 +29,13 @@ export default {
 				.setRequired(false),
 		),
 	async execute(interaction, client) {
+		if (!interaction.guild) {
+			return await interaction.reply({
+				content: "This command can only be used in a server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		
 		const seconds = interaction.options.getInteger("seconds") ?? 0;
 		const force = interaction.options.getBoolean("force") || false;
 		if (!(await isServerAlive()))

@@ -44,6 +44,13 @@ export default {
 				.setMaxValue(60000),
 		),
 	async execute(interaction, client) {
+		if (!interaction.guild) {
+			return await interaction.reply({
+				content: "This command can only be used in a server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		
 		const command = interaction.options.getString("command", true);
 		const force = interaction.options.getBoolean("poll") === false;
 		const capture = interaction.options.getInteger("capture") ?? 1000;

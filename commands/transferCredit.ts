@@ -34,7 +34,7 @@ export default {
 			});
 		}
 		
-		const totalTransferringFee = settings.baseTransferringFee + Math.floor(settings.trasnferringPercentageFee * amount);
+		const totalTransferringFee = settings.baseTransferringFee + Math.ceil(settings.trasnferringPercentageFee * amount);
 		
 		await spendCredit(
 			interaction.user.id,

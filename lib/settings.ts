@@ -1,5 +1,6 @@
 export interface CreditSettings {
 	dailyGift: number;
+	giftMax: number;
 
 	baseTransferringFee: number;
 	trasnferringPercentageFee: number;
@@ -19,6 +20,7 @@ export interface CreditSettings {
 }
 export const settings: CreditSettings = {
 	dailyGift: 5,
+	giftMax: 100,
 
 	trasnferringPercentageFee: 0.05,
 	baseTransferringFee: 5,
