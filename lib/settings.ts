@@ -1,7 +1,8 @@
 export interface CreditSettings {
 	dailyGift: number;
-	
-	transferringFee: number;
+
+	baseTransferringFee: number;
+	trasnferringPercentageFee: number;
 	checkUserCreditFee: number;
 	checkUserPermissionFee: number;
 	refreshDnsFee: number;
@@ -18,8 +19,9 @@ export interface CreditSettings {
 }
 export const settings: CreditSettings = {
 	dailyGift: 5,
-	
-	transferringFee: 5,
+
+	trasnferringPercentageFee: 0.05,
+	baseTransferringFee: 5,
 	checkUserCreditFee: 5,
 	checkUserPermissionFee: 5,
 	refreshDnsFee: 20,
@@ -37,7 +39,7 @@ export const settings: CreditSettings = {
 export function changeCreditSettings(changes: Partial<CreditSettings>) {
 	for (const [key, val] of Object.entries(changes)) {
 		if (key in settings) {
-			settings[key as keyof CreditSettings] = val
+			settings[key as keyof CreditSettings] = val;
 		}
 	}
 }

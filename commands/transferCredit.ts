@@ -33,9 +33,12 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
+		
+		const totalTransferringFee = settings.baseTransferringFee + Math.floor(settings.trasnferringPercentageFee * amount);
+		
 		await spendCredit(
 			interaction.user.id,
-			amount + settings.transferringFee,
+			amount + totalTransferringFee,
 			"Transfer Credit",
 		);
 		await changeCredit(user.id, amount, "Received Transfer Credit");
@@ -46,7 +49,7 @@ export default {
 		);
 		await sendCreditNotification(
 			interaction.user,
-			-settings.transferringFee,
+			-totalTransferringFee,
 			"Transfer Credit Fee",
 		);
 		await sendCreditNotification(
