@@ -35,8 +35,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 bun.lock*
 
-permissions.json
-credit.json
+data/permissions.json
+data/credit.json
+data/settings.json
 
 test/**/*
 !test/**/*.test.*
