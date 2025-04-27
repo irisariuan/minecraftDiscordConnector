@@ -1,4 +1,5 @@
 import {
+    italic,
 	MessageFlags,
 	type GuildMember,
 	type PartialUser,
@@ -165,7 +166,7 @@ export async function sendCreditNotification(
 	const creditFetched = await getCredit(user.id);
 	await user
 		.send({
-			content: `Your credit has been changed by ${creditChanged}. Your current credit is ${creditFetched.currentCredit}\nReason: ${reason}\nYou could always check your credit by using \`/credit\` command.`,
+			content: `Your credit has been changed by \`${creditChanged}\`. Your current credit is \`${creditFetched.currentCredit}\`\nReason: ${italic(reason)}\n\n*You could always check your credit by using \`/credit\` command.*`,
 			flags: silent ? [MessageFlags.SuppressNotifications] : [],
 		})
 		.catch((err) => console.error("Error occured during DM", err));
