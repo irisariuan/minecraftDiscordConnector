@@ -62,6 +62,7 @@ export default {
 			interaction.user.id,
 			amount + totalTransferringFee,
 			"Transfer Credit",
+			false
 		);
 		if (!success) {
 			return await interaction.reply({

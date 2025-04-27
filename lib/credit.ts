@@ -24,23 +24,31 @@ export interface Change {
 	reason?: string;
 }
 
+interface CreditJson {
+	users: Record<string, UserCredit>;
+	jackpot: number;
+}
+
 export const CREDIT = `${process.cwd()}/data/credit.json`;
 const creditCache = new Map<string, CacheItem<UserCredit>>();
+const jackpotCache = new CacheItem<number>(null);
 
 async function getCreditJson() {
 	const file = Bun.file(CREDIT);
 	if (!(await file.exists())) {
-		await Bun.write(CREDIT, "{}");
-		return {};
+		await Bun.write(CREDIT, "{users:{}, jackpot: 0}");
+		return { users: {}, jackpot: 0 };
 	}
-	return (await file.json().catch(() => ({}))) as Promise<
-		Record<string, UserCredit>
-	>;
+	return (await file
+		.json()
+		.catch(
+			() => ({ users: {}, jackpot: 0 }) as CreditJson,
+		)) as Promise<CreditJson>;
 }
 
 export async function writeCredit(userId: string, credit: UserCredit) {
 	const currentCredit = await getCreditJson();
-	currentCredit[userId] = credit;
+	currentCredit.users[userId] = credit;
 	if (creditCache.has(userId)) {
 		creditCache.get(userId)?.setData(credit);
 	} else {
@@ -91,9 +99,9 @@ export async function getCredit(userId: string): Promise<UserCredit> {
 		if (data) return data;
 	}
 	const currentCredit = await getCreditJson();
-	if (currentCredit[userId]) {
-		creditCache.set(userId, new CacheItem(currentCredit[userId]));
-		return currentCredit[userId];
+	if (currentCredit.users[userId]) {
+		creditCache.set(userId, new CacheItem(currentCredit.users[userId]));
+		return currentCredit.users[userId];
 	}
 	return {
 		currentCredit: 0,
@@ -105,6 +113,7 @@ export async function spendCredit(
 	userId: string,
 	cost: number,
 	reason: string,
+	addToJackpot = true,
 ) {
 	const credit = await getCredit(userId);
 	const permission = await readPermission(userId);
@@ -114,7 +123,25 @@ export async function spendCredit(
 	)
 		return false;
 	await changeCredit(userId, -Math.abs(cost), reason);
+	if (addToJackpot) {
+		setJackpot(await getJackpot() + Math.abs(cost))
+	}
 	return true;
+}
+
+export async function getJackpot(): Promise<number> {
+	const data = await jackpotCache.getData();
+	if (data !== null) return data;
+	const currentCredit = await getCreditJson();
+	jackpotCache.setData(currentCredit.jackpot);
+	return currentCredit.jackpot;
+}
+
+export async function setJackpot(amount: number) {
+	jackpotCache.setData(amount)
+	const currentCredit = await getCreditJson()
+	currentCredit.jackpot = amount;
+	await Bun.write(CREDIT, JSON.stringify(currentCredit, null, 4));
 }
 
 export async function sendCreditNotification(
