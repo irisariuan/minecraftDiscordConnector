@@ -16,6 +16,7 @@ import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { setActivity } from "./lib/utils";
 import { input } from "@inquirer/prompts";
 import { changeCredit, sendCreditNotification } from "./lib/credit";
+import { changeCreditSettings, settings } from "./lib/settings";
 
 const commands = await loadCommands();
 
@@ -47,19 +48,21 @@ const giveCredits = Number.parseInt(
 		},
 	}),
 );
-const giftAmount = Number.parseInt(
-	await input({
-		message: "Daily gift amount?",
-		required: true,
-		default: "5",
-		validate: (value) => {
-			const num = Number.parseInt(value);
-			if (isNaN(num) || num < 0)
-				return "Please enter a valid number bigger or equals to 0";
-			return true;
-		},
-	}),
-);
+changeCreditSettings({
+	dailyGift: Number.parseInt(
+		await input({
+			message: "Daily gift amount?",
+			required: true,
+			default: "5",
+			validate: (value) => {
+				const num = Number.parseInt(value);
+				if (isNaN(num) || num < 0)
+					return "Please enter a valid number bigger or equals to 0";
+				return true;
+			},
+		}),
+	),
+});
 
 client.once("ready", async () => {
 	console.log(`Logged in as ${client.user?.tag}`);
@@ -182,6 +185,7 @@ suspendingEvent.on("update", async (data) => {
 setInterval(
 	async () => {
 		updateDnsRecord();
+		const giftAmount = settings.dailyGift
 		if (giftAmount <= 0) return;
 		const users = await getUsersMatchedPermission(PermissionFlags.gift);
 		for (const userId of users) {

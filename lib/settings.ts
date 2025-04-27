@@ -1,4 +1,6 @@
-export interface ChangableSettings {
+export interface CreditSettings {
+	dailyGift: number;
+	
 	transferringFee: number;
 	checkUserCreditFee: number;
 	checkUserPermissionFee: number;
@@ -14,7 +16,9 @@ export interface ChangableSettings {
 	cancelStopServerVoteFee: number;
 	stopServerVoteFee: number;
 }
-export const settings: ChangableSettings = {
+export const settings: CreditSettings = {
+	dailyGift: 5,
+	
 	transferringFee: 5,
 	checkUserCreditFee: 5,
 	checkUserPermissionFee: 5,
@@ -30,10 +34,10 @@ export const settings: ChangableSettings = {
 	cancelStopServerVoteFee: 20,
 	stopServerVoteFee: 5,
 };
-export function changeSettings(changes: Partial<ChangableSettings>) {
+export function changeCreditSettings(changes: Partial<CreditSettings>) {
 	for (const [key, val] of Object.entries(changes)) {
 		if (key in settings) {
-			settings[key as keyof ChangableSettings] = val
+			settings[key as keyof CreditSettings] = val
 		}
 	}
 }
