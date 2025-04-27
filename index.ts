@@ -17,6 +17,7 @@ import { setActivity } from "./lib/utils";
 import { input } from "@inquirer/prompts";
 import { changeCredit, sendCreditNotification } from "./lib/credit";
 import { changeCreditSettings, settings } from "./lib/settings";
+import { getNextTimestamp } from "./lib/time";
 
 const commands = await loadCommands();
 
@@ -182,13 +183,19 @@ suspendingEvent.on("update", async (data) => {
 	);
 });
 
-setInterval(
-	async () => {
-		updateDnsRecord();
-		const giftAmount = settings.dailyGift
+setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
+updateDnsRecord();
+
+const timeBeforeFirstRun =
+	getNextTimestamp({ hour: 14, minute: 0 }).getTime() - Date.now();
+
+setTimeout(async () => {
+	const func = async () => {
+		const giftAmount = settings.dailyGift;
 		if (giftAmount <= 0) return;
 		const users = await getUsersMatchedPermission(PermissionFlags.gift);
 		for (const userId of users) {
+			console.log(`Gifted ${userId} ${giftAmount} credits`);
 			await changeCredit(userId, giftAmount, "Daily Gift");
 			const user = client.users.cache.get(userId);
 			if (user) {
@@ -200,10 +207,12 @@ setInterval(
 				);
 			}
 		}
-	},
-	24 * 60 * 60 * 1000,
-);
-updateDnsRecord();
+	};
+	setInterval(func, 24 * 60 * 60 * 1000);
+	await func();
+}, timeBeforeFirstRun);
+
+console.log(`Time before first run: ${Math.round(timeBeforeFirstRun / 1000)}s`);
 
 async function exitHandler() {
 	const { success, promise } = await serverManager.stop(0);
