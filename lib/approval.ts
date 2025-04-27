@@ -477,7 +477,7 @@ export async function updateApprovalMessage(
 				approval.options.credit * voted,
 				"Approval Reaction Refund",
 			);
-			sendCreditNotification(user, approval.options.credit, "Approval Reaction Refund", true);
+			sendCreditNotification(user, approval.options.credit * voted, "Approval Reaction Refund", true);
 		}
 		return await reaction.message
 			.reply({
