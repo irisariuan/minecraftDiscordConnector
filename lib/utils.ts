@@ -107,3 +107,7 @@ export function isTrueValue(value: string): boolean | null {
 			? false
 			: null;
 }
+
+export function randomItem<T>(item: T[]): T {
+	return item[Math.floor(Math.random() * item.length)] as T;
+}

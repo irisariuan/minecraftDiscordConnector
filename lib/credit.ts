@@ -33,6 +33,17 @@ export const CREDIT = `${process.cwd()}/data/credit.json`;
 const creditCache = new Map<string, CacheItem<UserCredit>>();
 const jackpotCache = new CacheItem<number>(null);
 
+export let jackpotNumber = getRandomJackpotNumber();
+
+export function changeJackpotNumber() {
+	jackpotNumber = getRandomJackpotNumber();
+	return jackpotNumber
+}
+
+function getRandomJackpotNumber() {
+	return Math.floor(Math.random() * 10000) + 1;
+}
+
 async function getCreditJson() {
 	const file = Bun.file(CREDIT);
 	if (!(await file.exists())) {
@@ -91,6 +102,7 @@ export async function changeCredit(
 	});
 	userCreditFetched.currentCredit += change;
 	await writeCredit(userId, userCreditFetched);
+	return userCreditFetched.currentCredit;
 }
 
 export async function getCredit(userId: string): Promise<UserCredit> {
@@ -124,7 +136,7 @@ export async function spendCredit(
 		return false;
 	await changeCredit(userId, -Math.abs(cost), reason);
 	if (addToJackpot) {
-		setJackpot(await getJackpot() + Math.abs(cost))
+		setJackpot((await getJackpot()) + Math.abs(cost));
 	}
 	return true;
 }
@@ -138,8 +150,8 @@ export async function getJackpot(): Promise<number> {
 }
 
 export async function setJackpot(amount: number) {
-	jackpotCache.setData(amount)
-	const currentCredit = await getCreditJson()
+	jackpotCache.setData(amount);
+	const currentCredit = await getCreditJson();
 	currentCredit.jackpot = amount;
 	await Bun.write(CREDIT, JSON.stringify(currentCredit, null, 4));
 }

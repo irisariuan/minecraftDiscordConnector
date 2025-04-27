@@ -3,7 +3,9 @@ import type { CommandFile } from "../lib/commandFile";
 import {
 	changeCredit,
 	getCredit,
+	getJackpot,
 	sendCreditNotification,
+	setJackpot,
 	spendCredit,
 } from "../lib/credit";
 import { settings } from "../lib/settings";
@@ -62,7 +64,7 @@ export default {
 			interaction.user.id,
 			amount + totalTransferringFee,
 			"Transfer Credit",
-			false
+			false,
 		);
 		if (!success) {
 			return await interaction.reply({
@@ -70,6 +72,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
+		await setJackpot((await getJackpot()) + totalTransferringFee);
 		await changeCredit(user.id, amount, "Received Transfer Credit");
 		await sendCreditNotification(
 			interaction.user,
