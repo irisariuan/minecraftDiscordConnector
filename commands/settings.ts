@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { bold, MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { changeCreditSettings, settings } from "../lib/settings";
 import {
@@ -61,10 +61,10 @@ export default {
 		}
 		if (subcommand === "get") {
 			const settingsList = Object.entries(settings)
-				.map(([key, value]) => `${key}: ${value}`)
+				.map(([key, value]) => `${bold(key)}: \`${value}\``)
 				.join("\n");
 			return await interaction.reply({
-				content: `Settings:\n${settingsList}`,
+				content: `**Settings**:\n\n${settingsList}`,
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
