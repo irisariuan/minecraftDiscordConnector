@@ -46,6 +46,8 @@ export interface ApprovalOptions {
 	description: string;
 	approvalCount?: number;
 	disapprovalCount?: number;
+	callerId: string;
+	startPollFee?: number;
 	credit?: number;
 	onSuccess: (
 		approval: Approval,
@@ -469,9 +471,10 @@ export async function updateApprovalMessage(
 				.catch(console.error);
 		}
 		if (approval.options.credit) {
+			const voted = approval.approvalIds.filter(v => v === user.id).length + approval.disapprovalIds.filter(v => v === user.id).length
 			await changeCredit(
 				user.id,
-				approval.options.credit,
+				approval.options.credit * voted,
 				"Approval Reaction Refund",
 			);
 			sendCreditNotification(user, approval.options.credit, "Approval Reaction Refund", true);

@@ -240,6 +240,25 @@ async function exitHandler() {
 	}
 	for (const [id, approval] of approvalList.entries()) {
 		console.log(`Found approval ${id}, trying to clean up...`);
+		if (approval.options.startPollFee) {
+			console.log(
+				`Refund ${approval.options.startPollFee} to caller ${approval.options.callerId}`,
+			);
+			await changeCredit(
+				approval.options.callerId,
+				approval.options.startPollFee,
+				"New Approval Poll Refund",
+			);
+			const user = client.users.cache.get(approval.options.callerId);
+			if (user) {
+				await sendCreditNotification(
+					user,
+					approval.options.startPollFee,
+					"New Approval Poll Refund",
+					true,
+				);
+			}
+		}
 		if (approval.options.credit) {
 			for (const id of approval.approvalIds.concat(
 				approval.disapprovalIds,

@@ -101,6 +101,8 @@ export default {
 		sendApprovalPoll(interaction, {
 			content: displayString,
 			options: {
+				startPollFee: settings.newStopServerPollFee,
+				callerId: interaction.user.id,
 				description: displayString,
 				async onSuccess(approval, message) {
 					const { success, promise } = await serverManager.stop(

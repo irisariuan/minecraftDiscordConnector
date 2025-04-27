@@ -77,6 +77,8 @@ export default {
 			return await sendApprovalPoll(interaction, {
 				content: command,
 				options: {
+					startPollFee: settings.newRunCommandPollFee,
+					callerId: interaction.user.id,
 					description: `Command: \`${command}\``,
 					async onSuccess(approval, message) {
 						const output = serverManager.captureSomeOutput(capture);

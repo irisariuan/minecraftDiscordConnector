@@ -77,6 +77,8 @@ export default {
 		sendApprovalPoll(interaction, {
 			content: "Start Server",
 			options: {
+				startPollFee: settings.newStartServerPollFee,
+				callerId: interaction.user.id,
 				description: "Start Server",
 				async onSuccess(approval, message) {
 					const pid = await serverManager.start();

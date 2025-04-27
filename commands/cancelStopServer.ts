@@ -17,6 +17,13 @@ export default {
 		.setName("cancelstopserver")
 		.setDescription("Cancel stop the server"),
 	async execute(interaction, client) {
+		if (!interaction.guild) {
+			return await interaction.reply({
+				content: "This command can only be used in a server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		
 		if (!(await isServerAlive()))
 			return await interaction.reply({
 				content: "Server is offline",
@@ -75,6 +82,8 @@ export default {
 		sendApprovalPoll(interaction, {
 			content: "Cancel Server Shutdown",
 			options: {
+				startPollFee: settings.newCancelStopServerPollFee,
+				callerId: interaction.user.id,
 				description: "Cancel Server Shutdown",
 				async onSuccess(approval, message) {
 					let success = false;
@@ -95,7 +104,7 @@ export default {
 				},
 				approvalCount: 2,
 				disapprovalCount: 2,
-				credit: settings.cancelStopServerVoteFee
+				credit: settings.cancelStopServerVoteFee,
 			},
 		});
 	},
