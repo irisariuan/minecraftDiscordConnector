@@ -19,7 +19,7 @@ import {
 	compareAnyPermissions,
 } from "./permission";
 import { isSuspending } from "./suspend";
-import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
+import { changeCredit, getJackpot, sendCreditNotification, setJackpot, spendCredit } from "./credit";
 
 export interface BaseApproval {
 	content: string;
@@ -477,7 +477,8 @@ export async function updateApprovalMessage(
 				approval.options.credit * voted,
 				"Approval Reaction Refund",
 			);
-			sendCreditNotification(user, approval.options.credit * voted, "Approval Reaction Refund", true);
+			await setJackpot(await getJackpot() - approval.options.credit * voted)
+			await sendCreditNotification(user, approval.options.credit * voted, "Approval Reaction Refund", true);
 		}
 		return await reaction.message
 			.reply({
