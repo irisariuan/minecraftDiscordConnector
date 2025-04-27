@@ -1,23 +1,23 @@
-import "dotenv/config";
-import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
-import { loadCommands } from "./lib/commandFile";
-import {
-	compareAllPermissions,
-	comparePermission,
-	getUsersMatchedPermission,
-	PermissionFlags,
-	readPermission,
-	watchPermissionChange,
-} from "./lib/permission";
-import { updateDnsRecord } from "./lib/dnsRecord";
-import { approvalList, updateApprovalMessage } from "./lib/approval";
-import { serverManager } from "./lib/server";
-import { isSuspending, suspendingEvent } from "./lib/suspend";
-import { setActivity } from "./lib/utils";
 import { input } from "@inquirer/prompts";
+import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
+import "dotenv/config";
+import { approvalList, updateApprovalMessage } from "./lib/approval";
+import { loadCommands } from "./lib/commandFile";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
-import { changeCreditSettings, settings } from "./lib/settings";
+import { updateDnsRecord } from "./lib/dnsRecord";
+import {
+    compareAllPermissions,
+    comparePermission,
+    getUsersMatchedPermission,
+    PermissionFlags,
+    readPermission,
+    watchPermissionChange,
+} from "./lib/permission";
+import { serverManager } from "./lib/server";
+import { changeCreditSettings, loadSettings, setSetting, settings } from "./lib/settings";
+import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { getNextTimestamp } from "./lib/time";
+import { setActivity } from "./lib/utils";
 
 const commands = await loadCommands();
 
@@ -183,7 +183,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
 	updateApprovalMessage(reaction, user);
 });
 
-serverManager.isOnline.cacheEvent.on("setData", (data, oldData) => {
+serverManager.isOnline.cacheEvent.on("setData", (data) => {
 	setActivity(client, data || false, isSuspending());
 });
 
@@ -321,5 +321,10 @@ process.on("exit", async (code) => {
 });
 
 watchPermissionChange();
+loadSettings().then((setting) => {
+	console.log("Loaded custom settings");
+	setSetting(setting);
+});
+
 
 client.login(process.env.TOKEN);

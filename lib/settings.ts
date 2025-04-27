@@ -1,3 +1,5 @@
+const SETTINGS = `${process.cwd()}/data/settings.json`;
+
 export interface CreditSettings {
 	dailyGift: number;
 	giftMax: number;
@@ -38,10 +40,29 @@ export const settings: CreditSettings = {
 	cancelStopServerVoteFee: 20,
 	stopServerVoteFee: 5,
 };
-export function changeCreditSettings(changes: Partial<CreditSettings>) {
+
+export function setSetting(changes: Partial<CreditSettings>) {
 	for (const [key, val] of Object.entries(changes)) {
 		if (key in settings) {
 			settings[key as keyof CreditSettings] = val;
 		}
 	}
+}
+
+async function saveSettings(settings: Partial<CreditSettings>) {
+	const currentLocalSettings = await loadSettings();
+	const newSettings = { ...currentLocalSettings, ...settings };
+	return await Bun.write(SETTINGS, JSON.stringify(newSettings, null, 4));
+}
+
+export async function changeCreditSettings(changes: Partial<CreditSettings>) {
+	setSetting(changes);
+	await saveSettings(changes)
+}
+
+export async function loadSettings(): Promise<Partial<CreditSettings>> {
+	const settings = Bun.file(SETTINGS);
+	if (!(await settings.exists())) return {};
+	const data = await settings.json().catch(() => ({}));
+	return data;
 }
