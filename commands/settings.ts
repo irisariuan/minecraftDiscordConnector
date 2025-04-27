@@ -1,10 +1,10 @@
-import { bold, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { italic, MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { changeCreditSettings, settings } from "../lib/settings";
 import {
-	comparePermission,
-	PermissionFlags,
-	readPermission,
+    comparePermission,
+    PermissionFlags,
+    readPermission,
 } from "../lib/permission";
 export default {
 	command: new SlashCommandBuilder()
@@ -61,7 +61,7 @@ export default {
 		}
 		if (subcommand === "get") {
 			const settingsList = Object.entries(settings)
-				.map(([key, value]) => `${bold(key)}: \`${value}\``)
+				.map(([key, value]) => `${italic(key)}: \`${value}\``)
 				.join("\n");
 			return await interaction.reply({
 				content: `**Settings**:\n\n${settingsList}`,

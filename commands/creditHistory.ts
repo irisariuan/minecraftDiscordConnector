@@ -1,9 +1,9 @@
 import {
-	bold,
 	EmbedBuilder,
+	italic,
 	MessageFlags,
 	SlashCommandBuilder,
-	time,
+	time
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { getCredit, sendCreditNotification, spendCredit } from "../lib/credit";
@@ -50,7 +50,7 @@ export default {
 					.setTitle(user.username)
 					.addFields({
 						name: "Current Credit",
-						value: bold(creditData.currentCredit.toString()),
+						value: `\`${creditData.currentCredit}\``,
 					})
 					.addFields(
 						creditData.histories
@@ -59,7 +59,7 @@ export default {
 							.map((history) => ({
 								name:
 									history.changed >= 0 ? "Income" : "Expense",
-								value: `${bold(`${history.changed > 0 ? "+" : ""}${history.changed}`)}\n\`${history.creditBefore}\`➡️\`${history.creditAfter}\`\nTimestamp: ${time(new Date(history.timestamp))}${history.reason ? `\nReason: \`${history.reason}\`` : ""}`,
+								value: `${italic(`${history.changed > 0 ? "+" : ""}${history.changed}`)}\n\`${history.creditBefore}\`➡️\`${history.creditAfter}\`\nTimestamp: ${time(new Date(history.timestamp))}${history.reason ? `\nReason: \`${history.reason}\`` : ""}`,
 							})),
 					)
 					.setFooter({
