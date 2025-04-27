@@ -6,15 +6,20 @@ import { loadCommands } from "./lib/commandFile";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { updateDnsRecord } from "./lib/dnsRecord";
 import {
-    compareAllPermissions,
-    comparePermission,
-    getUsersMatchedPermission,
-    PermissionFlags,
-    readPermission,
-    watchPermissionChange,
+	compareAllPermissions,
+	comparePermission,
+	getUsersMatchedPermission,
+	PermissionFlags,
+	readPermission,
+	watchPermissionChange,
 } from "./lib/permission";
 import { serverManager } from "./lib/server";
-import { changeCreditSettings, loadSettings, setSetting, settings } from "./lib/settings";
+import {
+	changeCreditSettings,
+	loadSettings,
+	setSetting,
+	settings,
+} from "./lib/settings";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { getNextTimestamp } from "./lib/time";
 import { setActivity } from "./lib/utils";
@@ -49,12 +54,16 @@ const giveCredits = Number.parseInt(
 		},
 	}),
 );
+
+const currentSettings = await loadSettings();
+console.log("Loaded custom settings");
+
 changeCreditSettings({
 	dailyGift: Number.parseInt(
 		await input({
 			message: "Daily gift amount?",
 			required: true,
-			default: "5",
+			default: (currentSettings.dailyGift ?? 5).toString(),
 			validate: (value) => {
 				const num = Number.parseInt(value);
 				if (isNaN(num) || num < 0)
@@ -67,7 +76,7 @@ changeCreditSettings({
 		await input({
 			message: "Gift users below this amount? (negative to disable)",
 			required: true,
-			default: "100",
+			default: (currentSettings.giftMax ?? 100).toString(),
 			validate: (value) => {
 				const num = Number.parseInt(value);
 				if (isNaN(num)) return "Please enter a valid number";
@@ -321,10 +330,5 @@ process.on("exit", async (code) => {
 });
 
 watchPermissionChange();
-loadSettings().then((setting) => {
-	console.log("Loaded custom settings");
-	setSetting(setting);
-});
-
 
 client.login(process.env.TOKEN);
