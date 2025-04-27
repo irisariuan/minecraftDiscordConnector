@@ -1,7 +1,8 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	changeCredit,
+	getCredit,
 	sendCreditNotification,
 	spendCredit,
 } from "../lib/credit";
@@ -27,20 +28,46 @@ export default {
 	async execute(interaction, client) {
 		const user = interaction.options.getUser("user", true);
 		const amount = interaction.options.getNumber("amount", true);
+		const fromUserCredit = await getCredit(interaction.user.id);
+		const toUserCredit = await getCredit(user.id);
 		if (user.id === interaction.user.id) {
 			return await interaction.reply({
 				content: "You cannot transfer credit to yourself",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		
-		const totalTransferringFee = settings.baseTransferringFee + Math.ceil(settings.trasnferringPercentageFee * amount);
-		
-		await spendCredit(
+
+		let totalTransferringFee =
+			settings.baseTransferringFee +
+			Math.ceil(settings.trasnferringPercentageFee * amount);
+		if (
+			Math.abs(
+				fromUserCredit.currentCredit - toUserCredit.currentCredit,
+			) > settings.transferringDifferencePenaltyTrigger
+		) {
+			totalTransferringFee += Math.ceil(
+				Math.abs(
+					fromUserCredit.currentCredit - toUserCredit.currentCredit,
+				) * settings.transferringDifferencePenaltyPercentage,
+			);
+		}
+
+		totalTransferringFee = Math.min(
+			totalTransferringFee,
+			settings.maxTransferringFee,
+		);
+
+		const success = await spendCredit(
 			interaction.user.id,
 			amount + totalTransferringFee,
 			"Transfer Credit",
 		);
+		if (!success) {
+			return await interaction.reply({
+				content: `You do not have enough credit (Requires ${totalTransferringFee}, current: ${fromUserCredit.currentCredit}) to transfer ${amount} credit to ${userMention(user.id)}`,
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
 		await changeCredit(user.id, amount, "Received Transfer Credit");
 		await sendCreditNotification(
 			interaction.user,

@@ -6,6 +6,10 @@ export interface CreditSettings {
 
 	baseTransferringFee: number;
 	trasnferringPercentageFee: number;
+	transferringDifferencePenaltyPercentage: number;
+	transferringDifferencePenaltyTrigger: number;
+	maxTransferringFee: number;
+	
 	checkUserCreditFee: number;
 	checkUserPermissionFee: number;
 	refreshDnsFee: number;
@@ -21,24 +25,28 @@ export interface CreditSettings {
 	stopServerVoteFee: number;
 }
 export const settings: CreditSettings = {
-	dailyGift: 5,
-	giftMax: 100,
+	dailyGift: 20,
+	giftMax: 70,
 
 	trasnferringPercentageFee: 0.05,
-	baseTransferringFee: 5,
-	checkUserCreditFee: 5,
-	checkUserPermissionFee: 5,
-	refreshDnsFee: 20,
+	baseTransferringFee: 3,
+	transferringDifferencePenaltyPercentage: 0.1,
+	transferringDifferencePenaltyTrigger: 50,
+	maxTransferringFee: 150,
+	
+	checkUserCreditFee: 3,
+	checkUserPermissionFee: 3,
+	refreshDnsFee: 3,
 
 	newRunCommandPollFee: 20,
-	newCancelStopServerPollFee: 10,
-	newStartServerPollFee: 5,
+	newCancelStopServerPollFee: 30,
+	newStartServerPollFee: 30,
 	newStopServerPollFee: 30,
 
-	runCommandVoteFee: 10,
+	runCommandVoteFee: 20,
 	startServerVoteFee: 15,
-	cancelStopServerVoteFee: 20,
-	stopServerVoteFee: 5,
+	cancelStopServerVoteFee: 15,
+	stopServerVoteFee: 15,
 };
 
 export function setSetting(changes: Partial<CreditSettings>) {
