@@ -83,42 +83,44 @@ export default {
 			});
 		}
 		if (subCommand === "set") {
-			await Promise.all(
-				users.map(async (user) => {
-					const original = await setCredit(
-						user.id,
-						amount,
-						"Set by admin",
-					);
-					console.log(`Set ${user.displayName} credit to ${amount}`);
-					if (!silent)
-						await sendCreditNotification(
+			const promises = [];
+			for (const user of users) {
+				const original = await setCredit(
+					user.id,
+					amount,
+					"Set by admin",
+				);
+				console.log(`Set ${user.displayName} credit to ${amount}`);
+				if (!silent)
+					promises.push(
+						sendCreditNotification(
 							user,
 							amount - original,
 							"Set by admin",
 							true,
-						);
-				}),
-			);
+						),
+					);
+			}
+			await Promise.all(promises);
 			await interaction.editReply({
 				content: `Set credit of ${user instanceof Role ? roleMention(user.id) : userMention(users[0].id)} to ${amount}`,
 			});
 		} else if (subCommand === "change") {
-			Promise.all(
-				users.map(async (user) => {
-					await changeCredit(user.id, amount, "Changed by admin");
-					console.log(
-						`Changed ${user.displayName} credit by ${amount}`,
-					);
-					if (!silent)
-						await sendCreditNotification(
+			const promises = [];
+			for (const user of users) {
+				await changeCredit(user.id, amount, "Changed by admin");
+				console.log(`Changed ${user.displayName} credit by ${amount}`);
+				if (!silent)
+					promises.push(
+						sendCreditNotification(
 							user,
 							amount,
 							"Changed by admin",
 							true,
-						);
-				}),
-			);
+						),
+					);
+			}
+			await Promise.all(promises);
 			await interaction.editReply({
 				content: `Changed credit of ${user instanceof Role ? roleMention(user.id) : userMention(users[0].id)} by ${amount}`,
 			});
