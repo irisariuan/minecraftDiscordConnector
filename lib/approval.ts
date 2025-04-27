@@ -471,7 +471,7 @@ export async function updateApprovalMessage(
 				.catch(console.error);
 		}
 		if (approval.options.credit) {
-			const voted = approval.approvalIds.filter(v => v === user.id).length + approval.disapprovalIds.filter(v => v === user.id).length
+			const voted = prevCount - approval.approvalIds.length - approval.disapprovalIds.length
 			await changeCredit(
 				user.id,
 				approval.options.credit * voted,
