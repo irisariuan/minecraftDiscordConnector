@@ -1,5 +1,5 @@
 import {
-    italic,
+	italic,
 	MessageFlags,
 	type GuildMember,
 	type PartialUser,
@@ -28,34 +28,39 @@ export interface Change {
 interface CreditJson {
 	users: Record<string, UserCredit>;
 	jackpot: number;
+	jackpotNumber: number;
 }
 
 export const CREDIT = `${process.cwd()}/data/credit.json`;
 const creditCache = new Map<string, CacheItem<UserCredit>>();
 const jackpotCache = new CacheItem<number>(null);
 
-export let jackpotNumber = getRandomJackpotNumber();
+export let jackpotNumber = (await getCreditJson()).jackpotNumber;
 
-export function changeJackpotNumber() {
+export async function changeJackpotNumber() {
 	jackpotNumber = getRandomJackpotNumber();
-	return jackpotNumber
+	const currentCredit = await getCreditJson();
+	currentCredit.jackpotNumber = jackpotNumber;
+	await Bun.write(CREDIT, JSON.stringify(currentCredit, null, 4));
+	return jackpotNumber;
 }
 
 function getRandomJackpotNumber() {
 	return Math.floor(Math.random() * 10000) + 1;
 }
 
-async function getCreditJson() {
+async function getCreditJson(): Promise<CreditJson> {
 	const file = Bun.file(CREDIT);
+	const fallback = {
+		users: {},
+		jackpot: 0,
+		jackpotNumber: getRandomJackpotNumber(),
+	};
 	if (!(await file.exists())) {
-		await Bun.write(CREDIT, "{users:{}, jackpot: 0}");
-		return { users: {}, jackpot: 0 };
+		await Bun.write(CREDIT, JSON.stringify(fallback, null, 4));
+		return fallback;
 	}
-	return (await file
-		.json()
-		.catch(
-			() => ({ users: {}, jackpot: 0 }) as CreditJson,
-		)) as Promise<CreditJson>;
+	return await file.json().catch(() => fallback);
 }
 
 export async function writeCredit(userId: string, credit: UserCredit) {

@@ -3,7 +3,7 @@ import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
 import "dotenv/config";
 import { approvalList, updateApprovalMessage } from "./lib/approval";
 import { loadCommands } from "./lib/commandFile";
-import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
+import { changeCredit, getCredit, jackpotNumber, sendCreditNotification } from "./lib/credit";
 import { updateDnsRecord } from "./lib/dnsRecord";
 import {
 	compareAllPermissions,
