@@ -77,7 +77,7 @@ export function endsWith(str: string, suffix: string) {
 	return str + suffix;
 }
 
-export function notEndsWith(str: string, suffix: string) {
+export function removeSuffix(str: string, suffix: string) {
 	if (str.endsWith(suffix)) return str.slice(0, -suffix.length);
 	return str;
 }
@@ -110,4 +110,11 @@ export function isTrueValue(value: string): boolean | null {
 
 export function randomItem<T>(item: T[]): T {
 	return item[Math.floor(Math.random() * item.length)] as T;
+}
+
+/**
+ * Clamp a number between a minimum and maximum value
+ */
+export function clamp(value: number, min: number, max: number) {
+	return Math.min(Math.max(value, min), max);
 }
