@@ -12,9 +12,11 @@
 	"dependencies": {
 		"@inquirer/prompts": "^7.5.0",
 		"@prisma/client": "^6.16.2",
+		"@types/cors": "^2.8.19",
 		"@types/express": "^5.0.3",
 		"@types/multer": "^2.0.0",
 		"@types/yauzl": "^2.10.3",
+		"cors": "^2.8.5",
 		"discord.js": "^14.18.0",
 		"dotenv": "^16.4.7",
 		"express": "^5.1.0",

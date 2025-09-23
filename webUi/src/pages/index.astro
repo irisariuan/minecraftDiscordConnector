@@ -1,0 +1,189 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Upload Plugins">
+	<div class="w-full h-full flex flex-col">
+		<h1 class="text-3xl text-center py-4 bg-gray-600 text-gray-400">
+			Upload Plugin
+		</h1>
+		<div
+			id="dropzone"
+			style="display: none"
+			class="bg-black flex-1 w-full hover:cursor-grab active:cursor-grabbing flex items-center justify-center flex-col gap-4 p-4"
+		>
+			<p class="text-5xl text-white select-none">Drop your files here</p>
+			<button
+				id="fileSelectButton"
+				class="text-3xl text-gray-400 hover:cursor-pointer hover:bg-white hover:text-gray-800 p-4 rounded-4xl transition-colors"
+				>Or else, upload</button
+			>
+			<p
+				id="preview"
+				class="text-white text-xl select-none break-all hover:cursor-pointer"
+			>
+			</p>
+			<button
+				id="uploadButton"
+				style="display: none"
+				class="text-white border border-px border-white p-4 rounded-4xl w-full hover:cursor-pointer hover:bg-white hover:text-gray-800 transition-colors"
+				>Upload</button
+			>
+		</div>
+		<div
+			id="pending"
+			class="bg-gray-900 w-full flex-1 flex items-center justify-center"
+		>
+			<p class="text-white animate-pulse text-5xl">Loading</p>
+		</div>
+		<div
+			id="error"
+			style="display: none"
+			class="bg-gradient-to-b from-red-700 to-red-800 w-full flex-1 flex items-center justify-center gap-4 flex-col p-4"
+		>
+			<p class="text-white text-5xl">Error</p>
+			<p id="errorDetail" class="text-red-300 text-xl"></p>
+			<button
+				onclick="window.location.reload()"
+				class="text-white border border-px border-white p-4 w-full rounded-4xl hover:cursor-pointer hover:bg-white hover:text-red-800 transition-colors"
+				>Reload</button
+			>
+		</div>
+		<div
+			class="bg-gradient-to-b from-green-600 to-green-800 w-full flex-1 flex items-center justify-center"
+			style="display: none"
+			id="uploaded"
+		>
+			<p class="text-white text-5xl">Uploaded</p>
+		</div>
+	</div>
+	<script>
+		async function verifyId(id: string) {
+			const res = await fetch("/verify/" + id, {
+				mode: "cors",
+			});
+			if (res.ok) {
+				const data: { valid: boolean; uploaded: boolean } =
+					await res.json();
+				return data;
+			}
+			return { valid: false, uploaded: false };
+		}
+		async function uploadFiles(id: string, file: File) {
+			const formData = new FormData();
+			formData.append("upload", file);
+			const res = await fetch("/upload/" + id, {
+				method: "POST",
+				body: formData,
+				mode: "cors",
+			});
+			if (res.ok) {
+				return { success: true };
+			} else {
+				return { success: false, reason: await res.text() };
+			}
+		}
+		let selectedFile: File | null = null;
+
+		window.onload = async () => {
+			const pending = document.getElementById("pending");
+			const error = document.getElementById("error");
+			const errorDetail = document.getElementById("errorDetail");
+			const uploaded = document.getElementById("uploaded");
+			const params = new URLSearchParams(window.location.search);
+			const currentId = params.get("id");
+			if (!currentId) {
+				console.error("No ID found in URL");
+				if (pending) pending.style.display = "none";
+				if (error) error.style.display = "flex";
+				if (errorDetail)
+					errorDetail.innerText = "No ID found in URL parameters.";
+				return;
+			}
+			const data = await verifyId(currentId);
+			if (!data.valid) {
+				console.error("Invalid ID");
+				if (pending) pending.style.display = "none";
+				if (error) error.style.display = "flex";
+				if (errorDetail)
+					errorDetail.innerText = "The provided ID is invalid.";
+				return;
+			}
+			if (data.uploaded) {
+				if (pending) pending.style.display = "none";
+				if (uploaded) uploaded.style.display = "flex";
+				return;
+			}
+			if (pending) pending.style.display = "none";
+			const dropzone = document.getElementById("dropzone");
+			const fileSelectButton =
+				document.getElementById("fileSelectButton");
+			const preview = document.getElementById("preview");
+			const uploadButton = document.getElementById(
+				"uploadButton",
+			) as HTMLButtonElement;
+			if (!dropzone || !fileSelectButton || !preview || !uploadButton)
+				return;
+			dropzone.style.display = "flex";
+			dropzone.addEventListener("dragover", (e) => {
+				e.preventDefault();
+			});
+
+			dropzone.addEventListener("dragleave", (e) => {
+				e.preventDefault();
+			});
+
+			dropzone.addEventListener("drop", (e) => {
+				e.preventDefault();
+				if (!e.dataTransfer) return;
+				const files = e.dataTransfer.files[0];
+				setUploadFiles(files);
+			});
+			uploadButton.addEventListener("click", async () => {
+				if (!uploadButton || !currentId || !selectedFile) return;
+				uploadButton.disabled = true;
+				uploadButton.innerText = "Uploading...";
+				const { success, reason } = await uploadFiles(
+					currentId,
+					selectedFile,
+				);
+				if (dropzone) dropzone.style.display = "none";
+				if (success) {
+					if (uploaded) uploaded.style.display = "flex";
+				} else {
+					if (error) error.style.display = "flex";
+					if (errorDetail)
+						errorDetail.innerText =
+							reason ??
+							"An error occurred during the upload. Please try again.";
+				}
+			});
+			preview.addEventListener("click", () => {
+				if (!selectedFile) return;
+				setUploadFiles(undefined);
+				preview.innerText = "";
+				if (uploadButton) uploadButton.style.display = "none";
+			});
+
+			fileSelectButton.addEventListener("click", () => {
+				const fileInput = document.createElement("input");
+				fileInput.type = "file";
+				fileInput.multiple = false;
+				fileInput.onchange = (e) => {
+					if (!e.currentTarget) return;
+					const files = (e.currentTarget as HTMLInputElement).files;
+					if (!files) return;
+					setUploadFiles(files[0]);
+				};
+				fileInput.click();
+			});
+
+			function setUploadFiles(file: File | undefined) {
+				if (!preview || !file) return;
+				preview.innerText = file.name;
+				selectedFile = file;
+				if (uploadButton) uploadButton.style.display = "block";
+			}
+		};
+	</script>
+</BaseLayout>
