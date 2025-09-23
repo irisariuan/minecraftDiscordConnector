@@ -23,6 +23,11 @@ export default {
 				.setName("plugin")
 				.setDescription("The plugin to append")
 				.setRequired(true),
+		)
+		.addBooleanOption((option) =>
+			option
+				.setName("release")
+				.setDescription("Whether to only show stable releases"),
 		),
 	async execute(interaction, client) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -38,29 +43,24 @@ export default {
 		}
 
 		const pluginOption = interaction.options.getString("plugin", true);
-
-		const allOptions = await listPluginVersions(pluginOption, {
-			loaders: [LOADER_TYPE],
-			game_versions: [MINECRAFT_VERSION],
-		});
+		const onlyRelease = interaction.options.getBoolean("release") ?? false;
 
 		await sendPaginationMessage<PluginListVersionItem<true>>({
 			interaction,
-			getResult: () => allOptions || [],
+			getResult: async () =>
+				(
+					(await listPluginVersions(pluginOption, {
+						loaders: [LOADER_TYPE],
+						game_versions: [MINECRAFT_VERSION],
+					})) || []
+				).filter((v) => !onlyRelease || v.version_type === "release"),
 			options: {
 				title: "Select a plugin version to download",
-				notFoundMessage: "No plugin version found",
+				notFoundMessage: "No available plugin version found",
 			},
 			formatter: (version) => ({
 				name: version.version_number,
 				value: `ID: \`${version.id}\`, Published on ${time(new Date(version.date_published))}`,
-				/*
-				Available for: ${version.game_versions
-					.toSorted()
-					.toReversed()
-					.map((v) => (v === MINECRAFT_VERSION ? `**${v}**` : v))
-					.join(", ")}
-			 */
 			}),
 			selectMenuTransform: (version) => ({
 				label: version.version_number,
@@ -77,7 +77,7 @@ export default {
 					);
 				};
 			},
-			async onItemSelected(menuInteraction) {
+			async onItemSelected(menuInteraction, result) {
 				const value = menuInteraction.values[0];
 				if (!value) return false;
 				const { newDownload } = await downloadPluginFile(value);
@@ -92,7 +92,9 @@ export default {
 					content:
 						"Plugin downloaded and appended successfully! You should restart the server to take effect",
 				});
-				const found = allOptions?.find((v) => v.id === value);
+				const found = (await result.getData())?.find(
+					(v) => v.id === value,
+				);
 				if (found && found.dependencies.length > 0) {
 					await menuInteraction.followUp({
 						content: `Note: This plugin has dependencies: ${found.dependencies.map((d) => `\`${d.file_name}\` (Version \`${d.version_id}\`)`).join(", ")}. You may need to download and append them as well.`,
@@ -102,21 +104,6 @@ export default {
 				return true;
 			},
 		});
-
-		// const { filename, newDownload } = await downloadLatestPlugin(
-		// 	pluginOption,
-		// 	{ game_versions: [MINECRAFT_VERSION], loaders: [LOADER_TYPE] },
-		// );
-		// if (!filename) {
-		// 	return interaction.editReply({ content: "Plugin not found" });
-		// }
-		// if (newDownload) {
-		// 	return interaction.editReply({
-		// 		content:
-		// 			"Plugin downloaded and appended successfully! You should restart the server to take effect",
-		// 	});
-		// }
-		// return interaction.editReply({ content: "Plugin already exists!" });
 	},
 	permissions: [PermissionFlags.downloadPlugin],
 } as CommandFile;

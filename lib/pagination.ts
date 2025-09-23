@@ -64,6 +64,7 @@ export interface PaginationOptions {
 interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
 	getResult: (
 		pageNumber: number,
+		filter?: string,
 		force?: boolean,
 	) => Promise<T[] | undefined> | T[] | undefined;
 	/**
@@ -71,6 +72,7 @@ interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
 	 */
 	onItemSelected?: (
 		interaction: StringSelectMenuInteraction,
+		currentResult: CacheItem<T[]>,
 	) => Promise<boolean> | boolean;
 }
 
@@ -87,14 +89,14 @@ export async function sendPaginationMessage<T>({
 	const result = new CacheItem<T[]>(null, {
 		updateMethod: async () =>
 			(filterFunc
-				? (await getResult(page, true))?.filter(
+				? (await getResult(page, options?.filter, true))?.filter(
 						filterFunc(options?.filter),
 					)
-				: await getResult(page, true)) || [],
+				: await getResult(page, options?.filter, true)) || [],
 		interval: 1000 * 60 * 5,
 		ttl: 1000 * 60 * 3,
 	});
-	let showSelectMenu = !!selectMenuTransform;
+	let showSelectMenu = selectMenuTransform !== undefined;
 
 	const interactionResponse = await editInteraction({
 		result,
@@ -155,10 +157,11 @@ export async function sendPaginationMessage<T>({
 				result.setUpdateMethod(
 					async () =>
 						(filterFunc
-							? (await getResult(page, true))?.filter(
-									filterFunc(filter),
-								)
-							: await getResult(page, true)) || [],
+							? (
+									await getResult(page, options?.filter, true)
+								)?.filter(filterFunc(filter))
+							: await getResult(page, options?.filter, true)) ||
+						[],
 				);
 				await result.update();
 				const maxPage = calculateMaxPage(
@@ -212,21 +215,20 @@ export async function sendPaginationMessage<T>({
 				filterFunc,
 				formatter,
 				showSelectMenu,
+				selectMenuTransform,
 			});
 		});
 
-	if (onItemSelected) {
-		const collector = interactionResponse.createMessageComponentCollector({
-			componentType: ComponentType.StringSelect,
-		});
+	const collector = interactionResponse.createMessageComponentCollector({
+		componentType: ComponentType.StringSelect,
+	});
 
-		collector.on("collect", async (item) => {
-			if (await onItemSelected(item)) {
-				collector.stop();
-				showSelectMenu = false;
-			}
-		});
-	}
+	collector.on("collect", async (item) => {
+		if (await onItemSelected?.(item, result)) {
+			collector.stop();
+			showSelectMenu = false;
+		}
+	});
 }
 
 interface BasePaginationProps<T> {
@@ -286,6 +288,7 @@ async function editInteraction<T>({
 		selectMenuTransform && showSelectMenu && filteredResult.length > 0
 			? createSelectMenu(
 					filteredResult.map(selectMenuTransform),
+					page,
 					options?.selectMenuPlaceholder,
 				)
 			: [];

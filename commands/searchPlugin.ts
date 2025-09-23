@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags, time } from "discord.js";
 import {
+	getPlugin,
 	listPluginVersions,
 	LOADER_TYPE,
 	MINECRAFT_VERSION,
@@ -17,18 +18,33 @@ export default {
 		.setDescription("Search for a plugin")
 		.addStringOption((option) =>
 			option.setName("plugin").setDescription("The plugin to search for"),
+		)
+		.addBooleanOption((option) =>
+			option
+				.setName("release")
+				.setDescription("Whether to only show stable releases"),
+		)
+		.addBooleanOption((option) =>
+			option
+				.setName("id")
+				.setDescription("Search by ID or slug"),
 		),
 	async execute(interaction, client) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		const pluginOption = interaction.options.getString("plugin");
+		const onlyRelease = interaction.options.getBoolean("release") ?? false;
 
 		sendPaginationMessage<PluginSearchQueryItem<false>>({
 			interaction,
-			async getResult(page) {
+			async getResult(page, filter) {
 				const results = [];
 				for (let i = 0; i < Math.ceil((page + 1) / 5); i++) {
-					const plugins = await searchPlugins({ offset: i * 20 });
+					const plugins = await searchPlugins({
+						offset: i * 20,
+						query: filter,
+						facets: { categories: [LOADER_TYPE] },
+					});
 					if ("error" in plugins) {
 						continue;
 					}
@@ -42,7 +58,7 @@ export default {
 					plugin.categories.includes(LOADER_TYPE);
 				return {
 					name: plugin.title,
-					value: `${plugin.description}\nID: ${plugin.slug}, ${usable ? "Usable on this server" : "Not usable on this server"}, Latest Version: ${plugin.latest_version}`,
+					value: `${plugin.description}\nSlug: \`${plugin.slug}\`, Project ID: \`${plugin.project_id}\`, ${usable ? "✅Usable on this server" : "❌Not usable on this server"}, Latest Version ID: \`${plugin.latest_version}\``,
 				};
 			},
 			filterFunc: (filter) => {
@@ -73,16 +89,15 @@ export default {
 			onItemSelected: async (menuInteraction) => {
 				const value = menuInteraction.values[0];
 				if (!value) return false;
-				const details = await listPluginVersions(value, {
-					loaders: [LOADER_TYPE],
-				});
+
 				await menuInteraction.deferReply();
 				await sendPaginationMessage<PluginListVersionItem<true>>({
 					interaction: menuInteraction,
-					getResult: () => details || [],
+					getResult: async () =>
+						(await listPluginVersions(value)) || [],
 					formatter: (version) => ({
 						name: version.version_number,
-						value: `ID: \`${version.id}\`, Published on ${time(new Date(version.date_published))}, ${version.game_versions.includes(MINECRAFT_VERSION) ? "Usable on this server" : "Not usable on this server"}`,
+						value: `ID: \`${version.id}\`, Published on ${time(new Date(version.date_published))}, ${version.game_versions.includes(MINECRAFT_VERSION) && version.loaders.includes(LOADER_TYPE) ? "✅Usable on this server" : "❌Not usable on this server"}, Release Type: \`${version.version_type}\``,
 					}),
 					options: {
 						title: `Versions of ${value}`,
@@ -92,10 +107,12 @@ export default {
 						return (version) => {
 							if (!filter) return true;
 							return (
-								version.version_number
+								(version.version_number
 									.toLowerCase()
 									.includes(filter.toLowerCase()) ||
-								version.id === filter
+									version.id === filter) &&
+								(!onlyRelease ||
+									version.version_type === "release")
 							);
 						};
 					},

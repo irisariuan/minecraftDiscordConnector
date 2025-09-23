@@ -175,12 +175,13 @@ export interface SelectMenuOption {
 
 export function createSelectMenu(
 	options: SelectMenuOption[],
+	page: number,
 	placeholder = "Select an option",
 ) {
 	const selectMenu = new StringSelectMenuBuilder()
 		.setCustomId(SelectAction.SELECT_MENU_ID)
 		.setPlaceholder(placeholder)
-		.addOptions(options.slice(0, 25));
+		.addOptions(options.slice(page * pageSize, (page + 1) * pageSize));
 	return [
 		new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 			selectMenu,
