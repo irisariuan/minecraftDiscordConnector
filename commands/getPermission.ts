@@ -3,7 +3,7 @@ import type { CommandFile } from "../lib/commandFile";
 import {
 	allPermission,
 	parsePermission,
-	readPermission,
+    readPermission,
 } from "../lib/permission";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";

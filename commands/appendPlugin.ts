@@ -10,7 +10,7 @@ import {
 import {
 	comparePermission,
 	PermissionFlags,
-	readPermission,
+    readPermission,
 } from "../lib/permission";
 import { sendPaginationMessage } from "../lib/pagination";
 

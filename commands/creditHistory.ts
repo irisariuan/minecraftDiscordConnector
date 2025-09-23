@@ -59,7 +59,7 @@ export default {
 							.map((history) => ({
 								name:
 									history.changed >= 0 ? "Income" : "Expense",
-								value: `${italic(`${history.changed > 0 ? "+" : ""}${history.changed}`)}\n\`${history.creditBefore}\`➡️\`${history.creditAfter}\`\nTimestamp: ${time(new Date(history.timestamp))}${history.reason ? `\nReason: \`${history.reason}\`` : ""}`,
+								value: `${italic(`${history.changed > 0 ? "+" : ""}${history.changed}`)}\n\`${history.creditBefore}\`➡️\`${history.creditAfter}\`\nTimestamp: ${time(new Date(history.timestamp))}${history.reason ? `\nReason: \`${history.reason}\`` : ""}\nTracking ID: \`${history.trackingId}\``,
 							})),
 					)
 					.setFooter({

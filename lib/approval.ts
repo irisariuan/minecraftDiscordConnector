@@ -13,13 +13,13 @@ import {
 } from "discord.js";
 import type { PickAndOptional } from "./utils";
 import {
-	readPermission,
 	comparePermission,
 	PermissionFlags,
 	compareAnyPermissions,
+	readPermission,
 } from "./permission";
 import { isSuspending } from "./suspend";
-import { changeCredit, getJackpot, sendCreditNotification, setJackpot, spendCredit } from "./credit";
+import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
 
 export interface BaseApproval {
 	content: string;
@@ -229,7 +229,7 @@ function createUserMentions(ids: string[]) {
 	return mentions.join(", ");
 }
 
-export function createEmbed(
+export function createInternalApprovalEmbed(
 	approval: BaseApproval & {
 		options: Pick<
 			ApprovalOptions,
@@ -264,10 +264,10 @@ export function createEmbed(
 export function createApprovalEmbed(approval: Approval) {
 	switch (checkApprovalStatus(approval)) {
 		case "pending": {
-			return createEmbed(approval, 0x0099ff, "Pending");
+			return createInternalApprovalEmbed(approval, 0x0099ff, "Pending");
 		}
 		case "approved": {
-			return createEmbed(
+			return createInternalApprovalEmbed(
 				approval,
 				0x00ff00,
 				approval.superStatus === "approved"
@@ -276,7 +276,7 @@ export function createApprovalEmbed(approval: Approval) {
 			);
 		}
 		case "disapproved": {
-			return createEmbed(
+			return createInternalApprovalEmbed(
 				approval,
 				0xff0000,
 				approval.superStatus === "disapproved"
@@ -285,7 +285,7 @@ export function createApprovalEmbed(approval: Approval) {
 			);
 		}
 		case "timeout": {
-			return createEmbed(approval, 0xff0000, "Timeout");
+			return createInternalApprovalEmbed(approval, 0xff0000, "Timeout");
 		}
 	}
 }
@@ -304,7 +304,7 @@ export async function sendApprovalPoll(
 		Number(process.env.APPROVAL_TIMEOUT) ||
 		1000 * 60 * 60 * 2;
 	const validTill = Date.now() + duration; // 2 hours
-	const embed = createEmbed(
+	const embed = createInternalApprovalEmbed(
 		{
 			content,
 			duration,
@@ -471,14 +471,21 @@ export async function updateApprovalMessage(
 				.catch(console.error);
 		}
 		if (approval.options.credit) {
-			const voted = prevCount - approval.approvalIds.length - approval.disapprovalIds.length
+			const voted =
+				prevCount -
+				approval.approvalIds.length -
+				approval.disapprovalIds.length;
 			await changeCredit(
 				user.id,
 				approval.options.credit * voted,
 				"Approval Reaction Refund",
 			);
-			await setJackpot(await getJackpot() - approval.options.credit * voted)
-			await sendCreditNotification(user, approval.options.credit * voted, "Approval Reaction Refund", true);
+			await sendCreditNotification(
+				user,
+				approval.options.credit * voted,
+				"Approval Reaction Refund",
+				true,
+			);
 		}
 		return await reaction.message
 			.reply({

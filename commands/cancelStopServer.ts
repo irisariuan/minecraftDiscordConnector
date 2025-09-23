@@ -3,7 +3,6 @@ import type { CommandFile } from "../lib/commandFile";
 import { serverManager } from "../lib/server";
 import {
 	compareAnyPermissions,
-	comparePermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
@@ -23,7 +22,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		
+
 		if (!(await isServerAlive()))
 			return await interaction.reply({
 				content: "Server is offline",

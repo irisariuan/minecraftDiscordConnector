@@ -1,17 +1,19 @@
 {
-  "name": "ipbotdiscord",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "@inquirer/prompts": "^7.5.0",
-    "discord.js": "^14.18.0",
-    "dotenv": "^16.4.7"
-  }
+	"name": "ipbotdiscord",
+	"module": "index.ts",
+	"type": "module",
+	"private": true,
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@inquirer/prompts": "^7.5.0",
+		"@prisma/client": "^6.16.2",
+		"discord.js": "^14.18.0",
+		"dotenv": "^16.4.7",
+		"prisma": "^6.16.2"
+	}
 }

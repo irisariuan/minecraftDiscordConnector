@@ -3,7 +3,7 @@ import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
 import "dotenv/config";
 import { approvalList, updateApprovalMessage } from "./lib/approval";
 import { loadCommands } from "./lib/commandFile";
-import { changeCredit, getCredit, jackpotNumber, sendCreditNotification } from "./lib/credit";
+import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { updateDnsRecord } from "./lib/dnsRecord";
 import {
 	compareAllPermissions,
@@ -11,13 +11,11 @@ import {
 	getUsersMatchedPermission,
 	PermissionFlags,
 	readPermission,
-	watchPermissionChange,
 } from "./lib/permission";
 import { serverManager } from "./lib/server";
 import {
 	changeCreditSettings,
 	loadSettings,
-	setSetting,
 	settings,
 } from "./lib/settings";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
@@ -328,7 +326,5 @@ process.on("exit", async (code) => {
 	console.log(`Process exited with code ${code}`);
 	process.exit(code);
 });
-
-watchPermissionChange();
 
 client.login(process.env.TOKEN);

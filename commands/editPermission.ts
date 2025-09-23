@@ -14,8 +14,8 @@ import {
 	parsePermission,
 	PermissionFlags,
 	removePermission,
-	writePermission,
 } from "../lib/permission";
+import { updateUserPermission } from "../lib/db";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -126,7 +126,7 @@ export default {
 				true,
 			);
 			if (users instanceof User || users instanceof GuildMember) {
-				await writePermission(users.id, permission);
+				await updateUserPermission(users.id, permission);
 				return await interaction.reply({
 					content: `Permission set to ${permission} for user ${userMention(users.id)} (\`${parsePermission(permission).join(", ")}\`, \`${permission}\`)`,
 					flags: [MessageFlags.Ephemeral],
@@ -134,7 +134,7 @@ export default {
 			}
 			if (users instanceof Role) {
 				for (const [_, user] of users.members) {
-					await writePermission(user.user.id, permission);
+					await updateUserPermission(user.user.id, permission);
 				}
 				return await interaction.reply({
 					content: `Permission set to ${permission} for role ${roleMention(users.id)} (\`${parsePermission(permission).join(", ")}\`, \`${permission}\`)`,

@@ -5,12 +5,12 @@ import {
 	type PartialUser,
 	type User,
 } from "discord.js";
-import { CacheItem } from "./cache";
 import {
 	comparePermission,
 	PermissionFlags,
 	readPermission,
 } from "./permission";
+import { getUserById, newTransaction, setUserCredits } from "./db";
 
 export interface UserCredit {
 	currentCredit: number;
@@ -23,55 +23,7 @@ export interface Change {
 	changed: number;
 	timestamp: number;
 	reason?: string;
-}
-
-interface CreditJson {
-	users: Record<string, UserCredit>;
-	jackpot: number;
-	jackpotNumber: number;
-}
-
-export const CREDIT = `${process.cwd()}/data/credit.json`;
-const creditCache = new Map<string, CacheItem<UserCredit>>();
-const jackpotCache = new CacheItem<number>(null);
-
-export let jackpotNumber = (await getCreditJson()).jackpotNumber;
-
-export async function changeJackpotNumber() {
-	jackpotNumber = getRandomJackpotNumber();
-	const currentCredit = await getCreditJson();
-	currentCredit.jackpotNumber = jackpotNumber;
-	await Bun.write(CREDIT, JSON.stringify(currentCredit, null, 4));
-	return jackpotNumber;
-}
-
-function getRandomJackpotNumber() {
-	return Math.floor(Math.random() * 10000) + 1;
-}
-
-async function getCreditJson(): Promise<CreditJson> {
-	const file = Bun.file(CREDIT);
-	const fallback = {
-		users: {},
-		jackpot: 0,
-		jackpotNumber: getRandomJackpotNumber(),
-	};
-	if (!(await file.exists())) {
-		await Bun.write(CREDIT, JSON.stringify(fallback, null, 4));
-		return fallback;
-	}
-	return await file.json().catch(() => fallback);
-}
-
-export async function writeCredit(userId: string, credit: UserCredit) {
-	const currentCredit = await getCreditJson();
-	currentCredit.users[userId] = credit;
-	if (creditCache.has(userId)) {
-		creditCache.get(userId)?.setData(credit);
-	} else {
-		creditCache.set(userId, new CacheItem(credit));
-	}
-	await Bun.write(CREDIT, JSON.stringify(currentCredit, null, 4));
+	trackingId: string;
 }
 
 export async function setCredit(
@@ -81,16 +33,17 @@ export async function setCredit(
 ) {
 	const userCreditFetched = await getCredit(userId);
 	const originalCredit = userCreditFetched.currentCredit;
-	userCreditFetched.histories.push({
-		changed: credit - userCreditFetched.currentCredit,
-		creditAfter: credit,
-		creditBefore: userCreditFetched.currentCredit,
-		timestamp: Date.now(),
+	await newTransaction({
+		user: {
+			connectOrCreate: { create: { id: userId }, where: { id: userId } },
+		},
+		afterAmount: credit,
+		beforeAmount: originalCredit,
+		amount: credit - originalCredit,
 		reason,
+		timestamp: new Date(),
 	});
-	userCreditFetched.currentCredit = credit;
-	await writeCredit(userId, userCreditFetched);
-	return originalCredit;
+	return credit;
 }
 
 export async function changeCredit(
@@ -99,31 +52,42 @@ export async function changeCredit(
 	reason: string,
 ) {
 	const userCreditFetched = await getCredit(userId);
-	userCreditFetched.histories.push({
-		changed: change,
-		creditAfter: userCreditFetched.currentCredit + change,
-		creditBefore: userCreditFetched.currentCredit,
-		timestamp: Date.now(),
+
+	await newTransaction({
+		user: {
+			connectOrCreate: { create: { id: userId }, where: { id: userId } },
+		},
+		afterAmount: userCreditFetched.currentCredit + change,
+		beforeAmount: userCreditFetched.currentCredit,
+		amount: change,
 		reason,
+		timestamp: new Date(),
 	});
-	userCreditFetched.currentCredit += change;
-	await writeCredit(userId, userCreditFetched);
-	return userCreditFetched.currentCredit;
+	await setUserCredits(userId, userCreditFetched.currentCredit + change);
+
+	return userCreditFetched.currentCredit + change;
 }
 
 export async function getCredit(userId: string): Promise<UserCredit> {
-	if (creditCache.has(userId)) {
-		const data = await creditCache.get(userId)?.getData();
-		if (data) return data;
-	}
-	const currentCredit = await getCreditJson();
-	if (currentCredit.users[userId]) {
-		creditCache.set(userId, new CacheItem(currentCredit.users[userId]));
-		return currentCredit.users[userId];
+	const user = await getUserById(userId, true);
+	if (!user) {
+		return {
+			currentCredit: 0,
+			histories: [],
+		};
 	}
 	return {
-		currentCredit: 0,
-		histories: [],
+		currentCredit: user.credits,
+		histories: user.transactions
+			.map((v) => ({
+				changed: v.amount,
+				creditAfter: v.afterAmount,
+				creditBefore: v.beforeAmount,
+				timestamp: v.timestamp.getTime(),
+				reason: v.reason || undefined,
+				trackingId: v.id.toString(),
+			}))
+			.toSorted((a, b) => b.timestamp - a.timestamp),
 	};
 }
 
@@ -131,7 +95,6 @@ export async function spendCredit(
 	userId: string,
 	cost: number,
 	reason: string,
-	addToJackpot = true,
 ) {
 	const credit = await getCredit(userId);
 	const permission = await readPermission(userId);
@@ -141,25 +104,7 @@ export async function spendCredit(
 	)
 		return false;
 	await changeCredit(userId, -Math.abs(cost), reason);
-	if (addToJackpot) {
-		setJackpot((await getJackpot()) + Math.abs(cost));
-	}
 	return true;
-}
-
-export async function getJackpot(): Promise<number> {
-	const data = await jackpotCache.getData();
-	if (data !== null) return data;
-	const currentCredit = await getCreditJson();
-	jackpotCache.setData(currentCredit.jackpot);
-	return currentCredit.jackpot;
-}
-
-export async function setJackpot(amount: number) {
-	jackpotCache.setData(amount);
-	const currentCredit = await getCreditJson();
-	currentCredit.jackpot = amount;
-	await Bun.write(CREDIT, JSON.stringify(currentCredit, null, 4));
 }
 
 export async function sendCreditNotification(
@@ -171,7 +116,7 @@ export async function sendCreditNotification(
 	const creditFetched = await getCredit(user.id);
 	await user
 		.send({
-			content: `Your credit has been changed by \`${creditChanged}\`. Your current credit is \`${creditFetched.currentCredit}\`\nReason: ${italic(reason)}\n\n*You could always check your credit by using \`/credit\` command.*`,
+			content: `Your credit has been changed by \`${creditChanged}\`. Your current credit is \`${creditFetched.currentCredit}\`\nReason: ${italic(reason)}\n*You could always check your credit by using \`/credit\` command.*`,
 			flags: silent ? [MessageFlags.SuppressNotifications] : [],
 		})
 		.catch((err) => console.error("Error occured during DM", err));
