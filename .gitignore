@@ -38,6 +38,7 @@ bun.lock*
 data/permissions.json
 data/credit.json
 data/settings.json
+data/plugins.json
 
 test/**/*
 !test/**/*.test.*

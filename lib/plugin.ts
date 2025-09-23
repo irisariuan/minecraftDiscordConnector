@@ -1,7 +1,7 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import { ensureSuffix, removeSuffix, safeFetch } from "./utils";
-import { readdir, rm } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 
 if (
 	!process.env.MINECRAFT_VERSION ||
@@ -22,6 +22,7 @@ export const SERVER_DIR = process.env.SERVER_DIR;
 export const MINECRAFT_VERSION = process.env.MINECRAFT_VERSION;
 export const LOADER_TYPE = process.env.LOADER_TYPE;
 export const PLUGIN_DIR = join(SERVER_DIR, "plugins");
+export const PLUGIN_JSON_PATH = join(process.cwd(), "data", "plugins.json");
 
 type SideValue = "required" | "optional" | "unsupported" | "unknown";
 type ProjectType = "mod" | "modpack" | "resourcepack" | "shader";
@@ -44,12 +45,15 @@ export interface PluginVersionDependencyItem {
 	dependency_type: "required" | "optional" | "incompatible" | "embedded";
 }
 
+export type PluginVersionType = "release" | "beta" | "alpha";
+
 export interface PluginListVersionItem<Transformed extends boolean = false> {
 	date_published: Transformed extends true ? number : string;
 	version_number: string;
 	game_versions: string[];
 	id: string;
 	project_id: string;
+	version_type: PluginVersionType;
 	loaders: string[];
 	files: PluginVersionFileItem[];
 	dependencies: PluginVersionDependencyItem[];
@@ -135,18 +139,49 @@ export interface ErrorResponse {
 	description: string;
 }
 
-export async function searchPlugins({ offset = 0 }: { offset?: number } = {}) {
+interface SearchPluginProps {
+	offset?: number;
+	query?: string;
+	facets?: Partial<SearchPluginFacets>;
+}
+interface SearchPluginFacets {
+	categories: string[];
+	versions: string[];
+	project_type: string[];
+}
+
+function buildFacets(facets: Partial<SearchPluginFacets>) {
+	const result: string[][] = [];
+	if (facets.categories) {
+		result.push([...facets.categories.map((v) => `categories:${v}`)]);
+	}
+	if (facets.versions) {
+		result.push([...facets.versions.map((v) => `versions:${v}`)]);
+	}
+	if (facets.project_type) {
+		result.push([...facets.project_type.map((v) => `project_type:${v}`)]);
+	}
+	return result;
+}
+
+export async function searchPlugins(
+	{ offset = 0, query, facets }: SearchPluginProps = {
+		facets: {
+			categories: [LOADER_TYPE],
+			project_type: [MOD_TYPE],
+			versions: [MINECRAFT_VERSION],
+		},
+	},
+) {
 	const url = new URL("https://api.modrinth.com/v2/search");
-	url.searchParams.set(
-		"facets",
-		JSON.stringify([
-			[`categories:${LOADER_TYPE}`],
-			[`versions:${MINECRAFT_VERSION}`],
-			[`project_type:${MOD_TYPE}`],
-		]),
-	);
 	url.searchParams.set("limit", "100");
 	url.searchParams.set("offset", offset.toString());
+	if (facets) {
+		url.searchParams.set("facets", JSON.stringify(buildFacets(facets)));
+	}
+	if (query) {
+		url.searchParams.set("query", query);
+	}
 	const res = await safeFetch(url);
 	const data = (await res?.json().catch<ErrorResponse>((err) => ({
 		error: "[CLIENT] failed to parse JSON",
@@ -224,24 +259,20 @@ export async function listPluginVersions(
 	);
 }
 
-export async function downloadLatestPlugin(
-	slugOrId: string,
-	options?: { force?: boolean } & ListPluginVersionsProps,
-) {
-	const metadata = await listPluginVersions(slugOrId, options);
-	if (!metadata || !metadata[0])
-		return { filename: null, newDownload: false };
-	metadata.sort((a, b) => b.date_published - a.date_published);
-	return await downloadPluginFile(metadata[0].id, options?.force);
-}
-
 export async function downloadPluginFile(
 	id: string,
 	force = false,
 ): Promise<{ filename: string | null; newDownload: boolean }> {
 	const metadata = await getPluginVersionDetails(id);
-	if (!metadata || !metadata.files[0])
+	if (!metadata || !metadata.files[0]) {
 		return { filename: null, newDownload: false };
+	}
+	await addPluginToJson({
+		downloadedAt: Date.now(),
+		fileName: metadata.files[0].filename,
+		projectId: metadata.project_id,
+		versionId: metadata.id,
+	});
 	if (
 		!force &&
 		existsSync(createPathForPluginFile(metadata.files[0].filename))
@@ -262,11 +293,37 @@ export async function downloadPluginFile(
 		stream.write(chunk);
 	}
 	stream.end();
+	console.log(`Downloaded ${metadata.files[0].filename}`);
 	return { filename: metadata.files[0].filename, newDownload: true };
 }
 
 export function createPathForPluginFile(fileName: string) {
 	return join(PLUGIN_DIR, fileName);
+}
+
+interface PluginJsonEntry {
+	projectId: string;
+	versionId: string;
+	fileName: string;
+	downloadedAt: number;
+}
+
+async function readPluginsJson(): Promise<PluginJsonEntry[]> {
+	try {
+		return JSON.parse(await readFile(PLUGIN_JSON_PATH, "utf-8"));
+	} catch {
+		return [];
+	}
+}
+
+async function addPluginToJson(plugin: PluginJsonEntry) {
+	const json = await readPluginsJson();
+	if (json.find((p) => p.fileName === plugin.fileName)) return;
+	await writePluginsJson([...json, plugin]);
+}
+
+async function writePluginsJson(plugins: PluginJsonEntry[]) {
+	await writeFile(PLUGIN_JSON_PATH, JSON.stringify(plugins, null, 4));
 }
 
 /**
@@ -295,10 +352,24 @@ export async function getPluginFileName(slugOrId: string) {
 }
 
 export async function removePluginByFileName(fileName: string) {
-	const path = createPathForPluginFile(ensureSuffix(fileName, '.jar'));
+	const path = createPathForPluginFile(ensureSuffix(fileName, ".jar"));
 	if (existsSync(path)) {
 		await rm(path);
 		return true;
+	}
+	const json = await readPluginsJson();
+	const filtered = json.filter(
+		(p) =>
+			removeSuffix(p.fileName, ".jar") !== removeSuffix(fileName, ".jar"),
+	);
+	if (json.length !== filtered.length) {
+		await writePluginsJson(
+			json.filter(
+				(p) =>
+					removeSuffix(p.fileName, ".jar") !==
+					removeSuffix(fileName, ".jar"),
+			),
+		);
 	}
 	return false;
 }
