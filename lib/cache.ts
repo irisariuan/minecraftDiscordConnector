@@ -1,4 +1,4 @@
-import { EventEmitter } from "node:stream";
+import { EventEmitter } from "node:events";
 
 interface CacheOptions<T> {
 	ttl: number;

@@ -42,3 +42,5 @@ data/plugins.json
 
 test/**/*
 !test/**/*.test.*
+/generated/prisma
+/prisma/migrations/

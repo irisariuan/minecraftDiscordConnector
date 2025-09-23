@@ -3,7 +3,7 @@ import { CacheItem } from "./cache";
 import { isServerAlive, type LogLine } from "./request";
 import { join } from "node:path";
 import { createDisposableWritableStream, safeFetch } from "./utils";
-import { EventEmitter } from "node:stream";
+import { EventEmitter } from "node:events";
 import { stripVTControlCharacters } from "node:util";
 
 if (
@@ -96,7 +96,6 @@ class ServerManager {
 		if (this.instance || (await this.isOnline.getData(true))) return null;
 		this.instance = spawn(["sh", "./start.sh"], {
 			cwd: process.env.SERVER_DIR,
-			detached: true,
 			stdin: "ignore",
 			stdout: "pipe",
 			onExit: (subprocess, exitCode, signalCode, error) => {
