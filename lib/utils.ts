@@ -72,7 +72,7 @@ export async function safeFetch(
 	}
 }
 
-export function endsWith(str: string, suffix: string) {
+export function ensureSuffix(str: string, suffix: string) {
 	if (str.endsWith(suffix)) return str;
 	return str + suffix;
 }
@@ -80,6 +80,11 @@ export function endsWith(str: string, suffix: string) {
 export function removeSuffix(str: string, suffix: string) {
 	if (str.endsWith(suffix)) return str.slice(0, -suffix.length);
 	return str;
+}
+
+export function trimTextWithSuffix(text: string, maxLength: number, suffix = '...') {
+	if (text.length <= maxLength) return text;
+	return text.slice(0, maxLength - suffix.length) + suffix;
 }
 
 export function setActivity(

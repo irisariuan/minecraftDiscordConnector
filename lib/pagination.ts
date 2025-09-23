@@ -1,5 +1,6 @@
 import {
 	ComponentType,
+	MessageComponentInteraction,
 	StringSelectMenuInteraction,
 	type ChatInputCommandInteraction,
 	type ColorResolvable,
@@ -159,6 +160,7 @@ export async function sendPaginationMessage<T>({
 								)
 							: await getResult(page, true)) || [],
 				);
+				await result.update();
 				const maxPage = calculateMaxPage(
 					(await result.getData())?.length || 0,
 				);
@@ -192,6 +194,7 @@ export async function sendPaginationMessage<T>({
 						page: 0,
 						contentLength: 0,
 						unfixablePageNumber: options?.unfixablePageNumber,
+						haveFilter: !!filterFunc,
 					}),
 				});
 
@@ -227,7 +230,7 @@ export async function sendPaginationMessage<T>({
 }
 
 interface BasePaginationProps<T> {
-	interaction: ChatInputCommandInteraction;
+	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
 	filterFunc?: (filter?: string) => (v: T) => boolean;
 	selectMenuTransform?: (v: T) => SelectMenuOption;
 	formatter: (v: T, i: number) => { name: string; value: string };
@@ -259,6 +262,7 @@ async function editInteraction<T>({
 				page: 0,
 				contentLength: 0,
 				unfixablePageNumber: options?.unfixablePageNumber,
+				haveFilter: !!filterFunc,
 			}),
 		});
 	}
@@ -276,6 +280,7 @@ async function editInteraction<T>({
 		page,
 		contentLength: filteredResult.length,
 		unfixablePageNumber: options?.unfixablePageNumber,
+		haveFilter: !!filterFunc,
 	});
 	const selectMenuRow =
 		selectMenuTransform && showSelectMenu && filteredResult.length > 0

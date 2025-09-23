@@ -66,6 +66,17 @@ export default {
 				label: version.version_number,
 				value: version.id,
 			}),
+			filterFunc(filter) {
+				return (version) => {
+					if (!filter) return true;
+					return (
+						version.version_number
+							.toLowerCase()
+							.includes(filter.toLowerCase()) ||
+						version.id === filter
+					);
+				};
+			},
 			async onItemSelected(menuInteraction) {
 				const value = menuInteraction.values[0];
 				if (!value) return false;

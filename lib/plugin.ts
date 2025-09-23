@@ -1,6 +1,6 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
-import { endsWith, removeSuffix, safeFetch } from "./utils";
+import { ensureSuffix, removeSuffix, safeFetch } from "./utils";
 import { readdir, rm } from "node:fs/promises";
 
 if (
@@ -289,13 +289,13 @@ export async function getPluginFileName(slugOrId: string) {
 		.filter((v) => !!v);
 	const dir = await readdir(PLUGIN_DIR);
 	for (const file of dir) {
-		if (versionNames.includes(endsWith(file, ".jar"))) return file;
+		if (versionNames.includes(ensureSuffix(file, ".jar"))) return file;
 	}
 	return null;
 }
 
 export async function removePluginByFileName(fileName: string) {
-	const path = createPathForPluginFile(`${fileName}.jar`);
+	const path = createPathForPluginFile(ensureSuffix(fileName, '.jar'));
 	if (existsSync(path)) {
 		await rm(path);
 		return true;
