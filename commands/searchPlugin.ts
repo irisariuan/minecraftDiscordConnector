@@ -23,11 +23,6 @@ export default {
 			option
 				.setName("release")
 				.setDescription("Whether to only show stable releases"),
-		)
-		.addBooleanOption((option) =>
-			option
-				.setName("id")
-				.setDescription("Search by ID or slug"),
 		),
 	async execute(interaction, client) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
