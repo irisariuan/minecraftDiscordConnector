@@ -9,7 +9,11 @@ import {
 	TextInputStyle,
 	type ModalActionRowComponentBuilder,
 } from "discord.js";
-import { calculateMaxPage, pageSize, type PaginationOptions } from "./pagination";
+import {
+	calculateMaxPage,
+	pageSize,
+	type PaginationOptions,
+} from "./pagination";
 
 interface CreateEmbedProps<T> {
 	result: T[];
@@ -103,12 +107,14 @@ interface CreateButtonsProps {
 	contentLength: number;
 	maxPage?: number;
 	unfixablePageNumber?: boolean;
+	haveFilter: boolean;
 }
 export function createButtons({
 	page,
 	contentLength,
 	maxPage = calculateMaxPage(contentLength),
 	unfixablePageNumber = false,
+	haveFilter,
 }: CreateButtonsProps) {
 	const prevBtn = new ButtonBuilder()
 		.setCustomId(PageAction.PREVIOUS)
@@ -151,7 +157,10 @@ export function createButtons({
 		lastBtn.setDisabled(true);
 	}
 	firstRow.addComponents(prevBtn, nextBtn);
-	secondRow.addComponents(refreshBtn, pageModalBtn, filterModalBtn);
+	secondRow.addComponents(refreshBtn, pageModalBtn);
+	if (haveFilter) {
+		secondRow.addComponents(filterModalBtn);
+	}
 	if (maxPage > 1 && !unfixablePageNumber) {
 		secondRow.addComponents(firstBtn, lastBtn);
 	}
