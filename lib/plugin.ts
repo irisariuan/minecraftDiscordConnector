@@ -1,6 +1,6 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
-import { ensureSuffix, removeSuffix, safeFetch } from "./utils";
+import { ensureSuffix, removeSuffix, safeFetch, safeJoin } from "./utils";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 
 if (
@@ -298,7 +298,7 @@ export async function downloadPluginFile(
 }
 
 export function createPathForPluginFile(fileName: string) {
-	return join(PLUGIN_DIR, fileName);
+	return safeJoin(PLUGIN_DIR, fileName);
 }
 
 interface PluginJsonEntry {

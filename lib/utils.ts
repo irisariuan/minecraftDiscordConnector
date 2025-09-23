@@ -1,5 +1,6 @@
 import { ActivityType, type Client } from "discord.js";
 import { MINECRAFT_VERSION } from "./plugin";
+import { join } from "path";
 
 export type PickAndOptional<
 	T,
@@ -122,4 +123,12 @@ export function randomItem<T>(item: T[]): T {
  */
 export function clamp(value: number, min: number, max: number) {
 	return Math.min(Math.max(value, min), max);
+}
+
+export function safeJoin(...paths: string[]) {
+	const finalPath = join(...paths)
+	if (!finalPath.startsWith(paths[0])) {
+		throw new Error("Unsafe path detected");
+	}
+	return finalPath;
 }

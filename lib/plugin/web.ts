@@ -3,6 +3,7 @@ import { SERVER_DIR } from "../plugin";
 import { join } from "path";
 import { Entry, fromBuffer } from "yauzl";
 import { mkdir, exists } from "fs/promises";
+import { safeJoin } from "../utils";
 
 export async function downloadWebPluginFileToLocal(
 	url: string,
@@ -38,7 +39,7 @@ export async function downloadWebPluginFileToLocal(
 	}
 
 	const stream = createWriteStream(
-		join(SERVER_DIR, "plugins", finalFilename),
+		safeJoin(SERVER_DIR, "plugins", finalFilename),
 	);
 	try {
 		for await (const chunk of res.body) {
@@ -123,14 +124,14 @@ export async function unzipTempPluginFile(
 
 				if (
 					!(await exists(
-						join(SERVER_DIR, "plugins", parentEntryFolder),
+						safeJoin(SERVER_DIR, "plugins", parentEntryFolder),
 					))
 				) {
 					console.log(
 						`Creating parent folder ${parentEntryFolder} for entry ${entry.fileName}`,
 					);
 					await mkdir(
-						join(SERVER_DIR, "plugins", parentEntryFolder),
+						safeJoin(SERVER_DIR, "plugins", parentEntryFolder),
 						{
 							recursive: true,
 						},
@@ -141,7 +142,7 @@ export async function unzipTempPluginFile(
 					if (err) throw err;
 					if (
 						!(await exists(
-							join(SERVER_DIR, "plugins", parentEntryFolder),
+							safeJoin(SERVER_DIR, "plugins", parentEntryFolder),
 						))
 					) {
 						console.warn(
@@ -154,7 +155,7 @@ export async function unzipTempPluginFile(
 					});
 					readStream.pipe(
 						createWriteStream(
-							join(SERVER_DIR, "plugins", entry.fileName),
+							safeJoin(SERVER_DIR, "plugins", entry.fileName),
 						),
 					);
 				});
