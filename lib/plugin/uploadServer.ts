@@ -3,6 +3,8 @@ import multer from "multer";
 import { randomBytes } from "crypto";
 import EventEmitter from "events";
 import type { Server } from "http";
+import cors from "cors";
+import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
 
 function createUploadServer(manager: UploadServerManager) {
 	const app = express();
@@ -11,8 +13,25 @@ function createUploadServer(manager: UploadServerManager) {
 			fileSize: 1024 * 1024 * 1024, // 1GB limit
 		},
 	});
+
+	app.use(cors({ origin: "*" }));
+	app.use("/", express.static("../../webUi/dist/client/"));
+	app.use(ssrHandler);
+
+	app.get("/verify/:id", (req, res) => {
+		if (!req.params.id) {
+			return res.status(403).send("Forbidden");
+		}
+		if (manager.hasActiveToken(req.params.id)) {
+			return res.status(200).send({
+				valid: true,
+				uploaded: !manager.hasActiveToken(req.params.id),
+			});
+		}
+		return res.status(200).send({ valid: false, uploaded: false });
+	});
 	app.post("/upload/:id", upload.single("upload"), (req, res) => {
-		if (!req.params.id || !manager.hasToken(req.params.id)) {
+		if (!req.params.id || !manager.hasActiveToken(req.params.id)) {
 			return res.status(403).send("Forbidden");
 		}
 		// Handle file upload here
@@ -53,19 +72,28 @@ export class UploadServerManager extends EventEmitter {
 	port: number;
 	hosting: boolean;
 	hostAddress: string;
-	private usingTokens: Set<string>;
+	activeTokens: Set<string>;
+	allTokens: Set<string>;
+	autoHost: boolean;
+	acceptedExtensions: string[];
 	private app: Express;
 	private server: Server | null;
-	readonly acceptedExtensions = [".jar", ".yaml", ".yml", ".conf"];
 
-	constructor(port = 6003, hostAddress = "0.0.0.0") {
+	constructor(
+		port = 6003,
+		hostAddress = "0.0.0.0",
+		extensions = [".jar", ".yaml", ".yml", ".conf"],
+	) {
 		super();
 		this.port = port;
 		this.hosting = false;
 		this.hostAddress = hostAddress;
-		this.usingTokens = new Set();
+		this.activeTokens = new Set();
+		this.allTokens = new Set();
 		this.server = null;
 		this.app = createUploadServer(this);
+		this.autoHost = true;
+		this.acceptedExtensions = extensions;
 	}
 	host() {
 		if (this.hosting) return;
@@ -76,17 +104,24 @@ export class UploadServerManager extends EventEmitter {
 			);
 		});
 	}
+	hasActiveToken(token: string | null | undefined) {
+		if (token === null || token === undefined) return false;
+		return this.activeTokens.has(token);
+	}
 	hasToken(token: string | null | undefined) {
 		if (token === null || token === undefined) return false;
-		return this.usingTokens.has(token);
+		return this.allTokens.has(token);
 	}
+
 	createToken() {
 		const token = randomBytes(16).toString("hex");
-		this.usingTokens.add(token);
+		this.activeTokens.add(token);
+		this.allTokens.add(token);
+		if (this.autoHost) this.host();
 		return token;
 	}
 	awaitToken(token: string, timeout = 1000 * 60 * 5) {
-		if (!this.hasToken(token)) return Promise.resolve();
+		if (!this.hasActiveToken(token)) return Promise.resolve();
 		return new Promise<File>((resolve, reject) => {
 			const listener = (usedToken: string, file: File) => {
 				if (usedToken === token) {
@@ -104,8 +139,8 @@ export class UploadServerManager extends EventEmitter {
 	}
 
 	useToken(token: string, file: File) {
-		if (this.hasToken(token)) {
-			this.usingTokens.delete(token);
+		if (this.hasActiveToken(token)) {
+			this.activeTokens.delete(token);
 			this.emit("tokenUsed", token, file);
 			this.checkTokens();
 			return true;
@@ -114,7 +149,7 @@ export class UploadServerManager extends EventEmitter {
 	}
 
 	checkTokens() {
-		if (this.usingTokens.size === 0) {
+		if (this.activeTokens.size === 0 && this.autoHost) {
 			this.stopHost();
 		}
 	}

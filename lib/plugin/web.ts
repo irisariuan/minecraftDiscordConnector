@@ -1,6 +1,5 @@
 import { createWriteStream } from "fs";
 import { SERVER_DIR } from "../plugin";
-import { join } from "path";
 import { Entry, fromBuffer } from "yauzl";
 import { mkdir, exists } from "fs/promises";
 import { safeJoin } from "../utils";
