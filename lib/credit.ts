@@ -32,18 +32,18 @@ export async function setCredit(
 	reason: string,
 ) {
 	const userCreditFetched = await getCredit(userId);
-	const originalCredit = userCreditFetched.currentCredit;
 	await newTransaction({
 		user: {
 			connectOrCreate: { create: { id: userId }, where: { id: userId } },
 		},
 		afterAmount: credit,
-		beforeAmount: originalCredit,
-		amount: credit - originalCredit,
+		beforeAmount: userCreditFetched.currentCredit,
+		amount: credit - userCreditFetched.currentCredit,
 		reason,
 		timestamp: new Date(),
 	});
-	return credit;
+	await setUserCredits(userId, credit);
+	return userCreditFetched.currentCredit;
 }
 
 export async function changeCredit(
@@ -91,18 +91,21 @@ export async function getCredit(userId: string): Promise<UserCredit> {
 	};
 }
 
+export async function canSpendCredit(userId: string, cost: number) {
+	const credit = await getCredit(userId);
+	const permission = await readPermission(userId);
+	return (
+		credit.currentCredit >= cost ||
+		comparePermission(permission, PermissionFlags.creditFree)
+	);
+}
+
 export async function spendCredit(
 	userId: string,
 	cost: number,
 	reason: string,
 ) {
-	const credit = await getCredit(userId);
-	const permission = await readPermission(userId);
-	if (
-		credit.currentCredit < cost &&
-		!comparePermission(permission, PermissionFlags.creditFree)
-	)
-		return false;
+	if (!canSpendCredit(userId, cost)) return false;
 	await changeCredit(userId, -Math.abs(cost), reason);
 	return true;
 }

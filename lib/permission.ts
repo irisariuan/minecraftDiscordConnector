@@ -13,15 +13,22 @@ export const PermissionFlags = {
 	superApprove: 1 << 5,
 	startServer: 1 << 6,
 	stopServer: 1 << 7,
+
 	downloadPlugin: 1 << 8,
 	deletePlugin: 1 << 9,
+
 	suspend: 1 << 10,
 	editPerm: 1 << 11,
 	repeatApproval: 1 << 12,
+
 	creditFree: 1 << 13,
 	creditEdit: 1 << 14,
+
 	gift: 1 << 15,
 	editSetting: 1 << 16,
+
+	voteDownloadPlugin: 1 << 17,
+	voteDeletePlugin: 1 << 18,
 } as const;
 
 export const allPermission = Object.values(PermissionFlags).reduce(
