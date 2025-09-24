@@ -202,6 +202,9 @@ export class UploadServerManager extends EventEmitter {
 
 	stopHost() {
 		if (!this.hosting) return;
+		console.log(
+			"No active tokens or files, stopping upload server to save resources.",
+		);
 		this.server?.close();
 		this.hosting = false;
 		this.server = null;
