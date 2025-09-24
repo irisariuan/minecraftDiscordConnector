@@ -5,6 +5,7 @@ import EventEmitter from "events";
 import type { Server } from "http";
 import cors from "cors";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
+import { join } from "path";
 
 function createUploadServer(manager: UploadServerManager) {
 	const app = express();
@@ -15,7 +16,10 @@ function createUploadServer(manager: UploadServerManager) {
 	});
 
 	app.use(cors({ origin: "*" }));
-	app.use("/", express.static("../../webUi/dist/client/"));
+	app.use(
+		"/",
+		express.static(join(process.cwd(), "webUi", "dist", "client")),
+	);
 	app.use(ssrHandler);
 
 	app.get("/verify/:id", (req, res) => {
@@ -29,6 +33,21 @@ function createUploadServer(manager: UploadServerManager) {
 			});
 		}
 		return res.status(200).send({ valid: false, uploaded: false });
+	});
+	app.get("/file/:id", (req, res) => {
+		if (!req.params.id || !manager.tokenMap.has(req.params.id)) {
+			return res.status(404).send("Not Found");
+		}
+		const file = manager.tokenMap.get(req.params.id);
+		if (!file) {
+			return res.status(404).send("Not Found");
+		}
+		res.setHeader(
+			"Content-Disposition",
+			`attachment; filename="${file.filename}"`,
+		);
+		res.setHeader("Content-Type", "application/octet-stream");
+		return res.status(200).send(file.buffer);
 	});
 	app.post("/upload/:id", upload.single("upload"), (req, res) => {
 		if (!req.params.id || !manager.hasActiveToken(req.params.id)) {
@@ -74,6 +93,7 @@ export class UploadServerManager extends EventEmitter {
 	hostAddress: string;
 	activeTokens: Set<string>;
 	allTokens: Set<string>;
+	tokenMap: Map<string, File>;
 	autoHost: boolean;
 	acceptedExtensions: string[];
 	private app: Express;
@@ -90,6 +110,7 @@ export class UploadServerManager extends EventEmitter {
 		this.hostAddress = hostAddress;
 		this.activeTokens = new Set();
 		this.allTokens = new Set();
+		this.tokenMap = new Map();
 		this.server = null;
 		this.app = createUploadServer(this);
 		this.autoHost = true;
@@ -121,27 +142,47 @@ export class UploadServerManager extends EventEmitter {
 		return token;
 	}
 	awaitToken(token: string, timeout = 1000 * 60 * 5) {
-		if (!this.hasActiveToken(token)) return Promise.resolve();
+		if (!this.hasActiveToken(token))
+			return Promise.reject(new Error("Invalid token"));
 		return new Promise<File>((resolve, reject) => {
-			const listener = (usedToken: string, file: File) => {
+			const listener = (usedToken: string, file?: File) => {
 				if (usedToken === token) {
 					this.off("tokenUsed", listener);
+					this.off("tokenDeleted", listener);
 					clearTimeout(tid);
-					resolve(file);
+					if (file) return resolve(file);
+					return reject(new Error("Token was disposed"));
 				}
 			};
 			this.on("tokenUsed", listener);
+			this.on("tokenDeleted", listener);
 			const tid = setTimeout(() => {
 				this.off("tokenUsed", listener);
+				this.off("tokenDeleted", listener);
+				this.checkTokens();
 				reject(new Error("Timeout waiting for token usage"));
 			}, timeout);
 		});
 	}
 
-	useToken(token: string, file: File) {
+	useToken(token: string, file: File, timeout = 1000 * 60 * 60) {
 		if (this.hasActiveToken(token)) {
 			this.activeTokens.delete(token);
 			this.emit("tokenUsed", token, file);
+			this.tokenMap.set(token, file);
+			setTimeout(() => {
+				this.tokenMap.delete(token);
+				this.checkTokens();
+			}, timeout);
+			this.checkTokens();
+			return true;
+		}
+		return false;
+	}
+
+	disposeToken(token: string) {
+		if (this.hasActiveToken(token)) {
+			this.activeTokens.delete(token);
 			this.checkTokens();
 			return true;
 		}
@@ -149,7 +190,11 @@ export class UploadServerManager extends EventEmitter {
 	}
 
 	checkTokens() {
-		if (this.activeTokens.size === 0 && this.autoHost) {
+		if (
+			this.activeTokens.size === 0 &&
+			this.tokenMap.size === 0 &&
+			this.autoHost
+		) {
 			this.stopHost();
 		}
 	}
@@ -161,7 +206,12 @@ export class UploadServerManager extends EventEmitter {
 		this.server = null;
 	}
 
-	on(event: "tokenUsed", listener: (token: string, file: File) => unknown) {
+	on(event: "tokenDeleted", listener: (token: string) => unknown): this;
+	on(
+		event: "tokenUsed",
+		listener: (token: string, file: File) => unknown,
+	): this;
+	on(event: string, listener: (...args: any[]) => unknown): this {
 		return super.on(event, listener);
 	}
 }

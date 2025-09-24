@@ -1,8 +1,17 @@
 import { createWriteStream } from "fs";
 import { SERVER_DIR } from "../plugin";
 import { Entry, fromBuffer } from "yauzl";
-import { mkdir, exists } from "fs/promises";
+import { mkdir, exists, writeFile } from "fs/promises";
 import { safeJoin } from "../utils";
+
+export async function copyLocalPluginFileToServer(file: File) {
+	console.log(
+		`Copying local plugin file ${file.name} to server plugins folder...`,
+	);
+	const path = safeJoin(SERVER_DIR, "plugins", file.name);
+	await writeFile(path, await file.bytes());
+	return file.name;
+}
 
 export async function downloadWebPluginFileToLocal(
 	url: string,
@@ -12,6 +21,9 @@ export async function downloadWebPluginFileToLocal(
 	if (!res.ok || !res.body) {
 		return null;
 	}
+	console.log(
+		`Downloading plugin file from ${url} to server plugins folder...`,
+	);
 	let finalFilename = filename;
 	if (!finalFilename) {
 		const contentDisposition = res.headers.get("content-disposition");
@@ -19,6 +31,9 @@ export async function downloadWebPluginFileToLocal(
 		if (result) {
 			finalFilename = result[1];
 		}
+		console.log(
+			`No filename provided, extracted from content-disposition: ${finalFilename}`,
+		);
 	}
 	finalFilename = finalFilename ?? `plugin-${Date.now()}.jar`;
 

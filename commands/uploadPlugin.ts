@@ -1,6 +1,7 @@
 import {
 	channelMention,
 	ChannelType,
+	Collection,
 	Message,
 	MessageFlags,
 	MessageReaction,
@@ -23,10 +24,16 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { downloadWebPluginFileToLocal } from "../lib/plugin/web";
+import {
+	copyLocalPluginFileToServer,
+	downloadWebPluginFileToLocal,
+} from "../lib/plugin/web";
+import { uploadServerManager } from "../lib/plugin/uploadServer";
+import "dotenv/config";
 
-const websiteRegex =
-	/^(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+(?:[\/?#]\S*)?$/;
+if (!process.env.UPLOAD_URL) {
+	throw new Error("UPLOAD_URL is not set in environment variables");
+}
 
 export default {
 	command: new SlashCommandBuilder()
@@ -97,7 +104,12 @@ export default {
 			`Please your file as attachment here before ${time(expire)}. We accept \`.jar\`, \`.yaml\`, \`.yml\` and \`.conf\`\nTo cancel the upload, react with ❌\nPlease note that uploading a file costs you \`${settings.uploadFileFee}\` credits, which is non-refundable unless the upload is cancelled before completion or the file fails to be added to the server.\nIf no file is uploaded before the expiration time, the upload will be automatically cancelled without refunding.`,
 		);
 		await cancelMessage.react("❌");
+		const token = uploadServerManager.createToken();
+		await thread.send(
+			`You may also upload the file to (this website)[${process.env.UPLOAD_URL}/?id=${token}]`,
+		);
 		const messages = await Promise.race([
+			uploadServerManager.awaitToken(token, 1000 * 60 * 30),
 			cancelMessage.awaitReactions({
 				filter: (reaction, user) =>
 					reaction.emoji.name === "❌" &&
@@ -108,58 +120,63 @@ export default {
 			}),
 			thread.awaitMessages({
 				filter: (message) =>
-					(message.attachments.size === 1 ||
-						websiteRegex.test(message.content)) &&
+					message.attachments.size === 1 &&
 					message.author.id === interaction.user.id,
 				time: 1000 * 60 * 30, // 30 minutes
 				max: 1,
 				errors: ["time"],
 			}),
 		]);
-		const firstMessage = messages.at(0);
-		if (firstMessage instanceof MessageReaction) {
-			await cancelMessage.reactions.removeAll().catch(() => {});
-			await thread.send("Upload cancelled.");
-			await thread.setLocked(true);
-			await thread.setArchived(true);
-			changeCredit(
-				interaction.user.id,
-				settings.uploadFileFee,
-				"Refund for cancelled Upload Custom Mod to Server",
-			);
-			sendCreditNotification(
-				interaction.user,
-				settings.uploadFileFee,
-				"Refund for cancelled Upload Custom Mod to Server",
-			);
-			setTimeout(cleanUp, 1000 * 10);
-			return;
-		}
-		const attachment = firstMessage?.attachments.at(0);
-		const downloadingUrl = attachment?.url ?? firstMessage?.content;
-		const filename = attachment?.name ?? firstMessage?.content;
+		let downloadingUrl: string;
+		let filename: string;
+		let isFileUpload = false;
+		if (!(messages instanceof Collection)) {
+			downloadingUrl = `${process.env.UPLOAD_URL}/file/${token}`;
+			filename = messages.filename;
+			isFileUpload = true;
+		} else {
+			const firstMessage = messages.at(0);
+			if (firstMessage instanceof MessageReaction) {
+				await cancelMessage.reactions.removeAll().catch(() => {});
+				await thread.send("Upload cancelled.");
+				await thread.setLocked(true);
+				await thread.setArchived(true);
+				changeCredit(
+					interaction.user.id,
+					settings.uploadFileFee,
+					"Refund for cancelled Upload Custom Mod to Server",
+				);
+				sendCreditNotification(
+					interaction.user,
+					settings.uploadFileFee,
+					"Refund for cancelled Upload Custom Mod to Server",
+				);
+				setTimeout(cleanUp, 1000 * 10);
+				return;
+			}
+			const attachment = firstMessage?.attachments.at(0);
 
-		if (
-			(!attachment &&
-				firstMessage &&
-				!websiteRegex.test(firstMessage.content)) ||
-			!downloadingUrl
-		) {
-			await thread.send("No attachment or URL found, please try again.");
-			await thread.setLocked(true);
-			await thread.setArchived(true);
-			changeCredit(
-				interaction.user.id,
-				settings.uploadFileFee,
-				"Refund for cancelled Upload Custom Mod to Server",
-			);
-			sendCreditNotification(
-				interaction.user,
-				settings.uploadFileFee,
-				"Refund for cancelled Upload Custom Mod to Server",
-			);
-			setTimeout(cleanUp, 1000 * 10);
-			return;
+			if (!attachment?.url) {
+				await thread.send(
+					"No attachment or upload found, please try again.",
+				);
+				await thread.setLocked(true);
+				await thread.setArchived(true);
+				changeCredit(
+					interaction.user.id,
+					settings.uploadFileFee,
+					"Refund for cancelled Upload Custom Mod to Server",
+				);
+				sendCreditNotification(
+					interaction.user,
+					settings.uploadFileFee,
+					"Refund for cancelled Upload Custom Mod to Server",
+				);
+				setTimeout(cleanUp, 1000 * 10);
+				return;
+			}
+			downloadingUrl = attachment.url;
+			filename = attachment.name;
 		}
 
 		await thread.send(`File uploaded: ${downloadingUrl}`);
@@ -173,10 +190,13 @@ export default {
 			)
 		) {
 			await thread.send(`The file will be added to the server shortly.`);
-			const finalFilename = await downloadWebPluginFileToLocal(
-				downloadingUrl,
-				filename,
-			);
+			const finalFilename =
+				messages instanceof File
+					? await copyLocalPluginFileToServer(messages)
+					: await downloadWebPluginFileToLocal(
+							downloadingUrl,
+							filename,
+						);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
 			} else {
@@ -239,10 +259,13 @@ export default {
 					await thread.send(
 						`The file will be added to the server shortly.`,
 					);
-					const finalFilename = await downloadWebPluginFileToLocal(
-						downloadingUrl,
-						filename,
-					);
+					const finalFilename =
+						messages instanceof File
+							? await copyLocalPluginFileToServer(messages)
+							: await downloadWebPluginFileToLocal(
+									downloadingUrl,
+									filename,
+								);
 					if (finalFilename) {
 						await thread.send(`File added to server.`);
 						await interaction.user.send(
