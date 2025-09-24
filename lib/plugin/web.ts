@@ -3,14 +3,15 @@ import { SERVER_DIR } from "../plugin";
 import { Entry, fromBuffer } from "yauzl";
 import { mkdir, exists, writeFile } from "fs/promises";
 import { safeJoin } from "../utils";
+import type { File } from "./uploadServer";
 
 export async function copyLocalPluginFileToServer(file: File) {
 	console.log(
-		`Copying local plugin file ${file.name} to server plugins folder...`,
+		`Copying local plugin file ${file.filename} to server plugins folder...`,
 	);
-	const path = safeJoin(SERVER_DIR, "plugins", file.name);
-	await writeFile(path, await file.bytes());
-	return file.name;
+	const path = safeJoin(SERVER_DIR, "plugins", file.filename);
+	await writeFile(path, file.buffer);
+	return file.filename;
 }
 
 export async function downloadWebPluginFileToLocal(

@@ -82,7 +82,7 @@ function createUploadServer(manager: UploadServerManager) {
 	return app;
 }
 
-interface File {
+export interface File {
 	buffer: Buffer;
 	filename: string;
 }
