@@ -30,6 +30,7 @@ import {
 } from "../lib/plugin/web";
 import { uploadServerManager } from "../lib/plugin/uploadServer";
 import "dotenv/config";
+import type { i } from "../webUi/dist/server/chunks/astro/server_D518bSdL.mjs";
 
 if (!process.env.UPLOAD_URL) {
 	throw new Error("UPLOAD_URL is not set in environment variables");
@@ -106,7 +107,7 @@ export default {
 		await cancelMessage.react("❌");
 		const token = uploadServerManager.createToken();
 		await thread.send(
-			`You may also upload the file to (this website)[${process.env.UPLOAD_URL}/?id=${token}]`,
+			`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
 		);
 		const messages = await Promise.race([
 			uploadServerManager.awaitToken(token, 1000 * 60 * 30),
@@ -129,11 +130,10 @@ export default {
 		]);
 		let downloadingUrl: string;
 		let filename: string;
-		let isFileUpload = false;
-		if (!(messages instanceof Collection)) {
+		const isFile = !(messages instanceof Collection);
+		if (isFile) {
 			downloadingUrl = `${process.env.UPLOAD_URL}/file/${token}`;
 			filename = messages.filename;
-			isFileUpload = true;
 		} else {
 			const firstMessage = messages.at(0);
 			if (firstMessage instanceof MessageReaction) {
@@ -190,13 +190,9 @@ export default {
 			)
 		) {
 			await thread.send(`The file will be added to the server shortly.`);
-			const finalFilename =
-				messages instanceof File
-					? await copyLocalPluginFileToServer(messages)
-					: await downloadWebPluginFileToLocal(
-							downloadingUrl,
-							filename,
-						);
+			const finalFilename = isFile
+				? await copyLocalPluginFileToServer(messages)
+				: await downloadWebPluginFileToLocal(downloadingUrl, filename);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
 			} else {
@@ -259,13 +255,12 @@ export default {
 					await thread.send(
 						`The file will be added to the server shortly.`,
 					);
-					const finalFilename =
-						messages instanceof File
-							? await copyLocalPluginFileToServer(messages)
-							: await downloadWebPluginFileToLocal(
-									downloadingUrl,
-									filename,
-								);
+					const finalFilename = isFile
+						? await copyLocalPluginFileToServer(messages)
+						: await downloadWebPluginFileToLocal(
+								downloadingUrl,
+								filename,
+							);
 					if (finalFilename) {
 						await thread.send(`File added to server.`);
 						await interaction.user.send(
