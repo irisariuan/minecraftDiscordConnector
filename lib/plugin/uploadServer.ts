@@ -183,6 +183,7 @@ export class UploadServerManager extends EventEmitter {
 	disposeToken(token: string) {
 		if (this.hasActiveToken(token)) {
 			this.activeTokens.delete(token);
+			this.tokenMap.delete(token);
 			this.checkTokens();
 			return true;
 		}
