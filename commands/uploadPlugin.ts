@@ -100,7 +100,7 @@ export default {
 		await thread.members.add(interaction.user);
 		const expire = new Date(Date.now() + 1000 * 60 * 30); // 30 minutes
 		const cancelMessage = await thread.send(
-			`Please your file as attachment here before ${time(expire)}. We accept \`.jar\`, \`.yaml\`, \`.yml\` and \`.conf\`\nTo cancel the upload, react with ❌\nPlease note that uploading a file costs you \`${settings.uploadFileFee}\` credits, which is non-refundable unless the upload is cancelled before completion or the file fails to be added to the server.\nIf no file is uploaded before the expiration time, the upload will be automatically cancelled without refunding.`,
+			`Please your file as attachment here before ${time(expire)}. We accept \`.jar\`, \`.yaml\`, \`.yml\`, \`.conf\` and \`.zip\` files\nTo cancel the upload, react with ❌\nIf no file is uploaded before the expiration time, the upload will be cancelled **without** refunding.`,
 		);
 		await cancelMessage.react("❌");
 		const token = uploadServerManager.createToken();
