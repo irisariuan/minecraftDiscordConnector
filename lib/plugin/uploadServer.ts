@@ -168,8 +168,8 @@ export class UploadServerManager extends EventEmitter {
 	useToken(token: string, file: File, timeout = 1000 * 60 * 60) {
 		if (this.hasActiveToken(token)) {
 			this.activeTokens.delete(token);
-			this.emit("tokenUsed", token, file);
 			this.tokenMap.set(token, file);
+			this.emit("tokenUsed", token, file);
 			setTimeout(() => {
 				this.tokenMap.delete(token);
 				this.checkTokens();
@@ -181,13 +181,9 @@ export class UploadServerManager extends EventEmitter {
 	}
 
 	disposeToken(token: string) {
-		if (this.hasActiveToken(token)) {
-			this.activeTokens.delete(token);
-			this.tokenMap.delete(token);
-			this.checkTokens();
-			return true;
-		}
-		return false;
+		this.activeTokens.delete(token);
+		this.tokenMap.delete(token);
+		this.checkTokens();
 	}
 
 	checkTokens() {
