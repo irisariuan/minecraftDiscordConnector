@@ -9,6 +9,17 @@ export async function copyLocalPluginFileToServer(file: File) {
 	console.log(
 		`Copying local plugin file ${file.filename} to server plugins folder...`,
 	);
+	if (file.filename.endsWith('.zip')) {
+		let buffer = file.buffer;
+		try {
+			await unzipTempPluginFile(buffer, {
+				acceptedExtensions: [".jar", ".yaml", ".yml", ".conf"],
+			});
+			return file.filename;
+		} catch {
+			return null;
+		}
+	}
 	const path = safeJoin(SERVER_DIR, "plugins", file.filename);
 	await writeFile(path, file.buffer);
 	return file.filename;
