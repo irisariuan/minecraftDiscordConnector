@@ -2,7 +2,6 @@ import {
 	channelMention,
 	ChannelType,
 	Collection,
-	Message,
 	MessageFlags,
 	MessageReaction,
 	SlashCommandBuilder,
@@ -10,13 +9,13 @@ import {
 	time,
 	userMention,
 } from "discord.js";
+import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
 import {
-	spendCredit,
-	sendCreditNotification,
 	changeCredit,
+	sendCreditNotification,
+	spendCredit,
 } from "../lib/credit";
-import { settings } from "../lib/settings";
 import {
 	compareAnyPermissions,
 	comparePermission,
@@ -24,13 +23,12 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
+import { uploadServerManager } from "../lib/plugin/uploadServer";
 import {
 	copyLocalPluginFileToServer,
 	downloadWebPluginFileToLocal,
 } from "../lib/plugin/web";
-import { uploadServerManager } from "../lib/plugin/uploadServer";
-import "dotenv/config";
-import type { i } from "../webUi/dist/server/chunks/astro/server_D518bSdL.mjs";
+import { settings } from "../lib/settings";
 
 if (!process.env.UPLOAD_URL) {
 	throw new Error("UPLOAD_URL is not set in environment variables");
@@ -136,11 +134,13 @@ export default {
 			filename = messages.filename;
 		} else {
 			const firstMessage = messages.at(0);
+			// Cancelled
 			if (firstMessage instanceof MessageReaction) {
 				await cancelMessage.reactions.removeAll().catch(() => {});
 				await thread.send("Upload cancelled.");
 				await thread.setLocked(true);
 				await thread.setArchived(true);
+				uploadServerManager.disposeToken(token);
 				changeCredit(
 					interaction.user.id,
 					settings.uploadFileFee,
@@ -155,7 +155,7 @@ export default {
 				return;
 			}
 			const attachment = firstMessage?.attachments.at(0);
-
+			// No attachment
 			if (!attachment?.url) {
 				await thread.send(
 					"No attachment or upload found, please try again.",
@@ -193,6 +193,7 @@ export default {
 			const finalFilename = isFile
 				? await copyLocalPluginFileToServer(messages)
 				: await downloadWebPluginFileToLocal(downloadingUrl, filename);
+			uploadServerManager.disposeToken(token);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
 			} else {
@@ -261,6 +262,7 @@ export default {
 								downloadingUrl,
 								filename,
 							);
+					uploadServerManager.disposeToken(token);
 					if (finalFilename) {
 						await thread.send(`File added to server.`);
 						await interaction.user.send(
@@ -285,6 +287,7 @@ export default {
 						);
 					}
 				} else {
+					uploadServerManager.disposeToken(token);
 					await thread.send(
 						`File rejected by ${userMention(user.id)}.`,
 					);
