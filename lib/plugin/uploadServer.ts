@@ -102,7 +102,7 @@ export class UploadServerManager extends EventEmitter {
 	constructor(
 		port = 6003,
 		hostAddress = "0.0.0.0",
-		extensions = [".jar", ".yaml", ".yml", ".conf"],
+		extensions = [".jar", ".yaml", ".yml", ".conf", '.zip'],
 	) {
 		super();
 		this.port = port;
