@@ -39,7 +39,7 @@ export default {
 						"You don't have enough credit to check other users' credit",
 				});
 			}
-			await sendCreditNotification(interaction.user, -settings.checkUserCreditFee, "Check Credit of Other Users")
+			await sendCreditNotification({ user: interaction.user, creditChanged: -settings.checkUserCreditFee, reason: "Check Credit of Other Users" })
 		}
 
 		const creditData = await getCredit(user.id);

@@ -69,9 +69,7 @@ export default {
 			});
 		}
 		sendCreditNotification(
-			interaction.user,
-			-settings.newStartServerPollFee,
-			"New Start Server Poll",
+			{ user: interaction.user, creditChanged: -settings.newStartServerPollFee, reason: "New Start Server Poll" },
 		);
 
 		sendApprovalPoll(interaction, {

@@ -481,10 +481,7 @@ export async function updateApprovalMessage(
 				"Approval Reaction Refund",
 			);
 			await sendCreditNotification(
-				user,
-				approval.options.credit * voted,
-				"Approval Reaction Refund",
-				true,
+				{ user, creditChanged: approval.options.credit * voted, reason: "Approval Reaction Refund", silent: true },
 			);
 		}
 		return await reaction.message
@@ -580,9 +577,7 @@ export async function updateApprovalMessage(
 				.catch(console.error);
 		}
 		await sendCreditNotification(
-			user,
-			-approval.options.credit,
-			"Approval Reaction",
+			{ user, creditChanged: -approval.options.credit, reason: "Approval Reaction" },
 		);
 	}
 

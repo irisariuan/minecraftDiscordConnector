@@ -70,9 +70,7 @@ export default {
 			});
 		}
 		await sendCreditNotification(
-			interaction.user,
-			-settings.uploadFileFee,
-			"Upload Custom Mod to Server",
+			{ user: interaction.user, creditChanged: -settings.uploadFileFee, reason: "Upload Custom Mod to Server" },
 		);
 		const thread = await interaction.channel.threads.create({
 			name: "Upload File",
@@ -140,9 +138,7 @@ export default {
 					"Refund for cancelled Upload Custom Mod to Server",
 				);
 				sendCreditNotification(
-					interaction.user,
-					settings.uploadFileFee,
-					"Refund for cancelled Upload Custom Mod to Server",
+					{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for cancelled Upload Custom Mod to Server" },
 				);
 				setTimeout(cleanUp, 1000 * 10);
 				return;
@@ -161,9 +157,7 @@ export default {
 					"Refund for cancelled Upload Custom Mod to Server",
 				);
 				sendCreditNotification(
-					interaction.user,
-					settings.uploadFileFee,
-					"Refund for cancelled Upload Custom Mod to Server",
+					{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for cancelled Upload Custom Mod to Server" },
 				);
 				setTimeout(cleanUp, 1000 * 10);
 				return;
@@ -199,9 +193,7 @@ export default {
 					"Refund for failed to add uploaded Custom Mod to Server",
 				);
 				sendCreditNotification(
-					interaction.user,
-					settings.uploadFileFee,
-					"Refund for failed to add uploaded Custom Mod to Server",
+					{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for failed to add uploaded Custom Mod to Server" },
 				);
 			}
 			return setTimeout(cleanUp, 1000 * 10);
@@ -274,9 +266,7 @@ export default {
 							"Refund for failed to add uploaded Custom Mod to Server",
 						);
 						sendCreditNotification(
-							interaction.user,
-							settings.uploadFileFee,
-							"Refund for failed to add uploaded Custom Mod to Server",
+							{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for failed to add uploaded Custom Mod to Server" },
 						);
 					}
 				} else {

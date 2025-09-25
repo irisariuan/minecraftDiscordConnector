@@ -35,7 +35,7 @@ export default {
 					flags: [MessageFlags.Ephemeral],
 				});
 			}
-			await sendCreditNotification(interaction.user, -settings.checkUserPermissionFee, "Check Permission Of Other Users");
+			await sendCreditNotification({ user: interaction.user, creditChanged: -settings.checkUserPermissionFee, reason: "Check Permission Of Other Users" });
 		}
 
 		if (permission) {
