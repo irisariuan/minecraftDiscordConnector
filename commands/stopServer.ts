@@ -58,7 +58,7 @@ export default {
 		if (
 			force &&
 			comparePermission(
-				await readPermission(interaction.user.id),
+				await readPermission(interaction.user),
 				PermissionFlags.stopServer,
 			)
 		) {

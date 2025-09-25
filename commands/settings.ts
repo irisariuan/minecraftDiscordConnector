@@ -35,7 +35,7 @@ export default {
 		if (subcommand === "set") {
 			if (
 				!comparePermission(
-					await readPermission(interaction.user.id),
+					await readPermission(interaction.user),
 					PermissionFlags.editSetting,
 				)
 			) {

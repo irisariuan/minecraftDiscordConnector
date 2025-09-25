@@ -19,7 +19,7 @@ export default {
 		),
 	async execute(interaction, client) {
 		const user = interaction.options.getUser("user") || interaction.user;
-		const permission = await readPermission(user.id);
+		const permission = await readPermission(user);
 
 		if (user.id !== interaction.user.id) {
 			if (

@@ -37,7 +37,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		if (
-			compareAnyPermissions(await readPermission(interaction.user.id), [
+			compareAnyPermissions(await readPermission(interaction.user), [
 				PermissionFlags.stopServer,
 				PermissionFlags.startServer,
 			])

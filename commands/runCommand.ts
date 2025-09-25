@@ -56,7 +56,7 @@ export default {
 		const capture = interaction.options.getInteger("capture") ?? 1000;
 		const timeout = interaction.options.getInteger("timeout");
 		const canRunCommand = compareAllPermissions(
-			await readPermission(interaction.user.id),
+			await readPermission(interaction.user),
 			[PermissionFlags.runCommand],
 		);
 

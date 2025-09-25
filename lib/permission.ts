@@ -1,3 +1,4 @@
+import { User } from "discord.js";
 import {
 	getAllUserPermissions,
 	getUserPermission,
@@ -52,8 +53,11 @@ export function compareAllPermissions(a: Permission, b: Permission[]) {
 	return b.every((v) => comparePermission(a, v));
 }
 
-export async function readPermission(userId: string) {
-	return (await getUserPermission(userId)) ?? 0;
+export async function readPermission(user: string | Pick<User, "id">) {
+	return (
+		(await getUserPermission(typeof user === "string" ? user : user.id)) ??
+		0
+	);
 }
 
 export function createPermission(permissions: Permission[]) {
