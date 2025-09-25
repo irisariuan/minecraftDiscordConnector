@@ -94,10 +94,7 @@ export default {
 				if (!silent)
 					promises.push(
 						sendCreditNotification(
-							user,
-							amount - original,
-							"Set by admin",
-							true,
+							{ user, creditChanged: amount - original, reason: "Set by admin", silent: true },
 						),
 					);
 			}
@@ -113,10 +110,7 @@ export default {
 				if (!silent)
 					promises.push(
 						sendCreditNotification(
-							user,
-							amount,
-							"Changed by admin",
-							true,
+							{ user, creditChanged: amount, reason: "Changed by admin", silent: true },
 						),
 					);
 			}

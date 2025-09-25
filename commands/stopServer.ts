@@ -97,7 +97,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification(interaction.user, -settings.newStopServerPollFee, "New Stop Server Poll");
+		await sendCreditNotification({ user: interaction.user, creditChanged: -settings.newStopServerPollFee, reason: "New Stop Server Poll" });
 		sendApprovalPoll(interaction, {
 			content: displayString,
 			options: {

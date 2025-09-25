@@ -73,9 +73,7 @@ export default {
 			});
 		}
 		await sendCreditNotification(
-			interaction.user,
-			-settings.newCancelStopServerPollFee,
-			"New Cancel Stop Server Poll",
+			{ user: interaction.user, creditChanged: -settings.newCancelStopServerPollFee, reason: "New Cancel Stop Server Poll" },
 		);
 
 		sendApprovalPoll(interaction, {

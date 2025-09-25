@@ -1,6 +1,11 @@
 import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ComponentType,
 	italic,
 	MessageFlags,
+	time,
 	type GuildMember,
 	type PartialUser,
 	type User,
@@ -110,17 +115,90 @@ export async function spendCredit(
 	return true;
 }
 
-export async function sendCreditNotification(
-	user: User | PartialUser | GuildMember,
-	creditChanged: number,
-	reason: string,
+export async function sendCreditNotification({
+	user,
+	creditChanged,
+	reason,
 	silent = false,
-) {
+	cancellable = false,
+	maxRefund = 0,
+	onRefund,
+}: {
+	user: User | PartialUser | GuildMember;
+	creditChanged: number;
+	reason: string;
+	silent?: boolean;
+	cancellable?: boolean;
+	maxRefund?: number;
+	onRefund?: (refundAmount: number) => unknown;
+}) {
 	const creditFetched = await getCredit(user.id);
-	await user
+	const expire = new Date(Date.now() + 1000 * 60 * 10); // 10 minutes
+	const message = await user
 		.send({
-			content: `Your credit has been changed by \`${creditChanged}\`. Your current credit is \`${creditFetched.currentCredit}\`\nReason: ${italic(reason)}\n*You could always check your credit by using \`/credit\` command.*`,
+			content: `Your credit has been changed by \`${creditChanged}\`. Your current credit is \`${creditFetched.currentCredit}\`\nReason: ${italic(
+				reason,
+			)}${
+				cancellable
+					? `\n*You can cancel this transaction by clicking the button below before ${time(new Date(expire))}.*`
+					: ""
+			}\n*You could always check your credit by using \`/credit\` command.*`,
 			flags: silent ? [MessageFlags.SuppressNotifications] : [],
+			components: cancellable ? [new ActionRowBuilder<ButtonBuilder>().addComponents(createCancelButton())] : [],
 		})
 		.catch((err) => console.error("Error occured during DM", err));
+	if (cancellable && message) {
+		setTimeout(
+			async () => {
+				message.edit({ components: [] });
+			},
+			1000 * 60 * 10,
+		);
+		const isNegative = creditChanged < 0;
+		const refund =
+			maxRefund > 0
+				? Math.min(Math.abs(creditChanged), maxRefund) *
+					(isNegative ? 1 : -1)
+				: -creditChanged;
+		const collector = message.createMessageComponentCollector({
+			componentType: ComponentType.Button,
+			time: 1000 * 60 * 10,
+			filter: (i) => i.user.id === user.id,
+			max: 1,
+		});
+		collector.on("collect", async () => {
+			onRefund?.(refund);
+			const newCredit = await changeCredit(
+				user.id,
+				-refund,
+				`Cancelled: ${reason}`,
+			);
+			console.log(
+				`User ${user.id} cancelled a transaction of ${creditChanged}, refunded ${-refund}, new credit: ${newCredit}`,
+			);
+			await message.edit({
+				content: `The transaction has been cancelled. Your credit has been changed by \`${refund}\`. Your current credit is \`${newCredit}\``,
+				components: [],
+			});
+		});
+	}
+}
+
+export enum CreditNotificationButtonId {
+	CancelButton = "CANCEL_TRANSACTION",
+	ApproveButton = "APPROVE_TRANSACTION",
+}
+
+export function createCancelButton() {
+	return new ButtonBuilder()
+		.setCustomId(CreditNotificationButtonId.CancelButton)
+		.setLabel("Cancel Transaction")
+		.setStyle(ButtonStyle.Danger)
+}
+
+export function createApproveButton() {
+	return new ButtonBuilder()
+		.setCustomId(CreditNotificationButtonId.ApproveButton)
+		.setLabel("Approve Transaction")
+		.setStyle(ButtonStyle.Success);
 }

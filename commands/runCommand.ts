@@ -73,7 +73,7 @@ export default {
 					flags: [MessageFlags.Ephemeral],
 				});
 			}
-			await sendCreditNotification(interaction.user, -settings.newRunCommandPollFee, "New Run Command Poll");
+			await sendCreditNotification({ user: interaction.user, creditChanged: -settings.newRunCommandPollFee, reason: "New Run Command Poll" });
 			return await sendApprovalPoll(interaction, {
 				content: command,
 				options: {

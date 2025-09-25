@@ -1,7 +1,18 @@
-import { MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
+import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ComponentType,
+	MessageFlags,
+	SlashCommandBuilder,
+	time,
+	userMention,
+} from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	changeCredit,
+	createApproveButton,
+	createCancelButton,
+	CreditNotificationButtonId,
 	getCredit,
 	sendCreditNotification,
 	spendCredit,
@@ -58,37 +69,81 @@ export default {
 			settings.maxTransferringFee,
 		);
 
+		const message = await interaction.reply({
+			content: `Transferring ${amount} credit to ${userMention(user.id)} will cost a total fee of ${totalTransferringFee} credit. You will be charged a total of ${amount + totalTransferringFee} credit. Do you want to proceed? (React before ${time(
+				new Date(Date.now() + 1000 * 60 * 5),
+			)})`,
+			flags: [MessageFlags.Ephemeral],
+			components: [
+				new ActionRowBuilder<ButtonBuilder>()
+					.addComponents(createApproveButton())
+					.addComponents(createCancelButton()),
+			],
+		});
+		const reply = await message
+			.awaitMessageComponent({
+				componentType: ComponentType.Button,
+				filter: (i) => i.user.id === interaction.user.id,
+				time: 1000 * 60 * 5,
+			})
+			.catch(() => null);
+		if (!reply) {
+			return await interaction.editReply({
+				content: "Transfer credit request timed out.",
+				components: [],
+			});
+		}
+		if (reply.customId === CreditNotificationButtonId.CancelButton) {
+			return await interaction.editReply({
+				content: "Transfer credit request cancelled.",
+				components: [],
+			});
+		}
+
 		const success = await spendCredit(
 			interaction.user.id,
 			amount + totalTransferringFee,
-			"Transfer Credit"
+			"Transfer Credit",
 		);
 		if (!success) {
-			return await interaction.reply({
+			return await interaction.editReply({
 				content: `You do not have enough credit (Requires ${totalTransferringFee}, current: ${fromUserCredit.currentCredit}) to transfer ${amount} credit to ${userMention(user.id)}`,
-				flags: [MessageFlags.Ephemeral],
+				components: [],
 			});
 		}
 		await changeCredit(user.id, amount, "Received Transfer Credit");
-		await sendCreditNotification(
-			interaction.user,
-			-amount,
-			"Transfer Credit",
-		);
-		await sendCreditNotification(
-			interaction.user,
-			-totalTransferringFee,
-			"Transfer Credit Fee",
-		);
-		await sendCreditNotification(
+		await sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -amount,
+			reason: "Transfer Credit",
+		});
+		await sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -totalTransferringFee,
+			reason: "Transfer Credit Fee",
+		});
+		await sendCreditNotification({
 			user,
-			amount,
-			"Received Transfer Credit",
-			true,
-		);
-		return await interaction.reply({
+			creditChanged: amount,
+			reason: "Received Transfer Credit",
+			silent: true,
+			cancellable: true,
+			maxRefund: amount,
+			onRefund: async (refundAmount) => {
+				await changeCredit(
+					interaction.user.id,
+					refundAmount,
+					"Transfer Credit Refund",
+				);
+				await sendCreditNotification({
+					user: interaction.user,
+					creditChanged: -refundAmount,
+					reason: "Transfer Credit Refund",
+				});
+			},
+		});
+		return await interaction.editReply({
 			content: `Successfully transferred ${amount} credit to ${user.username}`,
-			flags: [MessageFlags.Ephemeral],
 		});
 	},
 } as CommandFile;

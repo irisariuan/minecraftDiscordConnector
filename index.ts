@@ -98,10 +98,7 @@ client.once("ready", async () => {
 			const user = client.users.cache.get(userId);
 			if (user) {
 				await sendCreditNotification(
-					user,
-					giveCredits,
-					"System Gift",
-					true,
+					{ user, creditChanged: giveCredits, reason: "System Gift", silent: true },
 				);
 			}
 		}
@@ -224,10 +221,7 @@ setTimeout(async () => {
 			const user = client.users.cache.get(userId);
 			if (user) {
 				await sendCreditNotification(
-					user,
-					giftAmount,
-					"Daily Gift",
-					true,
+					{ user, creditChanged: giftAmount, reason: "Daily Gift", silent: true },
 				);
 			}
 		}
@@ -259,10 +253,7 @@ async function exitHandler() {
 			const user = client.users.cache.get(approval.options.callerId);
 			if (user) {
 				await sendCreditNotification(
-					user,
-					approval.options.startPollFee,
-					"New Approval Poll Refund",
-					true,
+					{ user, creditChanged: approval.options.startPollFee, reason: "New Approval Poll Refund", silent: true },
 				);
 			}
 		}
@@ -278,10 +269,7 @@ async function exitHandler() {
 				const user = client.users.cache.get(id);
 				if (user) {
 					await sendCreditNotification(
-						user,
-						approval.options.credit,
-						"Approval Reaction Refund",
-						true,
+						{ user, creditChanged: approval.options.credit, reason: "Approval Reaction Refund", silent: true },
 					);
 				}
 			}
