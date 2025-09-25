@@ -75,9 +75,10 @@ export default {
 			)})`,
 			flags: [MessageFlags.Ephemeral],
 			components: [
-				new ActionRowBuilder<ButtonBuilder>()
-					.addComponents(createApproveButton())
-					.addComponents(createCancelButton()),
+				new ActionRowBuilder<ButtonBuilder>().addComponents(
+					createApproveButton(),
+					createCancelButton(),
+				),
 			],
 		});
 		const reply = await message

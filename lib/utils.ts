@@ -83,7 +83,11 @@ export function removeSuffix(str: string, suffix: string) {
 	return str;
 }
 
-export function trimTextWithSuffix(text: string, maxLength: number, suffix = '...') {
+export function trimTextWithSuffix(
+	text: string,
+	maxLength: number,
+	suffix = "...",
+) {
 	if (text.length <= maxLength) return text;
 	return text.slice(0, maxLength - suffix.length) + suffix;
 }
@@ -126,7 +130,7 @@ export function clamp(value: number, min: number, max: number) {
 }
 
 export function safeJoin(...paths: string[]) {
-	const finalPath = join(...paths)
+	const finalPath = join(...paths);
 	if (!paths[0] || !finalPath.startsWith(paths[0])) {
 		throw new Error("Unsafe path detected");
 	}
