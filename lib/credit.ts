@@ -170,7 +170,7 @@ export async function sendCreditNotification({
 			onRefund?.(refund);
 			const newCredit = await changeCredit(
 				user.id,
-				-refund,
+				refund,
 				`Cancelled: ${reason}`,
 			);
 			console.log(
