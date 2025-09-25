@@ -473,7 +473,7 @@ export async function updateApprovalMessage(reaction: ButtonInteraction) {
 			prevCount ===
 			approval.approvalIds.length + approval.disapprovalIds.length
 		) {
-			return reaction.followUp({
+			return await reaction.followUp({
 				content: "You have not approved or disapproved this poll",
 				flags: [MessageFlags.Ephemeral],
 			});
@@ -549,7 +549,7 @@ export async function updateApprovalMessage(reaction: ButtonInteraction) {
 		approval.disapprovalIds = approval.disapprovalIds.filter(
 			(id) => id !== reaction.user.id,
 		);
-		// Check if need to spend credit
+		// Check if need to spend credit for new reaction
 	} else if (approval.options.credit) {
 		const success = await spendCredit(
 			reaction.user.id,
@@ -623,14 +623,16 @@ export async function updateApprovalMessage(reaction: ButtonInteraction) {
 	}
 	if (status === "timeout") {
 		await approval.options.onTimeout?.(approval, reaction.message);
-		return await reaction
-			.followUp({
+		return await reaction.message
+			.edit({
 				content: `The poll \`${approval.content}\` has timed out.`,
+				components: [],
 			})
 			.catch(console.error);
 	}
-	await reaction.followUp({
+	await reaction.message.edit({
 		content: "Unknown error occurred",
-		flags: [MessageFlags.SuppressNotifications],
+		embeds: [],
+		components: [],
 	});
 }
