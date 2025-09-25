@@ -127,7 +127,7 @@ export function clamp(value: number, min: number, max: number) {
 
 export function safeJoin(...paths: string[]) {
 	const finalPath = join(...paths)
-	if (!finalPath.startsWith(paths[0])) {
+	if (!paths[0] || !finalPath.startsWith(paths[0])) {
 		throw new Error("Unsafe path detected");
 	}
 	return finalPath;

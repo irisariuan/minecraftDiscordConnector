@@ -39,14 +39,7 @@ export default {
 		.setName("uploadplugin")
 		.setDescription("Upload a custom plugin to the server"),
 	async execute(interaction, client) {
-		if (
-			!interaction.channel ||
-			!interaction.channel.isTextBased ||
-			interaction.channel.isThread() ||
-			interaction.channel.isDMBased() ||
-			interaction.channel.isVoiceBased() ||
-			interaction.channel.type === ChannelType.GuildAnnouncement
-		) {
+		if (interaction.channel?.type !== ChannelType.GuildText) {
 			return await interaction.reply({
 				content:
 					"This command can only be used in a guild text channel",
