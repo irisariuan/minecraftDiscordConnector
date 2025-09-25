@@ -1,4 +1,12 @@
-import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
+import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ComponentType,
+	MessageFlags,
+	SlashCommandBuilder,
+	time,
+} from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	downloadPluginFile,
@@ -8,9 +16,10 @@ import {
 	type PluginListVersionItem,
 } from "../lib/plugin";
 import {
+	compareAnyPermissions,
 	comparePermission,
 	PermissionFlags,
-    readPermission,
+	readPermission,
 } from "../lib/permission";
 import { sendPaginationMessage } from "../lib/pagination";
 
@@ -31,11 +40,12 @@ export default {
 		),
 	async execute(interaction, client) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		const userPermission = await readPermission(interaction.user);
 		if (
-			!comparePermission(
-				await readPermission(interaction.user),
+			!compareAnyPermissions(userPermission, [
 				PermissionFlags.downloadPlugin,
-			)
+				PermissionFlags.voteDownloadPlugin,
+			])
 		) {
 			return interaction.editReply({
 				content: "You do not have permission to download plugins.",
@@ -78,17 +88,69 @@ export default {
 				};
 			},
 			async onItemSelected(menuInteraction, result) {
+				await menuInteraction.deferUpdate();
 				const value = menuInteraction.values[0];
 				if (!value) return false;
+				if (
+					!comparePermission(
+						userPermission,
+						PermissionFlags.downloadPlugin,
+					)
+				) {
+					const request = await menuInteraction.followUp({
+						content: `Please ask a staff to permit your request on downloading \`${value}\``,
+						components: [
+							new ActionRowBuilder<ButtonBuilder>().addComponents(
+								new ButtonBuilder()
+									.setLabel("Allow")
+									.setStyle(ButtonStyle.Success)
+									.setCustomId("APPROVE_DOWNLOAD"),
+								new ButtonBuilder()
+									.setLabel("Deny")
+									.setStyle(ButtonStyle.Danger)
+									.setCustomId("DENY_DOWNLOAD"),
+							),
+						],
+					});
+					const result = await request
+						.awaitMessageComponent({
+							componentType: ComponentType.Button,
+							filter: async (i) =>
+								comparePermission(
+									await readPermission(i.user),
+									PermissionFlags.downloadPlugin,
+								),
+							time: 1000 * 60 * 10,
+						})
+						.catch(() => null);
+					if (!result) {
+						await request.edit({
+							content: "Request to download plugin timed out.",
+							components: [],
+						});
+						return false;
+					}
+					if (result.customId === "DENY_DOWNLOAD") {
+						await request.edit({
+							content: "Request to download plugin denied.",
+							components: [],
+						});
+						return false;
+					}
+					await request.edit({
+						content: `Your request to download \`${value}\` has been approved. Downloading...`,
+						components: [],
+					});
+				}
 				const { newDownload } = await downloadPluginFile(value);
 				if (!newDownload) {
-					await menuInteraction.reply({
+					await menuInteraction.editReply({
 						content:
 							"Failed to download plugin or plugin already exists.",
 					});
 					return false;
 				}
-				await menuInteraction.reply({
+				await menuInteraction.editReply({
 					content:
 						"Plugin downloaded and appended successfully! You should restart the server to take effect",
 				});

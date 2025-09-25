@@ -1,15 +1,21 @@
 import { ActionRowBuilder, ButtonBuilder } from "@discordjs/builders";
-import { ButtonStyle, ModalBuilder } from "discord.js";
+import { ButtonStyle } from "discord.js";
 
-export const BaseApprovalComponentId = "APPROVAL_";
-export enum ApprovalComponentId {
+export enum ApprovalMessageComponentId {
 	Approve = "APPROVAL_APPROVE",
 	SuperApprove = "APPROVAL_SUPER_APPROVE",
 	SuperReject = "APPROVAL_SUPER_REJECT",
 	Reject = "APPROVAL_REJECT",
 	Revoke = "APPROVAL_REVOKE",
 }
-export function createApprovalComponent({
+
+export function isApprovalMessageComponentId(customId: string) {
+	return Object.values(ApprovalMessageComponentId).includes(
+		customId as ApprovalMessageComponentId,
+	);
+}
+
+export function createApprovalMessageComponent({
 	showRevoke = true,
 	showSuperOptions = false,
 	showApprove = true,
@@ -21,23 +27,23 @@ export function createApprovalComponent({
 	showReject?: boolean;
 } = {}) {
 	const approveBtn = new ButtonBuilder()
-		.setCustomId(ApprovalComponentId.Approve)
+		.setCustomId(ApprovalMessageComponentId.Approve)
 		.setLabel("Approve")
 		.setStyle(ButtonStyle.Primary);
 	const rejectBtn = new ButtonBuilder()
-		.setCustomId(ApprovalComponentId.Reject)
+		.setCustomId(ApprovalMessageComponentId.Reject)
 		.setLabel("Reject")
 		.setStyle(ButtonStyle.Danger);
 	const revokeBtn = new ButtonBuilder()
-		.setCustomId(ApprovalComponentId.Revoke)
+		.setCustomId(ApprovalMessageComponentId.Revoke)
 		.setLabel("Revoke")
 		.setStyle(ButtonStyle.Secondary);
 	const superApproveBtn = new ButtonBuilder()
-		.setCustomId(ApprovalComponentId.SuperApprove)
+		.setCustomId(ApprovalMessageComponentId.SuperApprove)
 		.setLabel("Super Approve")
 		.setStyle(ButtonStyle.Success);
 	const superRejectBtn = new ButtonBuilder()
-		.setCustomId(ApprovalComponentId.SuperReject)
+		.setCustomId(ApprovalMessageComponentId.SuperReject)
 		.setLabel("Super Reject")
 		.setStyle(ButtonStyle.Danger);
 	const actionRow = new ActionRowBuilder<ButtonBuilder>();
@@ -51,17 +57,17 @@ export function createApprovalComponent({
 	return actionRow;
 }
 
-export function parseApprovalId(customId: ApprovalComponentId) {
+export function parseApprovalComponentId(customId: ApprovalMessageComponentId) {
 	return {
 		approveVote:
-			customId === ApprovalComponentId.Approve ||
-			customId === ApprovalComponentId.SuperApprove,
+			customId === ApprovalMessageComponentId.Approve ||
+			customId === ApprovalMessageComponentId.SuperApprove,
 		superVote:
-			customId === ApprovalComponentId.SuperApprove ||
-			customId === ApprovalComponentId.SuperReject,
+			customId === ApprovalMessageComponentId.SuperApprove ||
+			customId === ApprovalMessageComponentId.SuperReject,
 		rejectVote:
-			customId === ApprovalComponentId.Reject ||
-			customId === ApprovalComponentId.SuperReject,
-		revokeVote: customId === ApprovalComponentId.Revoke,
+			customId === ApprovalMessageComponentId.Reject ||
+			customId === ApprovalMessageComponentId.SuperReject,
+		revokeVote: customId === ApprovalMessageComponentId.Revoke,
 	};
 }
