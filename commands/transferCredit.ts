@@ -93,6 +93,7 @@ export default {
 				components: [],
 			});
 		}
+		await reply.update({});
 		if (reply.customId === CreditNotificationButtonId.CancelButton) {
 			return await interaction.editReply({
 				content: "Transfer credit request cancelled.",
@@ -144,6 +145,7 @@ export default {
 		});
 		return await interaction.editReply({
 			content: `Successfully transferred ${amount} credit to ${user.username}`,
+			components: [],
 		});
 	},
 } as CommandFile;
