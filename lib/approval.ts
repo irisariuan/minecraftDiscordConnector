@@ -10,6 +10,7 @@ import {
 	type PartialUser,
 	MessageFlags,
 	type PartialMessageReaction,
+	ButtonInteraction,
 } from "discord.js";
 import type { PickAndOptional } from "./utils";
 import {
@@ -20,6 +21,11 @@ import {
 } from "./permission";
 import { isSuspending } from "./suspend";
 import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
+import {
+	ApprovalComponentId,
+	createApprovalComponent,
+	parseApprovalId,
+} from "./approval/component";
 
 export interface BaseApproval {
 	content: string;
@@ -318,6 +324,7 @@ export async function sendApprovalPoll(
 	);
 	const message = await interaction.reply({
 		embeds: [embed],
+		components: [createApprovalComponent()],
 		withResponse: true,
 	});
 	const messageId = message.resource?.message?.id;
@@ -361,42 +368,34 @@ export async function sendApprovalPoll(
 			}
 			const newMessage = await approval.message.channel.send({
 				embeds: [createApprovalEmbed(approval)],
+				components: [createApprovalComponent()],
 			});
 			transferApproval(approval, newMessage);
-			await newMessage.react("✅");
-			await newMessage.react("❌");
-			await newMessage.react("📤");
-			await newMessage.react("🏁");
-			await newMessage.react("🏳️");
+			// await newMessage.react("✅");
+			// await newMessage.react("❌");
+			// await newMessage.react("📤");
+			// await newMessage.react("🏁");
+			// await newMessage.react("🏳️");
 		},
 	);
 	console.log(
 		`Polling for command ${interaction.commandName} with message id ${message.resource?.message?.id}`,
 	);
-	await message.resource.message.react("✅");
-	await message.resource.message.react("❌");
-	await message.resource.message.react("📤");
-	await message.resource.message.react("🏁");
-	await message.resource.message.react("🏳️");
+	// await message.resource.message.react("✅");
+	// await message.resource.message.react("❌");
+	// await message.resource.message.react("📤");
+	// await message.resource.message.react("🏁");
+	// await message.resource.message.react("🏳️");
 }
 
-export async function updateApprovalMessage(
-	reaction: MessageReaction | PartialMessageReaction,
-	user: User | PartialUser,
-) {
+export async function updateApprovalMessage(reaction: ButtonInteraction) {
 	const approval = getApproval(reaction.message.id);
 	if (!approval) return;
-	const userPerm = await readPermission(user.id);
-	const approving =
-		reaction.emoji.name === "✅" || reaction.emoji.name === "🏁";
-	const disapproving =
-		reaction.emoji.name === "❌" || reaction.emoji.name === "🏳️";
-	const canceling = reaction.emoji.name === "📤";
-	const superApprove =
-		reaction.emoji.name === "🏁" || reaction.emoji.name === "🏳️";
-	const isValidReaction = ["✅", "❌", "🏁", "🏳️", "📤"].includes(
-		reaction.emoji.name || "",
-	);
+	const userPerm = await readPermission(reaction.user);
+	let approving: boolean;
+	let disapproving: boolean;
+	let canceling: boolean;
+	let superApprove: boolean;
 	const canSuperApprove = comparePermission(
 		userPerm,
 		PermissionFlags.superApprove,
@@ -405,63 +404,79 @@ export async function updateApprovalMessage(
 		userPerm,
 		PermissionFlags.repeatApproval,
 	);
-	const userReactions = reaction.message.reactions.cache.filter((r) =>
-		r.users.cache.has(user.id),
-	);
-	for (const userReaction of userReactions.values()) {
-		await userReaction.users.remove(user.id).catch(console.error);
-	}
 	if (
-		!isValidReaction ||
 		!compareAnyPermissions(userPerm, [
 			PermissionFlags.approve,
 			PermissionFlags.superApprove,
 		])
 	)
 		return;
+	const { approveVote, rejectVote, revokeVote } = parseApprovalId(
+		reaction.customId as ApprovalComponentId,
+	);
+	await reaction.deferReply();
+	if (canSuperApprove && (approveVote || rejectVote)) {
+		const answer = await reaction.followUp({
+			content: `Do you want to super ${approveVote ? "approve" : "reject"} this poll?`,
+			components: [
+				createApprovalComponent({
+					showSuperOptions: true,
+					showApprove: approveVote,
+					showReject: rejectVote,
+				}),
+			],
+		});
+		const res = await answer
+			.awaitMessageComponent({
+				time: 10 * 1000,
+				filter: (i) => i.user.id === reaction.user.id,
+			})
+			.catch(() => null);
+		await answer.delete();
+		if (!res || res.customId === ApprovalComponentId.Revoke) {
+			return await reaction.followUp({
+				content: "Timeout or cancelled, no action taken",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		const final = parseApprovalId(res.customId as ApprovalComponentId);
+		approving = final.approveVote;
+		superApprove = final.superVote;
+		disapproving = final.rejectVote;
+		canceling = final.revokeVote;
+	} else {
+		approving = approveVote;
+		disapproving = rejectVote;
+		canceling = revokeVote;
+		superApprove = false;
+	}
 	if (
 		isSuspending() &&
 		!comparePermission(userPerm, PermissionFlags.suspend)
 	) {
-		return await reaction.message
-			.reply({
-				content:
-					"The server is currently suspended, you do not have permission to approve or disapprove",
-				flags: [MessageFlags.SuppressNotifications],
-			})
-			.then((message) =>
-				setTimeout(
-					() => message.delete().catch(console.error),
-					DELETE_AFTER_MS,
-				),
-			)
-			.catch(console.error);
+		return await reaction.followUp({
+			content:
+				"The server is currently suspended, you do not have permission to approve or disapprove",
+			flags: [MessageFlags.Ephemeral],
+		});
 	}
 	if (canceling) {
 		const prevCount =
 			approval.approvalIds.length + approval.disapprovalIds.length;
 		approval.approvalIds = approval.approvalIds.filter(
-			(id) => id !== user.id,
+			(id) => id !== reaction.user.id,
 		);
 		approval.disapprovalIds = approval.disapprovalIds.filter(
-			(id) => id !== user.id,
+			(id) => id !== reaction.user.id,
 		);
 		if (
 			prevCount ===
 			approval.approvalIds.length + approval.disapprovalIds.length
 		) {
-			return reaction.message
-				.reply({
-					content: "You have not approved or disapproved this poll",
-					flags: [MessageFlags.SuppressNotifications],
-				})
-				.then((message) =>
-					setTimeout(
-						() => message.delete().catch(console.error),
-						DELETE_AFTER_MS,
-					),
-				)
-				.catch(console.error);
+			return reaction.followUp({
+				content: "You have not approved or disapproved this poll",
+				flags: [MessageFlags.Ephemeral],
+			});
 		}
 		if (reaction.message.editable) {
 			await reaction.message
@@ -476,116 +491,93 @@ export async function updateApprovalMessage(
 				approval.approvalIds.length -
 				approval.disapprovalIds.length;
 			await changeCredit(
-				user.id,
+				reaction.user.id,
 				approval.options.credit * voted,
 				"Approval Reaction Refund",
 			);
-			await sendCreditNotification(
-				{ user, creditChanged: approval.options.credit * voted, reason: "Approval Reaction Refund", silent: true },
-			);
+			await sendCreditNotification({
+				user: reaction.user,
+				creditChanged: approval.options.credit * voted,
+				reason: "Approval Reaction Refund",
+				silent: true,
+			});
 		}
-		return await reaction.message
-			.reply({
-				content: `Cancelled by ${userMention(user.id)}`,
-				flags: [MessageFlags.SuppressNotifications],
-			})
-			.then((message) =>
-				setTimeout(
-					() => message.delete().catch(console.error),
-					DELETE_AFTER_MS,
-				),
-			)
-			.catch(console.error);
+		return await reaction.followUp({
+			content: `Cancelled by ${userMention(reaction.user.id)}`,
+			flags: [MessageFlags.Ephemeral],
+		});
 	}
 	if (
 		!canRepeatApprove &&
 		approving &&
-		approval.approvalIds.includes(user.id) &&
+		approval.approvalIds.includes(reaction.user.id) &&
 		!(superApprove && canSuperApprove)
 	) {
-		return await reaction.message
-			.reply({
-				content: "You have already approved this poll",
-				flags: [MessageFlags.SuppressNotifications],
-			})
-			.then((message) =>
-				setTimeout(
-					() => message.delete().catch(console.error),
-					DELETE_AFTER_MS,
-				),
-			)
-			.catch(console.error);
+		return await reaction.followUp({
+			content: "You have already approved this poll",
+			flags: [MessageFlags.Ephemeral],
+		});
 	}
 	if (
 		!canRepeatApprove &&
 		disapproving &&
-		approval.disapprovalIds.includes(user.id) &&
+		approval.disapprovalIds.includes(reaction.user.id) &&
 		!(superApprove && canSuperApprove)
 	) {
-		return await reaction.message
-			.reply({
-				content: "You have already disapproved this poll",
-				flags: [MessageFlags.SuppressNotifications],
-			})
-			.then((message) =>
-				setTimeout(
-					() => message.delete().catch(console.error),
-					DELETE_AFTER_MS,
-				),
-			)
-			.catch(console.error);
+		return await reaction.followUp({
+			content: "You have already disapproved this poll",
+			flags: [MessageFlags.Ephemeral],
+		});
 	}
 
 	// Check if the user is already in the opposite list and remove them
 	if (
 		!canRepeatApprove &&
 		disapproving &&
-		approval.approvalIds.includes(user.id) &&
+		approval.approvalIds.includes(reaction.user.id) &&
 		!(superApprove && canSuperApprove)
 	) {
 		approval.approvalIds = approval.approvalIds.filter(
-			(id) => id !== user.id,
+			(id) => id !== reaction.user.id,
 		);
 	} else if (
 		!canRepeatApprove &&
 		approving &&
-		approval.disapprovalIds.includes(user.id) &&
+		approval.disapprovalIds.includes(reaction.user.id) &&
 		!(superApprove && canSuperApprove)
 	) {
 		approval.disapprovalIds = approval.disapprovalIds.filter(
-			(id) => id !== user.id,
+			(id) => id !== reaction.user.id,
 		);
 		// Check if need to spend credit
 	} else if (approval.options.credit) {
 		const success = await spendCredit(
-			user.id,
+			reaction.user.id,
 			approval.options.credit,
 			"Approval Reaction",
 		);
 		if (!success) {
-			return await reaction.message
-				.reply({
-					content: `You do not have enough credit to approve this poll`,
-					flags: [MessageFlags.SuppressNotifications],
-				})
-				.then((message) =>
-					setTimeout(
-						() => message.delete().catch(console.error),
-						DELETE_AFTER_MS,
-					),
-				)
-				.catch(console.error);
+			return await reaction.followUp({
+				content: `You do not have enough credit to approve this poll`,
+				flags: [MessageFlags.Ephemeral],
+			});
 		}
-		await sendCreditNotification(
-			{ user, creditChanged: -approval.options.credit, reason: "Approval Reaction" },
-		);
+		await sendCreditNotification({
+			user: reaction.user,
+			creditChanged: -approval.options.credit,
+			reason: "Approval Reaction",
+		});
 	}
 
 	const status = approving
-		? approve(reaction.message.id, user.id, canSuperApprove && superApprove)
+		? approve(
+				reaction.message.id,
+				reaction.user.id,
+				canSuperApprove && superApprove,
+			)
 		: disapprove(
 				reaction.message.id,
-				user.id,
+				reaction.user.id,
 				canSuperApprove && superApprove,
 			);
 
@@ -601,9 +593,9 @@ export async function updateApprovalMessage(
 		? `${approval.approvalIds.length}/${approval.options.approvalCount || globalApprovalCount}`
 		: `${approval.disapprovalIds.length}/${approval.options.disapprovalCount || globalDisapprovalCount}`;
 
-	await reaction.message
-		.reply({
-			content: `${approving ? "Approved" : "Disapproved"} by ${userMention(user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,
+	await reaction
+		.followUp({
+			content: `${approving ? "Approved" : "Disapproved"} by ${userMention(reaction.user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,
 		})
 		.then((message) =>
 			setTimeout(
@@ -615,7 +607,7 @@ export async function updateApprovalMessage(
 
 	if (status === "pending") return;
 
-	await reaction.message.reactions.removeAll();
+	await reaction.message.edit({ components: [] });
 	await removeApproval(approval);
 
 	if (status === "approved") {
@@ -623,21 +615,21 @@ export async function updateApprovalMessage(
 	}
 	if (status === "disapproved") {
 		await approval.options.onFailure?.(approval, reaction.message);
-		return await reaction.message
-			.reply({
+		return await reaction
+			.followUp({
 				content: `The poll \`${approval.content}\` has been disapproved.`,
 			})
 			.catch(console.error);
 	}
 	if (status === "timeout") {
 		await approval.options.onTimeout?.(approval, reaction.message);
-		return await reaction.message
-			.reply({
+		return await reaction
+			.followUp({
 				content: `The poll \`${approval.content}\` has timed out.`,
 			})
 			.catch(console.error);
 	}
-	await reaction.message.reply({
+	await reaction.followUp({
 		content: "Unknown error occurred",
 		flags: [MessageFlags.SuppressNotifications],
 	});

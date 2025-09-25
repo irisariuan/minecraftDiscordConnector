@@ -21,6 +21,7 @@ import {
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { getNextTimestamp } from "./lib/time";
 import { setActivity } from "./lib/utils";
+import { BaseApprovalComponentId } from "./lib/approval/component";
 
 const commands = await loadCommands();
 
@@ -109,7 +110,7 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
 	if (interaction.isChatInputCommand()) {
 		if (
-			!compareAllPermissions(await readPermission(interaction.user.id), [
+			!compareAllPermissions(await readPermission(interaction.user), [
 				PermissionFlags.use,
 			])
 		) {
@@ -130,7 +131,7 @@ client.on("interactionCreate", async (interaction) => {
 		if (
 			command.permissions &&
 			!compareAllPermissions(
-				await readPermission(interaction.user.id),
+				await readPermission(interaction.user),
 				command.permissions,
 			)
 		) {
@@ -142,7 +143,7 @@ client.on("interactionCreate", async (interaction) => {
 		if (
 			isSuspending() &&
 			!comparePermission(
-				await readPermission(interaction.user.id),
+				await readPermission(interaction.user),
 				PermissionFlags.suspend,
 			)
 		) {
@@ -180,12 +181,18 @@ client.on("interactionCreate", async (interaction) => {
 			},
 		);
 	}
+	if (interaction.isMessageComponent() && interaction.isButton()) {
+		if (interaction.user.bot) return;
+		if (interaction.customId.startsWith(BaseApprovalComponentId)) {
+			return updateApprovalMessage(interaction);
+		}
+	}
 });
 
-client.on("messageReactionAdd", async (reaction, user) => {
-	if (user.bot) return;
-	updateApprovalMessage(reaction, user);
-});
+// client.on("messageReactionAdd", async (reaction, user) => {
+// 	if (user.bot) return;
+// 	updateApprovalMessage(reaction, user);
+// });
 
 serverManager.isOnline.cacheEvent.on("setData", (data) => {
 	setActivity(client, data || false, isSuspending());

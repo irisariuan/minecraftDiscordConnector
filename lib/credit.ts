@@ -144,7 +144,13 @@ export async function sendCreditNotification({
 					: ""
 			}\n*You could always check your credit by using \`/credit\` command.*`,
 			flags: silent ? [MessageFlags.SuppressNotifications] : [],
-			components: cancellable ? [new ActionRowBuilder<ButtonBuilder>().addComponents(createCancelButton())] : [],
+			components: cancellable
+				? [
+						new ActionRowBuilder<ButtonBuilder>().addComponents(
+							createCancelButton(),
+						),
+					]
+				: [],
 		})
 		.catch((err) => console.error("Error occured during DM", err));
 	if (cancellable && message) {
@@ -193,7 +199,7 @@ export function createCancelButton() {
 	return new ButtonBuilder()
 		.setCustomId(CreditNotificationButtonId.CancelButton)
 		.setLabel("Cancel Transaction")
-		.setStyle(ButtonStyle.Danger)
+		.setStyle(ButtonStyle.Danger);
 }
 
 export function createApproveButton() {
