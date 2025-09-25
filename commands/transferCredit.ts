@@ -41,10 +41,10 @@ export default {
 			settings.baseTransferringFee +
 			Math.ceil(settings.trasnferringPercentageFee * amount);
 		if (
-			settings.transferringDifferencePenaltyTrigger < 0 ||
+			settings.transferringDifferencePenaltyThreshold < 0 ||
 			Math.abs(
 				fromUserCredit.currentCredit - toUserCredit.currentCredit,
-			) > settings.transferringDifferencePenaltyTrigger
+			) > settings.transferringDifferencePenaltyThreshold
 		) {
 			totalTransferringFee += Math.ceil(
 				Math.abs(
