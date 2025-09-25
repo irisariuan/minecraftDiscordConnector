@@ -1,4 +1,5 @@
 import {
+	ButtonInteraction,
 	ComponentType,
 	MessageComponentInteraction,
 	StringSelectMenuInteraction,
@@ -6,17 +7,17 @@ import {
 	type ColorResolvable,
 } from "discord.js";
 import { CacheItem } from "./cache";
-import { clamp } from "./utils";
 import {
-	createEmbed,
-	PageAction,
-	createPageModal,
-	ModalAction,
-	createFilterModal,
 	createButtons,
-	type SelectMenuOption,
+	createEmbed,
+	createFilterModal,
+	createPageModal,
 	createSelectMenu,
+	ModalAction,
+	PageAction,
+	type SelectMenuOption,
 } from "./embed";
+import { clamp } from "./utils";
 
 interface GetPageProps {
 	page: number;
@@ -68,7 +69,7 @@ interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
 		force?: boolean,
 	) => Promise<T[] | undefined> | T[] | undefined;
 	/**
-	 * @returns {boolean} If we should continue to listen to the select menu
+	 * @returns {boolean} If we should stop to listen to the select menu
 	 */
 	onItemSelected?: (
 		interaction: StringSelectMenuInteraction,
@@ -76,15 +77,19 @@ interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
 	) => Promise<boolean> | boolean;
 }
 
-export async function sendPaginationMessage<T>({
-	getResult,
-	interaction,
-	options,
-	filterFunc,
-	formatter,
-	onItemSelected,
-	selectMenuTransform,
-}: SendPaginationMessageProps<T>) {
+export async function sendPaginationMessage<T>(
+	props: SendPaginationMessageProps<T>,
+) {
+	const {
+		getResult,
+		interaction,
+		options,
+		filterFunc,
+		formatter,
+		onItemSelected,
+		selectMenuTransform,
+		interactionFilter,
+	} = props;
 	let page = 0;
 	const result = new CacheItem<T[]>(null, {
 		updateMethod: async () =>
@@ -99,19 +104,16 @@ export async function sendPaginationMessage<T>({
 	let showSelectMenu = selectMenuTransform !== undefined;
 
 	const interactionResponse = await editInteraction({
+		...props,
 		result,
-		interaction,
 		page,
-		options,
-		filterFunc,
-		formatter,
-		selectMenuTransform,
 		showSelectMenu,
 	});
 
-	interactionResponse
+	const paginationCollector = interactionResponse
 		.createMessageComponentCollector({
 			componentType: ComponentType.Button,
+			filter: interactionFilter,
 		})
 		.on("collect", async (i) => {
 			if (i.customId === PageAction.SET_PAGE && !i.deferred) {
@@ -133,13 +135,9 @@ export async function sendPaginationMessage<T>({
 				);
 				return editInteraction({
 					result,
-					interaction,
 					page: clamp(page, 0, maxPage),
-					options,
-					filterFunc,
-					formatter,
 					showSelectMenu,
-					selectMenuTransform,
+					...props,
 				});
 			}
 
@@ -174,13 +172,9 @@ export async function sendPaginationMessage<T>({
 				});
 				return editInteraction({
 					result,
-					interaction,
 					page: clamp(page, 0, maxPage),
-					options,
-					filterFunc,
-					formatter,
-					selectMenuTransform,
 					showSelectMenu,
+					...props,
 				});
 			}
 
@@ -209,18 +203,15 @@ export async function sendPaginationMessage<T>({
 			});
 			await editInteraction({
 				result,
-				interaction,
 				page,
-				options,
-				filterFunc,
-				formatter,
 				showSelectMenu,
-				selectMenuTransform,
+				...props,
 			});
 		});
 
 	const collector = interactionResponse.createMessageComponentCollector({
 		componentType: ComponentType.StringSelect,
+		filter: interactionFilter,
 	});
 
 	collector.on("collect", async (item) => {
@@ -229,12 +220,14 @@ export async function sendPaginationMessage<T>({
 			showSelectMenu = false;
 		}
 	});
+	return paginationCollector;
 }
 
 interface BasePaginationProps<T> {
 	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
 	filterFunc?: (filter?: string) => (v: T) => boolean;
 	selectMenuTransform?: (v: T) => SelectMenuOption;
+	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
 	formatter: (v: T, i: number) => { name: string; value: string };
 	options?: PaginationOptions;
 }

@@ -39,7 +39,7 @@ export default {
 				.setDescription("Whether to only show stable releases"),
 		),
 	async execute(interaction, client) {
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		await interaction.deferReply();
 		const userPermission = await readPermission(interaction.user);
 		if (
 			!compareAnyPermissions(userPermission, [
@@ -55,7 +55,9 @@ export default {
 		const pluginOption = interaction.options.getString("plugin", true);
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
 
-		await sendPaginationMessage<PluginListVersionItem<true>>({
+		const collector = await sendPaginationMessage<PluginListVersionItem<true>>({
+			interactionFilter: (reaction) =>
+				reaction.user.id === interaction.user.id,
 			interaction,
 			getResult: async () =>
 				(
@@ -147,13 +149,18 @@ export default {
 					await menuInteraction.editReply({
 						content:
 							"Failed to download plugin or plugin already exists.",
+						components: [],
+						embeds: [],
 					});
 					return false;
 				}
 				await menuInteraction.editReply({
 					content:
 						"Plugin downloaded and appended successfully! You should restart the server to take effect",
+					components: [],
+					embeds: [],
 				});
+				collector.stop()
 				const found = (await result.getData())?.find(
 					(v) => v.id === value,
 				);
@@ -167,5 +174,4 @@ export default {
 			},
 		});
 	},
-	permissions: [PermissionFlags.downloadPlugin],
 } as CommandFile;
