@@ -133,12 +133,12 @@ export default {
 			onRefund: async (refundAmount) => {
 				await changeCredit(
 					interaction.user.id,
-					refundAmount,
+					-refundAmount,
 					"Transfer Credit Refund",
 				);
 				await sendCreditNotification({
 					user: interaction.user,
-					creditChanged: -refundAmount,
+					creditChanged: refundAmount,
 					reason: "Transfer Credit Refund",
 				});
 			},
