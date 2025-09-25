@@ -6,8 +6,11 @@ export interface CreditSettings {
 
 	baseTransferringFee: number;
 	trasnferringPercentageFee: number;
+	/**
+	 * Use a **float** for percentage, e.g. 0.1 for 10%
+	 */
 	transferringDifferencePenaltyPercentage: number;
-	transferringDifferencePenaltyTrigger: number;
+	transferringDifferencePenaltyThreshold: number;
 	maxTransferringFee: number;
 
 	checkUserCreditFee: number;
@@ -33,7 +36,7 @@ export const settings: CreditSettings = {
 	trasnferringPercentageFee: 0.05,
 	baseTransferringFee: 3,
 	transferringDifferencePenaltyPercentage: 0.1,
-	transferringDifferencePenaltyTrigger: 50,
+	transferringDifferencePenaltyThreshold: 50,
 	maxTransferringFee: 150,
 
 	checkUserCreditFee: 3,
