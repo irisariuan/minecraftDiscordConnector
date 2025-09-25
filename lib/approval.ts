@@ -1,31 +1,27 @@
 import {
+	ButtonInteraction,
 	EmbedBuilder,
-	type Message,
+	MessageFlags,
 	time,
 	userMention,
-	type PartialMessage,
 	type CommandInteraction,
-	type MessageReaction,
-	type User,
-	type PartialUser,
-	MessageFlags,
-	type PartialMessageReaction,
-	ButtonInteraction,
+	type Message,
+	type PartialMessage
 } from "discord.js";
-import type { PickAndOptional } from "./utils";
 import {
+	ApprovalMessageComponentId,
+	createApprovalMessageComponent,
+	parseApprovalComponentId,
+} from "./approval/component";
+import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
+import {
+	compareAnyPermissions,
 	comparePermission,
 	PermissionFlags,
-	compareAnyPermissions,
 	readPermission,
 } from "./permission";
 import { isSuspending } from "./suspend";
-import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
-import {
-	ApprovalComponentId,
-	createApprovalComponent,
-	parseApprovalId,
-} from "./approval/component";
+import type { PickAndOptional } from "./utils";
 
 export interface BaseApproval {
 	content: string;
@@ -52,6 +48,7 @@ export interface ApprovalOptions {
 	description: string;
 	approvalCount?: number;
 	disapprovalCount?: number;
+	requireSuperApproval?: boolean;
 	callerId: string;
 	startPollFee?: number;
 	credit?: number;
@@ -179,10 +176,14 @@ function checkApprovalStatus(approval: Approval): ApprovalStatus {
 	const approvalCount = approval.options.approvalCount || globalApprovalCount;
 	const disapprovalCount =
 		approval.options.disapprovalCount || globalDisapprovalCount;
-
+	const requireSuperApproval = approval.options.requireSuperApproval ?? false;
 	if (approval.validTill > Date.now()) {
 		if (approval.superStatus) return approval.superStatus;
-		if (approval.approvalIds.length >= approvalCount) return "approved";
+		if (
+			approval.approvalIds.length >= approvalCount &&
+			!requireSuperApproval
+		)
+			return "approved";
 		if (approval.disapprovalIds.length >= disapprovalCount)
 			return "disapproved";
 
@@ -324,7 +325,7 @@ export async function sendApprovalPoll(
 	);
 	const message = await interaction.reply({
 		embeds: [embed],
-		components: [createApprovalComponent()],
+		components: [createApprovalMessageComponent()],
 		withResponse: true,
 	});
 	const messageId = message.resource?.message?.id;
@@ -368,24 +369,14 @@ export async function sendApprovalPoll(
 			}
 			const newMessage = await approval.message.channel.send({
 				embeds: [createApprovalEmbed(approval)],
-				components: [createApprovalComponent()],
+				components: [createApprovalMessageComponent()],
 			});
 			transferApproval(approval, newMessage);
-			// await newMessage.react("✅");
-			// await newMessage.react("❌");
-			// await newMessage.react("📤");
-			// await newMessage.react("🏁");
-			// await newMessage.react("🏳️");
 		},
 	);
 	console.log(
 		`Polling for command ${interaction.commandName} with message id ${message.resource?.message?.id}`,
 	);
-	// await message.resource.message.react("✅");
-	// await message.resource.message.react("❌");
-	// await message.resource.message.react("📤");
-	// await message.resource.message.react("🏁");
-	// await message.resource.message.react("🏳️");
 }
 
 export async function updateApprovalMessage(reaction: ButtonInteraction) {
@@ -411,15 +402,15 @@ export async function updateApprovalMessage(reaction: ButtonInteraction) {
 		])
 	)
 		return;
-	const { approveVote, rejectVote, revokeVote } = parseApprovalId(
-		reaction.customId as ApprovalComponentId,
+	const { approveVote, rejectVote, revokeVote } = parseApprovalComponentId(
+		reaction.customId as ApprovalMessageComponentId,
 	);
 	await reaction.deferReply();
 	if (canSuperApprove && (approveVote || rejectVote)) {
 		const answer = await reaction.followUp({
 			content: `Do you want to super ${approveVote ? "approve" : "reject"} this poll?`,
 			components: [
-				createApprovalComponent({
+				createApprovalMessageComponent({
 					showSuperOptions: true,
 					showApprove: approveVote,
 					showReject: rejectVote,
@@ -433,13 +424,13 @@ export async function updateApprovalMessage(reaction: ButtonInteraction) {
 			})
 			.catch(() => null);
 		await answer.delete();
-		if (!res || res.customId === ApprovalComponentId.Revoke) {
+		if (!res || res.customId === ApprovalMessageComponentId.Revoke) {
 			return await reaction.followUp({
 				content: "Timeout or cancelled, no action taken",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		const final = parseApprovalId(res.customId as ApprovalComponentId);
+		const final = parseApprovalComponentId(res.customId as ApprovalMessageComponentId);
 		approving = final.approveVote;
 		superApprove = final.superVote;
 		disapproving = final.rejectVote;

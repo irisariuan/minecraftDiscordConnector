@@ -13,15 +13,11 @@ import {
 	readPermission,
 } from "./lib/permission";
 import { serverManager } from "./lib/server";
-import {
-	changeCreditSettings,
-	loadSettings,
-	settings,
-} from "./lib/settings";
+import { changeCreditSettings, loadSettings, settings } from "./lib/settings";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { getNextTimestamp } from "./lib/time";
 import { setActivity } from "./lib/utils";
-import { BaseApprovalComponentId } from "./lib/approval/component";
+import { isApprovalMessageComponentId } from "./lib/approval/component";
 
 const commands = await loadCommands();
 
@@ -98,9 +94,12 @@ client.once("ready", async () => {
 			await changeCredit(userId, giveCredits, "System Gift");
 			const user = client.users.cache.get(userId);
 			if (user) {
-				await sendCreditNotification(
-					{ user, creditChanged: giveCredits, reason: "System Gift", silent: true },
-				);
+				await sendCreditNotification({
+					user,
+					creditChanged: giveCredits,
+					reason: "System Gift",
+					silent: true,
+				});
 			}
 		}
 		console.log(`Gave ${giveCredits} credits to ${users.join(", ")}`);
@@ -183,16 +182,11 @@ client.on("interactionCreate", async (interaction) => {
 	}
 	if (interaction.isMessageComponent() && interaction.isButton()) {
 		if (interaction.user.bot) return;
-		if (interaction.customId.startsWith(BaseApprovalComponentId)) {
+		if (isApprovalMessageComponentId(interaction.customId)) {
 			return updateApprovalMessage(interaction);
 		}
 	}
 });
-
-// client.on("messageReactionAdd", async (reaction, user) => {
-// 	if (user.bot) return;
-// 	updateApprovalMessage(reaction, user);
-// });
 
 serverManager.isOnline.cacheEvent.on("setData", (data) => {
 	setActivity(client, data || false, isSuspending());
@@ -227,9 +221,12 @@ setTimeout(async () => {
 			await changeCredit(userId, giftAmount, "Daily Gift");
 			const user = client.users.cache.get(userId);
 			if (user) {
-				await sendCreditNotification(
-					{ user, creditChanged: giftAmount, reason: "Daily Gift", silent: true },
-				);
+				await sendCreditNotification({
+					user,
+					creditChanged: giftAmount,
+					reason: "Daily Gift",
+					silent: true,
+				});
 			}
 		}
 	};
@@ -259,9 +256,12 @@ async function exitHandler() {
 			);
 			const user = client.users.cache.get(approval.options.callerId);
 			if (user) {
-				await sendCreditNotification(
-					{ user, creditChanged: approval.options.startPollFee, reason: "New Approval Poll Refund", silent: true },
-				);
+				await sendCreditNotification({
+					user,
+					creditChanged: approval.options.startPollFee,
+					reason: "New Approval Poll Refund",
+					silent: true,
+				});
 			}
 		}
 		if (approval.options.credit) {
@@ -275,9 +275,12 @@ async function exitHandler() {
 				);
 				const user = client.users.cache.get(id);
 				if (user) {
-					await sendCreditNotification(
-						{ user, creditChanged: approval.options.credit, reason: "Approval Reaction Refund", silent: true },
-					);
+					await sendCreditNotification({
+						user,
+						creditChanged: approval.options.credit,
+						reason: "Approval Reaction Refund",
+						silent: true,
+					});
 				}
 			}
 		}
