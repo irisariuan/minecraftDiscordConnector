@@ -33,7 +33,7 @@ export default {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 		if (
 			!comparePermission(
-				await readPermission(interaction.user.id),
+				await readPermission(interaction.user),
 				PermissionFlags.downloadPlugin,
 			)
 		) {

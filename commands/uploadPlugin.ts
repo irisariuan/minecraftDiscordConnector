@@ -48,7 +48,7 @@ export default {
 		}
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 		if (
-			!compareAnyPermissions(await readPermission(interaction.user.id), [
+			!compareAnyPermissions(await readPermission(interaction.user), [
 				PermissionFlags.downloadPlugin,
 				PermissionFlags.voteDownloadPlugin,
 			])
@@ -172,7 +172,7 @@ export default {
 		);
 		if (
 			comparePermission(
-				await readPermission(interaction.user.id),
+				await readPermission(interaction.user),
 				PermissionFlags.downloadPlugin,
 			)
 		) {
@@ -225,7 +225,7 @@ export default {
 						["✅", "❌"].includes(reaction.emoji.name) &&
 						!user.bot &&
 						comparePermission(
-							await readPermission(user.id),
+							await readPermission(user),
 							PermissionFlags.downloadPlugin,
 						)
 					),
