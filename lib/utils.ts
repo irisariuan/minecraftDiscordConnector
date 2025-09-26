@@ -49,7 +49,7 @@ export async function safeFetch(
 ) {
 	if (timeout) {
 		const { signal, cancel } = newTimeoutSignal(timeout);
-		const opts = {
+		const opts: RequestInit = {
 			...options,
 			signal,
 			cache: cache ? "force-cache" : "default",
