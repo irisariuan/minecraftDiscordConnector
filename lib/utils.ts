@@ -20,16 +20,15 @@ export function newTimeoutSignal(time: number) {
 	};
 }
 
-export function createDisposableWritableStream(
+export function createDecodeWritableStream(
 	onData: (chunk: string) => void,
 	onClose?: () => void,
 	onAbort?: (err: Error) => void,
 ) {
+	const decoder = new TextDecoder();
 	return new WritableStream<Uint8Array<ArrayBufferLike>>({
 		write(chunk) {
-			const decoder = new TextDecoder();
-			const text = decoder.decode(chunk);
-			onData(text);
+			onData(decoder.decode(chunk));
 		},
 		close() {
 			onClose?.();
