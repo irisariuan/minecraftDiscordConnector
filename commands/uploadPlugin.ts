@@ -17,6 +17,7 @@ import {
 	spendCredit,
 } from "../lib/credit";
 import {
+	anyPerm,
 	compareAnyPermissions,
 	comparePermission,
 	getUsersMatchedPermission,
@@ -47,16 +48,6 @@ export default {
 			});
 		}
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		if (
-			!compareAnyPermissions(await readPermission(interaction.user), [
-				PermissionFlags.downloadPlugin,
-				PermissionFlags.voteDownloadPlugin,
-			])
-		) {
-			return interaction.editReply({
-				content: "You do not have permission to upload plugins.",
-			});
-		}
 
 		if (
 			!(await spendCredit(
@@ -69,9 +60,11 @@ export default {
 				content: "You don't have enough credit to upload mod to server",
 			});
 		}
-		await sendCreditNotification(
-			{ user: interaction.user, creditChanged: -settings.uploadFileFee, reason: "Upload Custom Mod to Server" },
-		);
+		await sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -settings.uploadFileFee,
+			reason: "Upload Custom Mod to Server",
+		});
 		const thread = await interaction.channel.threads.create({
 			name: "Upload File",
 			invitable: false,
@@ -137,9 +130,11 @@ export default {
 					settings.uploadFileFee,
 					"Refund for cancelled Upload Custom Mod to Server",
 				);
-				sendCreditNotification(
-					{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for cancelled Upload Custom Mod to Server" },
-				);
+				sendCreditNotification({
+					user: interaction.user,
+					creditChanged: settings.uploadFileFee,
+					reason: "Refund for cancelled Upload Custom Mod to Server",
+				});
 				setTimeout(cleanUp, 1000 * 10);
 				return;
 			}
@@ -156,9 +151,11 @@ export default {
 					settings.uploadFileFee,
 					"Refund for cancelled Upload Custom Mod to Server",
 				);
-				sendCreditNotification(
-					{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for cancelled Upload Custom Mod to Server" },
-				);
+				sendCreditNotification({
+					user: interaction.user,
+					creditChanged: settings.uploadFileFee,
+					reason: "Refund for cancelled Upload Custom Mod to Server",
+				});
 				setTimeout(cleanUp, 1000 * 10);
 				return;
 			}
@@ -192,9 +189,11 @@ export default {
 					settings.uploadFileFee,
 					"Refund for failed to add uploaded Custom Mod to Server",
 				);
-				sendCreditNotification(
-					{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for failed to add uploaded Custom Mod to Server" },
-				);
+				sendCreditNotification({
+					user: interaction.user,
+					creditChanged: settings.uploadFileFee,
+					reason: "Refund for failed to add uploaded Custom Mod to Server",
+				});
 			}
 			return setTimeout(cleanUp, 1000 * 10);
 		}
@@ -265,9 +264,11 @@ export default {
 							settings.uploadFileFee,
 							"Refund for failed to add uploaded Custom Mod to Server",
 						);
-						sendCreditNotification(
-							{ user: interaction.user, creditChanged: settings.uploadFileFee, reason: "Refund for failed to add uploaded Custom Mod to Server" },
-						);
+						sendCreditNotification({
+							user: interaction.user,
+							creditChanged: settings.uploadFileFee,
+							reason: "Refund for failed to add uploaded Custom Mod to Server",
+						});
 					}
 				} else {
 					uploadServerManager.disposeToken(token);
@@ -287,4 +288,8 @@ export default {
 			});
 		setTimeout(cleanUp, 1000 * 60 * 10);
 	},
+	permissions: anyPerm(
+		PermissionFlags.downloadPlugin,
+		PermissionFlags.voteDownloadPlugin,
+	),
 } as CommandFile;

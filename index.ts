@@ -36,50 +36,53 @@ const client = new Client({
 	],
 });
 
-const giveCredits = Number.parseInt(
-	await input({
-		message: "Give credits to users?",
-		required: true,
-		default: "0",
-		validate: (value) => {
-			const num = Number.parseInt(value);
-			if (isNaN(num) || num < 0)
-				return "Please enter a valid number bigger or equals to 0";
-			return true;
-		},
-	}),
-);
+const giveCredits = process.argv.includes("-C")
+	? Number.parseInt(
+			await input({
+				message: "Give credits to users?",
+				required: true,
+				default: "0",
+				validate: (value) => {
+					const num = Number.parseInt(value);
+					if (isNaN(num) || num < 0)
+						return "Please enter a valid number bigger or equals to 0";
+					return true;
+				},
+			}),
+		)
+	: 0;
 
 const currentSettings = await loadSettings();
 console.log("Loaded custom settings");
-
-changeCreditSettings({
-	dailyGift: Number.parseInt(
-		await input({
-			message: "Daily gift amount?",
-			required: true,
-			default: (currentSettings.dailyGift ?? 5).toString(),
-			validate: (value) => {
-				const num = Number.parseInt(value);
-				if (isNaN(num) || num < 0)
-					return "Please enter a valid number bigger or equals to 0";
-				return true;
-			},
-		}),
-	),
-	giftMax: Number.parseInt(
-		await input({
-			message: "Gift users below this amount? (negative to disable)",
-			required: true,
-			default: (currentSettings.giftMax ?? 100).toString(),
-			validate: (value) => {
-				const num = Number.parseInt(value);
-				if (isNaN(num)) return "Please enter a valid number";
-				return true;
-			},
-		}),
-	),
-});
+if (process.argv.includes("-C")) {
+	changeCreditSettings({
+		dailyGift: Number.parseInt(
+			await input({
+				message: "Daily gift amount?",
+				required: true,
+				default: (currentSettings.dailyGift ?? 5).toString(),
+				validate: (value) => {
+					const num = Number.parseInt(value);
+					if (isNaN(num) || num < 0)
+						return "Please enter a valid number bigger or equals to 0";
+					return true;
+				},
+			}),
+		),
+		giftMax: Number.parseInt(
+			await input({
+				message: "Gift users below this amount? (negative to disable)",
+				required: true,
+				default: (currentSettings.giftMax ?? 100).toString(),
+				validate: (value) => {
+					const num = Number.parseInt(value);
+					if (isNaN(num)) return "Please enter a valid number";
+					return true;
+				},
+			}),
+		),
+	});
+}
 
 client.once("ready", async () => {
 	console.log(`Logged in as ${client.user?.tag}`);
@@ -129,7 +132,7 @@ client.on("interactionCreate", async (interaction) => {
 			});
 		if (
 			command.permissions &&
-			!compareAllPermissions(
+			!comparePermission(
 				await readPermission(interaction.user),
 				command.permissions,
 			)

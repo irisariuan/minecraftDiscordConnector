@@ -120,5 +120,5 @@ export default {
 			});
 		}
 	},
-	permissions: [PermissionFlags.creditEdit],
+	permissions: PermissionFlags.creditEdit,
 } as CommandFile;

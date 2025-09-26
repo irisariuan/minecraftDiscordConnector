@@ -39,17 +39,25 @@ export const allPermission = Object.values(PermissionFlags).reduce(
 
 export const PERMISSION = `${process.cwd()}/data/permissions.json`;
 
-export type Permission = (typeof PermissionFlags)[keyof typeof PermissionFlags];
+export type Permission = number | PermissionComparsion;
 
-export function comparePermission(a: Permission, b: Permission) {
-	return (a & b) === b;
+export type PermissionCompareType = "any" | "all";
+export interface PermissionComparsion {
+	type: PermissionCompareType;
+	value: Permission[];
 }
 
-export function compareAnyPermissions(a: Permission, b: Permission[]) {
+export function comparePermission(a: number, b: Permission): boolean {
+	if (typeof b === "number") return (a & b) === b;
+	if (b.type === "any") return b.value.some((v) => comparePermission(a, v));
+	return b.value.every((v) => comparePermission(a, v));
+}
+
+export function compareAnyPermissions(a: number, b: number[]) {
 	return b.some((v) => comparePermission(a, v));
 }
 
-export function compareAllPermissions(a: Permission, b: Permission[]) {
+export function compareAllPermissions(a: number, b: number[]) {
 	return b.every((v) => comparePermission(a, v));
 }
 
@@ -60,7 +68,7 @@ export async function readPermission(user: string | Pick<User, "id">) {
 	);
 }
 
-export function createPermission(permissions: Permission[]) {
+export function createPermission(permissions: number[]) {
 	return permissions.reduce((acc, cur) => acc | cur, 0);
 }
 
@@ -71,7 +79,7 @@ export async function getUsersMatchedPermission(permission: Permission) {
 		.map(([user]) => user);
 }
 
-export function parsePermission(permission: Permission): string[] {
+export function parsePermission(permission: number): string[] {
 	return Object.entries(PermissionFlags)
 		.filter(([_, value]) => comparePermission(permission, value))
 		.map(([key]) => key);
@@ -79,7 +87,7 @@ export function parsePermission(permission: Permission): string[] {
 
 export async function appendPermission(
 	user: string,
-	permission: Permission[] | Permission,
+	permission: number[] | number,
 ) {
 	const currentPermission = await readPermission(user);
 	const newPermission = Array.isArray(permission)
@@ -92,7 +100,7 @@ export async function appendPermission(
 
 export async function removePermission(
 	user: string,
-	permission: Permission[] | Permission,
+	permission: number[] | number,
 ) {
 	const currentPermission = await readPermission(user);
 	const newPermission = Array.isArray(permission)
@@ -101,4 +109,17 @@ export async function removePermission(
 	const updatedPermission = currentPermission & ~newPermission;
 	await updateUserPermission(user, updatedPermission);
 	return updatedPermission;
+}
+
+export function anyPerm(...permissions: Permission[]): PermissionComparsion {
+	return {
+		type: "any",
+		value: permissions,
+	};
+}
+export function allPerm(...permissions: Permission[]): PermissionComparsion {
+	return {
+		type: "all",
+		value: permissions,
+	};
 }

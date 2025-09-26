@@ -8,6 +8,7 @@ import type {
 	User,
 } from "discord.js";
 import { join } from "node:path";
+import type { Permission } from "./permission";
 
 export interface CommandFile {
 	command: SlashCommandBuilder;
@@ -20,7 +21,7 @@ export interface CommandFile {
 		user: User | PartialUser,
 		client: Client,
 	) => unknown | Promise<unknown>;
-	permissions?: number[];
+	permissions?: Permission;
 }
 
 export async function loadCommands() {
