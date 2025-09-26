@@ -16,7 +16,7 @@ import {
 	type PluginListVersionItem,
 } from "../lib/plugin";
 import {
-	compareAnyPermissions,
+	anyPerm,
 	comparePermission,
 	PermissionFlags,
 	readPermission,
@@ -41,21 +41,13 @@ export default {
 	async execute(interaction, client) {
 		await interaction.deferReply();
 		const userPermission = await readPermission(interaction.user);
-		if (
-			!compareAnyPermissions(userPermission, [
-				PermissionFlags.downloadPlugin,
-				PermissionFlags.voteDownloadPlugin,
-			])
-		) {
-			return interaction.editReply({
-				content: "You do not have permission to download plugins.",
-			});
-		}
 
 		const pluginOption = interaction.options.getString("plugin", true);
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
 
-		const collector = await sendPaginationMessage<PluginListVersionItem<true>>({
+		const collector = await sendPaginationMessage<
+			PluginListVersionItem<true>
+		>({
 			interactionFilter: (reaction) =>
 				reaction.user.id === interaction.user.id,
 			interaction,
@@ -160,7 +152,7 @@ export default {
 					components: [],
 					embeds: [],
 				});
-				collector.stop()
+				collector.stop();
 				const found = (await result.getData())?.find(
 					(v) => v.id === value,
 				);
@@ -174,4 +166,8 @@ export default {
 			},
 		});
 	},
+	permissions: anyPerm(
+		PermissionFlags.downloadPlugin,
+		PermissionFlags.voteDownloadPlugin,
+	),
 } as CommandFile;

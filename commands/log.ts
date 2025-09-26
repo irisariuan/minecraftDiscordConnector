@@ -41,5 +41,5 @@ export default {
 			},
 		});
 	},
-	permissions: [PermissionFlags.readLog],
+	permissions: PermissionFlags.readLog,
 } as CommandFile;

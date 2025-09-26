@@ -148,5 +148,5 @@ export default {
 			flags: [MessageFlags.Ephemeral],
 		})
 	},
-	permissions: [PermissionFlags.editPerm],
+	permissions: PermissionFlags.editPerm,
 } as CommandFile;

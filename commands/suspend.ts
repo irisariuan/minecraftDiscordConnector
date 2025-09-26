@@ -22,5 +22,5 @@ export default {
 			flags: [MessageFlags.Ephemeral],
 		});
 	},
-	permissions: [PermissionFlags.suspend],
+	permissions: PermissionFlags.suspend,
 } as CommandFile;
