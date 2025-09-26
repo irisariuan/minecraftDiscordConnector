@@ -2,7 +2,7 @@ import { spawn, type Subprocess } from "bun";
 import { CacheItem } from "./cache";
 import { isServerAlive, type LogLine } from "./request";
 import { join } from "node:path";
-import { createDisposableWritableStream, safeFetch } from "./utils";
+import { createDecodeWritableStream, safeFetch } from "./utils";
 import { EventEmitter } from "node:events";
 import { stripVTControlCharacters } from "node:util";
 
@@ -111,7 +111,7 @@ class ServerManager {
 		this.isOnline.setData(true);
 
 		this.instance.stdout.pipeTo(
-			createDisposableWritableStream((chunk) => {
+			createDecodeWritableStream((chunk) => {
 				console.log(`[Minecraft Server] ${chunk}`);
 				this.serverMessageEmitter.emitMessage(chunk);
 				const unformattedChunk = stripVTControlCharacters(chunk);
