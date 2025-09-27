@@ -1,8 +1,9 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { channelMention, MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { serverManager } from "../lib/server";
 import {
 	comparePermission,
+	getUsersWithMatchedPermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
@@ -10,6 +11,7 @@ import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
+import { sendMessagesToUsersById } from "../lib/utils";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -114,7 +116,17 @@ export default {
 						});
 
 					if (seconds > 0) {
-						promise?.then(() => {
+						promise?.then(async () => {
+							const users = await getUsersWithMatchedPermission(
+								PermissionFlags.receiveNotification,
+							);
+							if (users) {
+								sendMessagesToUsersById(
+									client,
+									users,
+									`Server stopped with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)}`,
+								);
+							}
 							message
 								.reply({
 									content: "Server stopped successfully",

@@ -1,4 +1,9 @@
-import { ActivityType, type Client } from "discord.js";
+import {
+	ActivityType,
+	MessagePayload,
+	type Client,
+	type MessageCreateOptions,
+} from "discord.js";
 import { MINECRAFT_VERSION } from "./plugin";
 import { join } from "path";
 
@@ -134,4 +139,20 @@ export function safeJoin(...paths: string[]) {
 		throw new Error("Unsafe path detected");
 	}
 	return finalPath;
+}
+
+export async function sendMessagesToUsersById(
+	client: Client,
+	users: string[],
+	message: MessagePayload | MessageCreateOptions | string,
+) {
+	for (const userId of users) {
+		const user = await client.users.fetch(userId).catch(() => null);
+		if (!user) continue;
+		user.send(message).catch(() => {
+			console.log(
+				`Failed to send notification to ${user.username} (${userId})`,
+			);
+		});
+	}
 }

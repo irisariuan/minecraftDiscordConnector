@@ -73,7 +73,7 @@ export function createPermission(permissions: number[]) {
 	return permissions.reduce((acc, cur) => acc | cur, 0);
 }
 
-export async function getUsersMatchedPermission(permission: Permission) {
+export async function getUsersWithMatchedPermission(permission: Permission) {
 	const allPerm = await getAllUserPermissions();
 	return Object.entries(allPerm)
 		.filter(([_, perm]) => comparePermission(perm, permission))
