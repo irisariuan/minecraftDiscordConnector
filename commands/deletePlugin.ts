@@ -21,7 +21,7 @@ export default {
 		),
 	async execute(interaction, client) {
 		const plugin = interaction.options.getString("plugin", true);
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		await interaction.deferReply();
 		const deleteFunc = async () => {
 			if (await removePluginByFileName(plugin)) {
 				await interaction.editReply({
