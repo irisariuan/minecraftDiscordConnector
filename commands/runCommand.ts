@@ -2,6 +2,7 @@ import {
 	channelMention,
 	MessageFlags,
 	SlashCommandBuilder,
+	time,
 	userMention,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
@@ -103,7 +104,7 @@ export default {
 							sendMessagesToUsersById(
 								client,
 								users,
-								`Command \`${command}\` executed with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)}`,
+								`Command \`${command}\` executed with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)} (${time(approval.createdAt)})`,
 							);
 						}
 						if (!success) {

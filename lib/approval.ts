@@ -23,7 +23,10 @@ import {
 import { isSuspending } from "./suspend";
 import type { PickAndOptional } from "./utils";
 
-export interface BaseApproval {
+/**
+ * All core components needed for the approval system to work
+ */
+export interface CoreApproval {
 	content: string;
 	validTill: number;
 	duration: number;
@@ -31,8 +34,9 @@ export interface BaseApproval {
 	disapprovalIds: string[];
 }
 
-export interface Approval extends BaseApproval {
+export interface Approval extends CoreApproval {
 	superStatus: "approved" | "disapproved" | null;
+	createdAt: number;
 	options: ApprovalOptions;
 	message: Message | PartialMessage;
 	originalMessageId: string;
@@ -237,7 +241,7 @@ function createUserMentions(ids: string[]) {
 }
 
 export function createInternalApprovalEmbed(
-	approval: BaseApproval & {
+	approval: CoreApproval & {
 		options: Pick<
 			ApprovalOptions,
 			"description" | "approvalCount" | "disapprovalCount"
@@ -335,6 +339,7 @@ export async function sendApprovalPoll(
 	}
 	newApproval(
 		{
+			createdAt: Date.now(),
 			content,
 			validTill,
 			duration,
