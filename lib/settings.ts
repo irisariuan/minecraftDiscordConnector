@@ -1,3 +1,5 @@
+import { defaultCreditSettings } from "../defaultSettings";
+
 const SETTINGS = `${process.cwd()}/data/settings.json`;
 
 export interface CreditSettings {
@@ -29,52 +31,24 @@ export interface CreditSettings {
 
 	uploadFileFee: number;
 }
-export const settings: CreditSettings = {
-	dailyGift: 20,
-	giftMax: 70,
+export let settings: CreditSettings = defaultCreditSettings;
 
-	trasnferringPercentageFee: 0.05,
-	baseTransferringFee: 3,
-	transferringDifferencePenaltyPercentage: 0.1,
-	transferringDifferencePenaltyThreshold: 50,
-	maxTransferringFee: 150,
-
-	checkUserCreditFee: 3,
-	checkUserPermissionFee: 3,
-	refreshDnsFee: 3,
-
-	newRunCommandPollFee: 20,
-	newCancelStopServerPollFee: 30,
-	newStartServerPollFee: 30,
-	newStopServerPollFee: 30,
-
-	runCommandVoteFee: 20,
-	startServerVoteFee: 15,
-	cancelStopServerVoteFee: 15,
-	stopServerVoteFee: 15,
-	uploadFileFee: 70,
-};
-
-export function setSetting(changes: Partial<CreditSettings>) {
-	for (const [key, val] of Object.entries(changes)) {
-		if (key in settings) {
-			settings[key as keyof CreditSettings] = val;
-		}
-	}
+export function setCreditSettings(changes: Partial<CreditSettings>) {
+	settings = { ...settings, ...changes };
 }
 
-async function saveSettings(settings: Partial<CreditSettings>) {
-	const currentLocalSettings = await loadSettings();
+async function saveCreditSettings(settings: Partial<CreditSettings>) {
+	const currentLocalSettings = await loadCreditSettings();
 	const newSettings = { ...currentLocalSettings, ...settings };
 	return await Bun.write(SETTINGS, JSON.stringify(newSettings, null, 4));
 }
 
 export async function changeCreditSettings(changes: Partial<CreditSettings>) {
-	setSetting(changes);
-	await saveSettings(changes);
+	setCreditSettings(changes);
+	await saveCreditSettings(changes);
 }
 
-export async function loadSettings(): Promise<Partial<CreditSettings>> {
+export async function loadCreditSettings(): Promise<Partial<CreditSettings>> {
 	const settings = Bun.file(SETTINGS);
 	if (!(await settings.exists())) return {};
 	const data = await settings.json().catch(() => ({}));
