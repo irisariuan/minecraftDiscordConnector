@@ -2,6 +2,7 @@ import {
 	channelMention,
 	MessageFlags,
 	SlashCommandBuilder,
+	time,
 	userMention,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
@@ -133,7 +134,7 @@ export default {
 								sendMessagesToUsersById(
 									client,
 									users,
-									`Server stopped with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)}`,
+									`Server stopped with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)}  (${time(approval.createdAt)})`,
 								);
 							}
 							message

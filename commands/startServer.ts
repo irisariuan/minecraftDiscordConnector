@@ -2,6 +2,7 @@ import {
 	channelMention,
 	MessageFlags,
 	SlashCommandBuilder,
+	time,
 	userMention,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
@@ -16,7 +17,6 @@ import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
-import { c } from "../webUi/dist/server/chunks/astro/server_D518bSdL.mjs";
 import { sendMessagesToUsersById } from "../lib/utils";
 
 export default {
@@ -104,7 +104,7 @@ export default {
 						sendMessagesToUsersById(
 							client,
 							users,
-							`Server started with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)}`,
+							`Server started with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)} (${time(approval.createdAt)})`,
 						);
 					}
 					await message.reply({
