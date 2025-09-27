@@ -1,4 +1,9 @@
-import { channelMention, MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
+import {
+	channelMention,
+	MessageFlags,
+	SlashCommandBuilder,
+	userMention,
+} from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { serverManager } from "../lib/server";
 import {
@@ -37,7 +42,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		
+
 		const seconds = interaction.options.getInteger("seconds") ?? 0;
 		const force = interaction.options.getBoolean("force") || false;
 		if (!(await isServerAlive()))
@@ -99,7 +104,11 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({ user: interaction.user, creditChanged: -settings.newStopServerPollFee, reason: "New Stop Server Poll" });
+		await sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -settings.newStopServerPollFee,
+			reason: "New Stop Server Poll",
+		});
 		sendApprovalPoll(interaction, {
 			content: displayString,
 			options: {

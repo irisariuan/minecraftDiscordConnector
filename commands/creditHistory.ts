@@ -3,7 +3,7 @@ import {
 	italic,
 	MessageFlags,
 	SlashCommandBuilder,
-	time
+	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { getCredit, sendCreditNotification, spendCredit } from "../lib/credit";
@@ -39,7 +39,11 @@ export default {
 						"You don't have enough credit to check other users' credit",
 				});
 			}
-			await sendCreditNotification({ user: interaction.user, creditChanged: -settings.checkUserCreditFee, reason: "Check Credit of Other Users" })
+			await sendCreditNotification({
+				user: interaction.user,
+				creditChanged: -settings.checkUserCreditFee,
+				reason: "Check Credit of Other Users",
+			});
 		}
 
 		const creditData = await getCredit(user.id);

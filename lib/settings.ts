@@ -30,6 +30,7 @@ export interface CreditSettings {
 	stopServerVoteFee: number;
 
 	uploadFileFee: number;
+	deletePluginFee: number;
 }
 export let settings: CreditSettings = defaultCreditSettings;
 

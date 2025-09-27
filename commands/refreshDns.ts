@@ -12,10 +12,18 @@ export default {
 		),
 	async execute(interaction, client) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		if (await spendCredit(interaction.user.id, settings.refreshDnsFee, "Refresh DNS Record")) {
-			await sendCreditNotification(
-				{ user: interaction.user, creditChanged: -settings.refreshDnsFee, reason: "Refresh DNS Record" },
-			);
+		if (
+			await spendCredit(
+				interaction.user.id,
+				settings.refreshDnsFee,
+				"Refresh DNS Record",
+			)
+		) {
+			await sendCreditNotification({
+				user: interaction.user,
+				creditChanged: -settings.refreshDnsFee,
+				reason: "Refresh DNS Record",
+			});
 		}
 		const status = await updateDnsRecord().catch((err) => {
 			console.error(err);
