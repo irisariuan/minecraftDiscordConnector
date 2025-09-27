@@ -7,7 +7,7 @@ import {
 	PermissionFlags,
 	anyPerm,
 } from "../lib/permission";
-import { createRequestComponent } from "../lib/components";
+import { createRequestComponent, RequestComponentId } from "../lib/components";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -64,7 +64,7 @@ export default {
 				components: [],
 			});
 		}
-		if (reply.customId === "deny") {
+		if (reply.customId === RequestComponentId.Deny) {
 			return await interaction.editReply({
 				content: "Request denied.",
 				components: [],
