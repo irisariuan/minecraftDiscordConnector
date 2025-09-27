@@ -1,7 +1,9 @@
 import {
+	ButtonInteraction,
 	channelMention,
 	ChannelType,
 	Collection,
+	ComponentType,
 	MessageFlags,
 	MessageReaction,
 	SlashCommandBuilder,
@@ -30,6 +32,7 @@ import {
 	downloadWebPluginFileToLocal,
 } from "../lib/plugin/web";
 import { settings } from "../lib/settings";
+import { createRequestComponent } from "../lib/components";
 
 if (!process.env.UPLOAD_URL) {
 	throw new Error("UPLOAD_URL is not set in environment variables");
@@ -83,23 +86,27 @@ export default {
 		});
 		await thread.members.add(interaction.user);
 		const expire = new Date(Date.now() + 1000 * 60 * 30); // 30 minutes
-		const cancelMessage = await thread.send(
-			`Please your file as attachment here before ${time(expire)}. We accept \`.jar\`, \`.yaml\`, \`.yml\`, \`.conf\` and \`.zip\` files\nTo cancel the upload, react with ❌\nIf no file is uploaded before the expiration time, the upload will be cancelled **without** refunding.`,
-		);
-		await cancelMessage.react("❌");
+		const cancelMessage = await thread.send({
+			content: `Please your file as attachment here before ${time(expire)}. We accept \`.jar\`, \`.yaml\`, \`.yml\`, \`.conf\` and \`.zip\` files\nTo cancel the upload, click the cancel button\nIf no file is uploaded before the expiration time, the upload will be cancelled **without** refunding.`,
+			components: [
+				createRequestComponent({
+					showAllow: false,
+					showDeny: false,
+					showCancel: true,
+				}),
+			],
+		});
 		const token = uploadServerManager.createToken();
 		await thread.send(
 			`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
 		);
 		const messages = await Promise.race([
 			uploadServerManager.awaitToken(token, 1000 * 60 * 30),
-			cancelMessage.awaitReactions({
-				filter: (reaction, user) =>
-					reaction.emoji.name === "❌" &&
-					user.id === interaction.user.id,
+			cancelMessage.awaitMessageComponent({
+				filter: (componentInteraction) =>
+					componentInteraction.user.id === interaction.user.id,
 				time: 1000 * 60 * 30, // 30 minutes
-				max: 1,
-				errors: ["time"],
+				componentType: ComponentType.Button,
 			}),
 			thread.awaitMessages({
 				filter: (message) =>
@@ -110,34 +117,32 @@ export default {
 				errors: ["time"],
 			}),
 		]);
+		if (messages instanceof ButtonInteraction) {
+			await thread.send("Upload cancelled.");
+			await thread.setLocked(true);
+			await thread.setArchived(true);
+			uploadServerManager.disposeToken(token);
+			changeCredit(
+				interaction.user.id,
+				settings.uploadFileFee,
+				"Refund for cancelled Upload Custom Mod to Server",
+			);
+			sendCreditNotification({
+				user: interaction.user,
+				creditChanged: settings.uploadFileFee,
+				reason: "Refund for cancelled Upload Custom Mod to Server",
+			});
+			setTimeout(cleanUp, 1000 * 10);
+			return;
+		}
 		let downloadingUrl: string;
 		let filename: string;
-		const isFile = !(messages instanceof Collection);
+		const isFile = "filename" in messages;
 		if (isFile) {
 			downloadingUrl = `${process.env.UPLOAD_URL}/file/${token}`;
 			filename = messages.filename;
 		} else {
 			const firstMessage = messages.at(0);
-			// Cancelled
-			if (firstMessage instanceof MessageReaction) {
-				await cancelMessage.reactions.removeAll().catch(() => {});
-				await thread.send("Upload cancelled.");
-				await thread.setLocked(true);
-				await thread.setArchived(true);
-				uploadServerManager.disposeToken(token);
-				changeCredit(
-					interaction.user.id,
-					settings.uploadFileFee,
-					"Refund for cancelled Upload Custom Mod to Server",
-				);
-				sendCreditNotification({
-					user: interaction.user,
-					creditChanged: settings.uploadFileFee,
-					reason: "Refund for cancelled Upload Custom Mod to Server",
-				});
-				setTimeout(cleanUp, 1000 * 10);
-				return;
-			}
 			const attachment = firstMessage?.attachments.at(0);
 			// No attachment
 			if (!attachment?.url) {
