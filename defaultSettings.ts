@@ -23,5 +23,6 @@ export const defaultCreditSettings: CreditSettings = {
 	startServerVoteFee: 15,
 	cancelStopServerVoteFee: 15,
 	stopServerVoteFee: 15,
-	uploadFileFee: 70
+	uploadFileFee: 70,
+	deletePluginFee: 70
 }

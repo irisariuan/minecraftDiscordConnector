@@ -72,9 +72,11 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification(
-			{ user: interaction.user, creditChanged: -settings.newCancelStopServerPollFee, reason: "New Cancel Stop Server Poll" },
-		);
+		await sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -settings.newCancelStopServerPollFee,
+			reason: "New Cancel Stop Server Poll",
+		});
 
 		sendApprovalPoll(interaction, {
 			content: "Cancel Server Shutdown",

@@ -3,7 +3,7 @@ import type { CommandFile } from "../lib/commandFile";
 import {
 	allPermission,
 	parsePermission,
-    readPermission,
+	readPermission,
 } from "../lib/permission";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
@@ -35,7 +35,11 @@ export default {
 					flags: [MessageFlags.Ephemeral],
 				});
 			}
-			await sendCreditNotification({ user: interaction.user, creditChanged: -settings.checkUserPermissionFee, reason: "Check Permission Of Other Users" });
+			await sendCreditNotification({
+				user: interaction.user,
+				creditChanged: -settings.checkUserPermissionFee,
+				reason: "Check Permission Of Other Users",
+			});
 		}
 
 		if (permission) {

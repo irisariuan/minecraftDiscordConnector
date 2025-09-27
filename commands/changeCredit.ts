@@ -93,9 +93,12 @@ export default {
 				console.log(`Set ${user.displayName} credit to ${amount}`);
 				if (!silent)
 					promises.push(
-						sendCreditNotification(
-							{ user, creditChanged: amount - original, reason: "Set by admin", silent: true },
-						),
+						sendCreditNotification({
+							user,
+							creditChanged: amount - original,
+							reason: "Set by admin",
+							silent: true,
+						}),
 					);
 			}
 			await Promise.all(promises);
@@ -109,9 +112,12 @@ export default {
 				console.log(`Changed ${user.displayName} credit by ${amount}`);
 				if (!silent)
 					promises.push(
-						sendCreditNotification(
-							{ user, creditChanged: amount, reason: "Changed by admin", silent: true },
-						),
+						sendCreditNotification({
+							user,
+							creditChanged: amount,
+							reason: "Changed by admin",
+							silent: true,
+						}),
 					);
 			}
 			await Promise.all(promises);

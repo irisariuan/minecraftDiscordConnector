@@ -13,7 +13,11 @@ import {
 	readPermission,
 } from "./lib/permission";
 import { serverManager } from "./lib/server";
-import { changeCreditSettings, loadCreditSettings, settings } from "./lib/settings";
+import {
+	changeCreditSettings,
+	loadCreditSettings,
+	settings,
+} from "./lib/settings";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { getNextTimestamp } from "./lib/time";
 import { setActivity } from "./lib/utils";

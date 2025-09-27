@@ -8,6 +8,12 @@ import {
 	anyPerm,
 } from "../lib/permission";
 import { createRequestComponent, RequestComponentId } from "../lib/components";
+import {
+	changeCredit,
+	sendCreditNotification,
+	spendCredit,
+} from "../lib/credit";
+import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -42,6 +48,23 @@ export default {
 			)
 		)
 			return await deleteFunc();
+		if (
+			!(await spendCredit(
+				interaction.user.id,
+				settings.deletePluginFee,
+				"Delete Plugin Request",
+			))
+		) {
+			return await interaction.editReply({
+				content: `You don't have enough credit to delete a plugin. Deleting a plugin costs ${settings.deletePluginFee} credits.`,
+			});
+		}
+
+		await sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -settings.deletePluginFee,
+			reason: "Delete Plugin Request",
+		});
 
 		const message = await interaction.editReply({
 			content: `Please ask a staff to permit your request on deleting \`${plugin}\``,
@@ -65,6 +88,16 @@ export default {
 			});
 		}
 		if (reply.customId === RequestComponentId.Deny) {
+			await changeCredit(
+				interaction.user.id,
+				settings.deletePluginFee,
+				"Delete Plugin Request Denied Refund",
+			);
+			await sendCreditNotification({
+				user: interaction.user,
+				creditChanged: settings.deletePluginFee,
+				reason: "Delete Plugin Request Denied Refund",
+			});
 			return await interaction.editReply({
 				content: "Request denied.",
 				components: [],

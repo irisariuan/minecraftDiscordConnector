@@ -6,7 +6,7 @@ import {
 	userMention,
 	type CommandInteraction,
 	type Message,
-	type PartialMessage
+	type PartialMessage,
 } from "discord.js";
 import {
 	ApprovalMessageComponentId,
@@ -430,7 +430,9 @@ export async function updateApprovalMessage(reaction: ButtonInteraction) {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		const final = parseApprovalComponentId(res.customId as ApprovalMessageComponentId);
+		const final = parseApprovalComponentId(
+			res.customId as ApprovalMessageComponentId,
+		);
 		approving = final.approveVote;
 		superApprove = final.superVote;
 		disapproving = final.rejectVote;
