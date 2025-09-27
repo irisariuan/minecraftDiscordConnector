@@ -1,7 +1,13 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import {
+	channelMention,
+	MessageFlags,
+	SlashCommandBuilder,
+	userMention,
+} from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	compareAllPermissions,
+	getUsersWithMatchedPermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
@@ -10,6 +16,7 @@ import { parseCommandOutput, runCommandOnServer } from "../lib/request";
 import { serverManager } from "../lib/server";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
+import { sendMessagesToUsersById } from "../lib/utils";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -50,7 +57,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		
+
 		const command = interaction.options.getString("command", true);
 		const force = interaction.options.getBoolean("poll") === false;
 		const capture = interaction.options.getInteger("capture") ?? 1000;
@@ -73,7 +80,11 @@ export default {
 					flags: [MessageFlags.Ephemeral],
 				});
 			}
-			await sendCreditNotification({ user: interaction.user, creditChanged: -settings.newRunCommandPollFee, reason: "New Run Command Poll" });
+			await sendCreditNotification({
+				user: interaction.user,
+				creditChanged: -settings.newRunCommandPollFee,
+				reason: "New Run Command Poll",
+			});
 			return await sendApprovalPoll(interaction, {
 				content: command,
 				options: {
@@ -85,6 +96,16 @@ export default {
 						const { success } = await runCommandOnServer(
 							approval.content,
 						);
+						const users = await getUsersWithMatchedPermission(
+							PermissionFlags.receiveNotification,
+						);
+						if (users) {
+							sendMessagesToUsersById(
+								client,
+								users,
+								`Command \`${command}\` executed with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)}`,
+							);
+						}
 						if (!success) {
 							await message.reply("Failed to run command");
 							return;

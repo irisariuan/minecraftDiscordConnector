@@ -8,7 +8,7 @@ import { updateDnsRecord } from "./lib/dnsRecord";
 import {
 	compareAllPermissions,
 	comparePermission,
-	getUsersMatchedPermission,
+	getUsersWithMatchedPermission,
 	PermissionFlags,
 	readPermission,
 } from "./lib/permission";
@@ -92,7 +92,7 @@ client.once("ready", async () => {
 		isSuspending(),
 	);
 	if (giveCredits > 0) {
-		const users = await getUsersMatchedPermission(PermissionFlags.use);
+		const users = await getUsersWithMatchedPermission(PermissionFlags.use);
 		for (const userId of users) {
 			await changeCredit(userId, giveCredits, "System Gift");
 			const user = client.users.cache.get(userId);
@@ -213,7 +213,7 @@ setTimeout(async () => {
 	const func = async () => {
 		const giftAmount = settings.dailyGift;
 		if (giftAmount <= 0) return;
-		const users = await getUsersMatchedPermission(PermissionFlags.gift);
+		const users = await getUsersWithMatchedPermission(PermissionFlags.gift);
 		for (const userId of users) {
 			if (settings.giftMax > 0) {
 				const credit = await getCredit(userId);

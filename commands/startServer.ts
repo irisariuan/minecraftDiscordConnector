@@ -1,8 +1,14 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import {
+	channelMention,
+	MessageFlags,
+	SlashCommandBuilder,
+	userMention,
+} from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { serverManager } from "../lib/server";
 import {
 	comparePermission,
+	getUsersWithMatchedPermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
@@ -10,6 +16,8 @@ import { sendApprovalPoll } from "../lib/approval";
 import { isServerAlive } from "../lib/request";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
+import { c } from "../webUi/dist/server/chunks/astro/server_D518bSdL.mjs";
+import { sendMessagesToUsersById } from "../lib/utils";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -68,9 +76,11 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		sendCreditNotification(
-			{ user: interaction.user, creditChanged: -settings.newStartServerPollFee, reason: "New Start Server Poll" },
-		);
+		sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -settings.newStartServerPollFee,
+			reason: "New Start Server Poll",
+		});
 
 		sendApprovalPoll(interaction, {
 			content: "Start Server",
@@ -87,6 +97,16 @@ export default {
 						return;
 					}
 					console.log(`Server started with PID ${pid}`);
+					const users = await getUsersWithMatchedPermission(
+						PermissionFlags.receiveNotification,
+					);
+					if (users) {
+						sendMessagesToUsersById(
+							client,
+							users,
+							`Server started with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)}`,
+						);
+					}
 					await message.reply({
 						content: "Server started successfully",
 					});

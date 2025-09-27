@@ -22,7 +22,7 @@ import {
 	anyPerm,
 	compareAnyPermissions,
 	comparePermission,
-	getUsersMatchedPermission,
+	getUsersWithMatchedPermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
@@ -210,7 +210,7 @@ export default {
 		const message = await thread.send("Approve this file?");
 		await message.react("✅");
 		await message.react("❌");
-		for (const userId of await getUsersMatchedPermission(
+		for (const userId of await getUsersWithMatchedPermission(
 			PermissionFlags.downloadPlugin,
 		)) {
 			const user = await client.users.fetch(userId).catch(() => null);
