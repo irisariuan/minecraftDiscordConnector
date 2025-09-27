@@ -134,15 +134,21 @@ export async function sendCreditNotification({
 }) {
 	const creditFetched = await getCredit(user.id);
 	const expire = new Date(Date.now() + 1000 * 60 * 10); // 10 minutes
+	const isNegative = creditChanged < 0;
+	const refund =
+		maxRefund > 0
+			? Math.min(Math.abs(creditChanged), maxRefund) *
+				(isNegative ? 1 : -1)
+			: -creditChanged;
 	const message = await user
 		.send({
 			content: `Your credit has been changed by \`${creditChanged}\`. Your current credit is \`${creditFetched.currentCredit}\`\nReason: ${italic(
 				reason,
 			)}${
 				cancellable
-					? `\n*You can cancel this transaction by clicking the button below before ${time(new Date(expire))}.*`
+					? `\n*You can cancel this transaction (refunding ${refund} credits to sender) by clicking the button below before ${time(new Date(expire))}.*`
 					: ""
-			}\n*You could always check your credit by using \`/credit\` command.*`,
+			}`,
 			flags: silent ? [MessageFlags.SuppressNotifications] : [],
 			components: cancellable
 				? [
@@ -160,12 +166,6 @@ export async function sendCreditNotification({
 			},
 			1000 * 60 * 10,
 		);
-		const isNegative = creditChanged < 0;
-		const refund =
-			maxRefund > 0
-				? Math.min(Math.abs(creditChanged), maxRefund) *
-					(isNegative ? 1 : -1)
-				: -creditChanged;
 		const collector = message.createMessageComponentCollector({
 			componentType: ComponentType.Button,
 			time: 1000 * 60 * 10,
