@@ -22,6 +22,7 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { sendPaginationMessage } from "../lib/pagination";
+import { createRequestComponent, RequestComponentId } from "../lib/components";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -93,18 +94,7 @@ export default {
 				) {
 					const request = await menuInteraction.followUp({
 						content: `Please ask a staff to permit your request on downloading \`${value}\``,
-						components: [
-							new ActionRowBuilder<ButtonBuilder>().addComponents(
-								new ButtonBuilder()
-									.setLabel("Allow")
-									.setStyle(ButtonStyle.Success)
-									.setCustomId("APPROVE_DOWNLOAD"),
-								new ButtonBuilder()
-									.setLabel("Deny")
-									.setStyle(ButtonStyle.Danger)
-									.setCustomId("DENY_DOWNLOAD"),
-							),
-						],
+						components: [createRequestComponent()],
 					});
 					const result = await request
 						.awaitMessageComponent({
@@ -124,7 +114,7 @@ export default {
 						});
 						return false;
 					}
-					if (result.customId === "DENY_DOWNLOAD") {
+					if (result.customId === RequestComponentId.Deny) {
 						await request.edit({
 							content: "Request to download plugin denied.",
 							components: [],
