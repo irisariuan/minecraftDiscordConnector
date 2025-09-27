@@ -13,7 +13,7 @@ import {
 	readPermission,
 } from "./lib/permission";
 import { serverManager } from "./lib/server";
-import { changeCreditSettings, loadSettings, settings } from "./lib/settings";
+import { changeCreditSettings, loadCreditSettings, settings } from "./lib/settings";
 import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { getNextTimestamp } from "./lib/time";
 import { setActivity } from "./lib/utils";
@@ -52,7 +52,7 @@ const giveCredits = process.argv.includes("-C")
 		)
 	: 0;
 
-const currentSettings = await loadSettings();
+const currentSettings = await loadCreditSettings();
 console.log("Loaded custom settings");
 if (process.argv.includes("-C")) {
 	changeCreditSettings({
