@@ -68,66 +68,66 @@ export default {
 			[PermissionFlags.runCommand],
 		);
 
-		if (!canRunCommand || !force) {
-			if (
-				!(await spendCredit(
-					interaction.user.id,
-					settings.newRunCommandPollFee,
-					"New Run Command Poll",
-				))
-			) {
-				return await interaction.reply({
-					content: "You don't have enough credit to run this command",
-					flags: [MessageFlags.Ephemeral],
-				});
-			}
-			await sendCreditNotification({
-				user: interaction.user,
-				creditChanged: -settings.newRunCommandPollFee,
-				reason: "New Run Command Poll",
-			});
-			return await sendApprovalPoll(interaction, {
-				content: command,
-				options: {
-					startPollFee: settings.newRunCommandPollFee,
-					callerId: interaction.user.id,
-					description: `Command: \`${command}\``,
-					async onSuccess(approval, message) {
-						const output = serverManager.captureSomeOutput(capture);
-						const { success } = await runCommandOnServer(
-							approval.content,
-						);
-						const users = await getUsersWithMatchedPermission(
-							PermissionFlags.receiveNotification,
-						);
-						if (users) {
-							sendMessagesToUsersById(
-								client,
-								users,
-								`Command \`${command}\` executed with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)} (${time(approval.createdAt)})`,
-							);
-						}
-						if (!success) {
-							await message.reply("Failed to run command");
-							return;
-						}
-						await message.reply(
-							parseCommandOutput(
-								(await output)?.join("\n") || null,
-								success,
-							),
-						);
-					},
-					credit: settings.runCommandVoteFee,
-				},
-				duration: timeout || undefined,
+		if (canRunCommand && force) {
+			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+			const output = serverManager.captureSomeOutput(capture);
+			const { success } = await runCommandOnServer(command);
+			await interaction.editReply(
+				parseCommandOutput((await output)?.join("\n") || null, success),
+			);
+		}
+		if (
+			!(await spendCredit(
+				interaction.user.id,
+				settings.newRunCommandPollFee,
+				"New Run Command Poll",
+			))
+		) {
+			return await interaction.reply({
+				content: "You don't have enough credit to run this command",
+				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		const output = serverManager.captureSomeOutput(capture);
-		const { success } = await runCommandOnServer(command);
-		await interaction.editReply(
-			parseCommandOutput((await output)?.join("\n") || null, success),
-		);
+		await sendCreditNotification({
+			user: interaction.user,
+			creditChanged: -settings.newRunCommandPollFee,
+			reason: "New Run Command Poll",
+		});
+		return await sendApprovalPoll(interaction, {
+			content: command,
+			options: {
+				startPollFee: settings.newRunCommandPollFee,
+				callerId: interaction.user.id,
+				description: `Command: \`${command}\``,
+				async onSuccess(approval, message) {
+					const output = serverManager.captureSomeOutput(capture);
+					const { success } = await runCommandOnServer(
+						approval.content,
+					);
+					const users = await getUsersWithMatchedPermission(
+						PermissionFlags.receiveNotification,
+					);
+					if (users) {
+						sendMessagesToUsersById(
+							client,
+							users,
+							`Command \`${command}\` executed with a vote by ${userMention(interaction.user.id)} at ${channelMention(interaction.channelId)} (${time(approval.createdAt)})`,
+						);
+					}
+					if (!success) {
+						await message.reply("Failed to run command");
+						return;
+					}
+					await message.reply(
+						parseCommandOutput(
+							(await output)?.join("\n") || null,
+							success,
+						),
+					);
+				},
+				credit: settings.runCommandVoteFee,
+			},
+			duration: timeout || undefined,
+		});
 	},
 } as CommandFile;
