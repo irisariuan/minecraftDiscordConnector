@@ -99,7 +99,7 @@ client.once("ready", async () => {
 		const users = await getUsersWithMatchedPermission(PermissionFlags.use);
 		for (const userId of users) {
 			await changeCredit(userId, giveCredits, "System Gift");
-			const user = client.users.cache.get(userId);
+			const user = await client.users.fetch(userId).catch(() => null);
 			if (user) {
 				await sendCreditNotification({
 					user,
@@ -226,7 +226,7 @@ setTimeout(async () => {
 
 			console.log(`Gifted ${userId} ${giftAmount} credits`);
 			await changeCredit(userId, giftAmount, "Daily Gift");
-			const user = client.users.cache.get(userId);
+			const user = await client.users.fetch(userId).catch(() => null);
 			if (user) {
 				await sendCreditNotification({
 					user,
@@ -261,7 +261,9 @@ async function exitHandler() {
 				approval.options.startPollFee,
 				"New Approval Poll Refund",
 			);
-			const user = client.users.cache.get(approval.options.callerId);
+			const user = await client.users
+				.fetch(approval.options.callerId)
+				.catch(() => null);
 			if (user) {
 				await sendCreditNotification({
 					user,
@@ -280,7 +282,7 @@ async function exitHandler() {
 					approval.options.credit,
 					"Approval Reaction Refund",
 				);
-				const user = client.users.cache.get(id);
+				const user = await client.users.fetch(id).catch(() => null);
 				if (user) {
 					await sendCreditNotification({
 						user,
