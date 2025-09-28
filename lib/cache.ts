@@ -7,13 +7,19 @@ interface CacheOptions<T> {
 }
 
 class CacheEventEmitter<T> extends EventEmitter {
-	on(event: "update", listener: () => void): this
-	on(event: "setData", listener: (data: T | null, oldData: T | null) => void): this
-	on(event: string, listener: ((data: T | null, oldData: T | null) => void) | (() => void)): this {
+	on(event: "update", listener: () => void): this;
+	on(
+		event: "setData",
+		listener: (data: T | null, oldData: T | null) => void,
+	): this;
+	on(
+		event: string,
+		listener: ((data: T | null, oldData: T | null) => void) | (() => void),
+	): this {
 		return super.on(event, listener);
 	}
-	emit(event: "update"): boolean
-	emit(event: "setData", data: T | null, oldData: T | null): boolean
+	emit(event: "update"): boolean;
+	emit(event: "setData", data: T | null, oldData: T | null): boolean;
 	emit(event: string, data?: T | null, oldData?: T | null): boolean {
 		return super.emit(event, data, oldData);
 	}
@@ -47,7 +53,7 @@ export class CacheItem<T> {
 
 	async update() {
 		if (this.updateMethod) {
-			this.cacheEvent.emit("update")
+			this.cacheEvent.emit("update");
 			const newData = await this.updateMethod();
 			this.setData(newData);
 			return true;
