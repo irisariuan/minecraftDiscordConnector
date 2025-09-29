@@ -41,6 +41,19 @@ export default {
 		const amount = interaction.options.getNumber("amount", true);
 		const fromUserCredit = await getCredit(interaction.user.id);
 		const toUserCredit = await getCredit(user.id);
+		if (!fromUserCredit) {
+			return await interaction.reply({
+				content: "You do not have an account",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		if (!toUserCredit) {
+			return await interaction.reply({
+				content:
+					"The user you are transferring to does not have an account",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
 		if (user.id === interaction.user.id) {
 			return await interaction.reply({
 				content: "You cannot transfer credit to yourself",

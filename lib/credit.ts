@@ -37,6 +37,7 @@ export async function setCredit(
 	reason: string,
 ) {
 	const userCreditFetched = await getCredit(userId);
+	if (!userCreditFetched) return null;
 	await newTransaction({
 		user: {
 			connectOrCreate: { create: { id: userId }, where: { id: userId } },
@@ -57,6 +58,7 @@ export async function changeCredit(
 	reason: string,
 ) {
 	const userCreditFetched = await getCredit(userId);
+	if (!userCreditFetched) return null;
 
 	await newTransaction({
 		user: {
@@ -73,9 +75,16 @@ export async function changeCredit(
 	return userCreditFetched.currentCredit + change;
 }
 
-export async function getCredit(userId: string): Promise<UserCredit> {
+export async function getCredit(userId: string): Promise<UserCredit | null> {
 	const user = await getUserById(userId, true);
 	if (!user) {
+		if (
+			!comparePermission(
+				await readPermission(userId),
+				PermissionFlags.use,
+			)
+		)
+			return null;
 		return {
 			currentCredit: 0,
 			histories: [],
@@ -98,6 +107,7 @@ export async function getCredit(userId: string): Promise<UserCredit> {
 
 export async function canSpendCredit(userId: string, cost: number) {
 	const credit = await getCredit(userId);
+	if (!credit) return false;
 	const permission = await readPermission(userId);
 	return (
 		credit.currentCredit >= cost ||
@@ -131,8 +141,9 @@ export async function sendCreditNotification({
 	cancellable?: boolean;
 	maxRefund?: number;
 	onRefund?: (refundAmount: number) => unknown;
-}) {
+}): Promise<boolean> {
 	const creditFetched = await getCredit(user.id);
+	if (!creditFetched) return false;
 	const expire = new Date(Date.now() + 1000 * 60 * 10); // 10 minutes
 	const isNegative = creditChanged < 0;
 	const refund =
@@ -188,6 +199,7 @@ export async function sendCreditNotification({
 			});
 		});
 	}
+	return true;
 }
 
 export enum CreditNotificationButtonId {

@@ -186,9 +186,14 @@ client.on("interactionCreate", async (interaction) => {
 					});
 			},
 		);
-	}
-	if (interaction.isMessageComponent() && interaction.isButton()) {
-		if (interaction.user.bot) return;
+	} else if (interaction.isMessageComponent() && interaction.isButton()) {
+		if (
+			interaction.user.bot ||
+			!compareAllPermissions(await readPermission(interaction.user), [
+				PermissionFlags.use,
+			])
+		)
+			return;
 		if (isApprovalMessageComponentId(interaction.customId)) {
 			return updateApprovalMessage(interaction);
 		}
@@ -221,7 +226,8 @@ setTimeout(async () => {
 		for (const userId of users) {
 			if (settings.giftMax > 0) {
 				const credit = await getCredit(userId);
-				if (credit.currentCredit > settings.giftMax) continue;
+				if (!credit || credit.currentCredit > settings.giftMax)
+					continue;
 			}
 
 			console.log(`Gifted ${userId} ${giftAmount} credits`);

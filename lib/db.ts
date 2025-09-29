@@ -1,4 +1,9 @@
 import { Prisma, PrismaClient } from "../generated/prisma";
+import {
+	comparePermission,
+	PermissionFlags,
+	readPermission,
+} from "./permission";
 
 const prisma = new PrismaClient();
 
@@ -22,6 +27,8 @@ export async function getTransactionsByUserId(userId: string) {
 }
 
 export async function setUserCredits(userId: string, credits: number) {
+	if (!comparePermission(await readPermission(userId), PermissionFlags.use))
+		return null;
 	return prisma.user.upsert({
 		create: { id: userId, credits },
 		update: { credits },

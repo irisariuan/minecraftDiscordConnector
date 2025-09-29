@@ -90,6 +90,7 @@ export default {
 					amount,
 					"Set by admin",
 				);
+				if (original === null) continue;
 				console.log(`Set ${user.displayName} credit to ${amount}`);
 				if (!silent)
 					promises.push(
@@ -108,7 +109,12 @@ export default {
 		} else if (subCommand === "change") {
 			const promises = [];
 			for (const user of users) {
-				await changeCredit(user.id, amount, "Changed by admin");
+				const result = await changeCredit(
+					user.id,
+					amount,
+					"Changed by admin",
+				);
+				if (result === null) continue;
 				console.log(`Changed ${user.displayName} credit by ${amount}`);
 				if (!silent)
 					promises.push(
