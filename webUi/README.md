@@ -1,4 +1,4 @@
-ipBotDiscord/webUi/README.md
+webUi/README.md
 # Plugin Upload Web UI
 
 A web interface for uploading custom plugins to the Minecraft server managed by the Discord bot. Built with [Astro](https://astro.build/), [Tailwind CSS](https://tailwindcss.com/), and integrated with the bot's upload server.
