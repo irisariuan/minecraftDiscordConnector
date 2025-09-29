@@ -1,38 +1,39 @@
 import {
-	ButtonInteraction,
-	channelMention,
-	ChannelType,
-	Collection,
-	ComponentType,
-	MessageFlags,
-	MessageReaction,
-	SlashCommandBuilder,
-	ThreadAutoArchiveDuration,
-	time,
-	userMention,
+    ButtonInteraction,
+    channelMention,
+    ChannelType,
+    Collection,
+    ComponentType,
+    Message,
+    MessageFlags,
+    SlashCommandBuilder,
+    ThreadAutoArchiveDuration,
+    time,
+    userMention,
+    type Snowflake
 } from "discord.js";
 import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
+import { createRequestComponent } from "../lib/components";
 import {
-	changeCredit,
-	sendCreditNotification,
-	spendCredit,
+    changeCredit,
+    sendCreditNotification,
+    spendCredit,
 } from "../lib/credit";
 import {
-	anyPerm,
-	compareAnyPermissions,
-	comparePermission,
-	getUsersWithMatchedPermission,
-	PermissionFlags,
-	readPermission,
+    anyPerm,
+    comparePermission,
+    getUsersWithMatchedPermission,
+    PermissionFlags,
+    readPermission
 } from "../lib/permission";
+import type { File } from "../lib/plugin/uploadServer";
 import { uploadServerManager } from "../lib/plugin/uploadServer";
 import {
-	copyLocalPluginFileToServer,
-	downloadWebPluginFileToLocal,
+    copyLocalPluginFileToServer,
+    downloadWebPluginFileToLocal,
 } from "../lib/plugin/web";
 import { settings } from "../lib/settings";
-import { createRequestComponent } from "../lib/components";
 
 if (!process.env.UPLOAD_URL) {
 	throw new Error("UPLOAD_URL is not set in environment variables");
@@ -96,12 +97,9 @@ export default {
 				}),
 			],
 		});
-		const token = uploadServerManager.createToken();
-		await thread.send(
-			`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
-		);
-		const messages = await Promise.race([
-			uploadServerManager.awaitToken(token, 1000 * 60 * 30),
+		const promises: Promise<
+			Collection<Snowflake, Message> | ButtonInteraction | File
+		>[] = [
 			cancelMessage.awaitMessageComponent({
 				filter: (componentInteraction) =>
 					componentInteraction.user.id === interaction.user.id,
@@ -116,12 +114,29 @@ export default {
 				max: 1,
 				errors: ["time"],
 			}),
-		]);
+		];
+
+		let token: string | null = null;
+		if (
+			comparePermission(
+				await readPermission(interaction.user),
+				PermissionFlags.upload,
+			)
+		) {
+			token = uploadServerManager.createToken();
+			await thread.send(
+				`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
+			);
+			promises.push(
+				uploadServerManager.awaitToken(token, 1000 * 60 * 30),
+			);
+		}
+		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction) {
 			await thread.send("Upload cancelled.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
-			uploadServerManager.disposeToken(token);
+			if (token) uploadServerManager.disposeToken(token);
 			changeCredit(
 				interaction.user.id,
 				settings.uploadFileFee,
@@ -182,7 +197,7 @@ export default {
 			const finalFilename = isFile
 				? await copyLocalPluginFileToServer(messages)
 				: await downloadWebPluginFileToLocal(downloadingUrl, filename);
-			uploadServerManager.disposeToken(token);
+			if (token) uploadServerManager.disposeToken(token);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
 			} else {
@@ -251,7 +266,7 @@ export default {
 								downloadingUrl,
 								filename,
 							);
-					uploadServerManager.disposeToken(token);
+					if (token) uploadServerManager.disposeToken(token);
 					if (finalFilename) {
 						await thread.send(`File added to server.`);
 						await interaction.user.send(
@@ -276,7 +291,7 @@ export default {
 						});
 					}
 				} else {
-					uploadServerManager.disposeToken(token);
+					if (token) uploadServerManager.disposeToken(token);
 					await thread.send(
 						`File rejected by ${userMention(user.id)}.`,
 					);
