@@ -1,37 +1,37 @@
 import {
-    ButtonInteraction,
-    channelMention,
-    ChannelType,
-    Collection,
-    ComponentType,
-    Message,
-    MessageFlags,
-    SlashCommandBuilder,
-    ThreadAutoArchiveDuration,
-    time,
-    userMention,
-    type Snowflake
+	ButtonInteraction,
+	channelMention,
+	ChannelType,
+	Collection,
+	ComponentType,
+	Message,
+	MessageFlags,
+	SlashCommandBuilder,
+	ThreadAutoArchiveDuration,
+	time,
+	userMention,
+	type Snowflake,
 } from "discord.js";
 import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
 import { createRequestComponent } from "../lib/components";
 import {
-    changeCredit,
-    sendCreditNotification,
-    spendCredit,
+	changeCredit,
+	sendCreditNotification,
+	spendCredit,
 } from "../lib/credit";
 import {
-    anyPerm,
-    comparePermission,
-    getUsersWithMatchedPermission,
-    PermissionFlags,
-    readPermission
+	anyPerm,
+	comparePermission,
+	getUsersWithMatchedPermission,
+	PermissionFlags,
+	readPermission,
 } from "../lib/permission";
 import type { File } from "../lib/plugin/uploadServer";
 import { uploadServerManager } from "../lib/plugin/uploadServer";
 import {
-    copyLocalPluginFileToServer,
-    downloadWebPluginFileToLocal,
+	copyLocalPluginFileToServer,
+	downloadWebPluginFileToLocal,
 } from "../lib/plugin/web";
 import { settings } from "../lib/settings";
 
@@ -43,7 +43,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("uploadplugin")
 		.setDescription("Upload a custom plugin to the server"),
-	async execute(interaction, client) {
+	async execute({ interaction, client }) {
 		if (interaction.channel?.type !== ChannelType.GuildText) {
 			return await interaction.reply({
 				content:

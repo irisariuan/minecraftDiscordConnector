@@ -24,7 +24,7 @@ export default {
 				.setName("release")
 				.setDescription("Whether to only show stable releases"),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		const pluginOption = interaction.options.getString("plugin");

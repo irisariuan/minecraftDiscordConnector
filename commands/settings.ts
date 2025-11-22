@@ -2,9 +2,9 @@ import { italic, MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { changeCreditSettings, settings } from "../lib/settings";
 import {
-    comparePermission,
-    PermissionFlags,
-    readPermission,
+	comparePermission,
+	PermissionFlags,
+	readPermission,
 } from "../lib/permission";
 export default {
 	command: new SlashCommandBuilder()
@@ -30,7 +30,7 @@ export default {
 		.addSubcommand((command) =>
 			command.setName("get").setDescription("Get settings of the bot"),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		const subcommand = interaction.options.getSubcommand(true);
 		if (subcommand === "set") {
 			if (

@@ -69,7 +69,7 @@ export default {
 						.setMaxValue(allPermission),
 				),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		const subcommand = interaction.options.getSubcommand(true);
 		const users = interaction.options.getMentionable("users", true);
 		if (subcommand === "tags") {
@@ -146,7 +146,7 @@ export default {
 		return interaction.reply({
 			content: "Unknown subcommand",
 			flags: [MessageFlags.Ephemeral],
-		})
+		});
 	},
 	permissions: PermissionFlags.editPerm,
 } as CommandFile;

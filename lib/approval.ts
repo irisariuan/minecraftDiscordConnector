@@ -20,8 +20,8 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "./permission";
-import { isSuspending } from "./suspend";
 import type { PickAndOptional } from "./utils";
+import type { SuspendingEventEmitter } from "./suspend";
 
 /**
  * All core components needed for the approval system to work
@@ -384,7 +384,7 @@ export async function sendApprovalPoll(
 	);
 }
 
-export async function updateApprovalMessage(reaction: ButtonInteraction) {
+export async function updateApprovalMessage(reaction: ButtonInteraction, suspendingEvent: SuspendingEventEmitter) {
 	const approval = getApproval(reaction.message.id);
 	if (!approval) return;
 	const userPerm = await readPermission(reaction.user);
@@ -449,7 +449,7 @@ export async function updateApprovalMessage(reaction: ButtonInteraction) {
 		superApprove = false;
 	}
 	if (
-		isSuspending() &&
+		suspendingEvent.isSuspending() &&
 		!comparePermission(userPerm, PermissionFlags.suspend)
 	) {
 		return await reaction.followUp({

@@ -63,7 +63,7 @@ export default {
 						),
 				),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		await interaction.deferReply({
 			flags: [MessageFlags.Ephemeral],
 		});

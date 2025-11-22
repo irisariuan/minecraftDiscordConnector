@@ -14,7 +14,6 @@ import {
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { parseCommandOutput, runCommandOnServer } from "../lib/request";
-import { serverManager } from "../lib/server";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
 import { sendMessagesToUsersById } from "../lib/utils";
@@ -51,7 +50,7 @@ export default {
 				.setMinValue(1000)
 				.setMaxValue(60000),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction, client, serverManager }) {
 		if (!interaction.guild) {
 			return await interaction.reply({
 				content: "This command can only be used in a server",

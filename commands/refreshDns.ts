@@ -10,7 +10,7 @@ export default {
 		.setDescription(
 			"Refresh DNS record, use if you cannot connect to the server",
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 		if (
 			await spendCredit(

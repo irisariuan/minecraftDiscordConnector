@@ -15,7 +15,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("onlineplayers")
 		.setDescription("Get a list of online players"),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		sendPaginationMessage<Player>({

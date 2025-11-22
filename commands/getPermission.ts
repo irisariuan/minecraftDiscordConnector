@@ -17,7 +17,7 @@ export default {
 				.setName("user")
 				.setDescription("The user to get the permission of"),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		const user = interaction.options.getUser("user") || interaction.user;
 		const permission = await readPermission(user);
 

@@ -6,7 +6,6 @@ import {
 	userMention,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { serverManager } from "../lib/server";
 import {
 	comparePermission,
 	getUsersWithMatchedPermission,
@@ -36,7 +35,7 @@ export default {
 				.setDescription("Force stopping the server without polling")
 				.setRequired(false),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction, client, serverManager }) {
 		if (!interaction.guild) {
 			return await interaction.reply({
 				content: "This command can only be used in a server",

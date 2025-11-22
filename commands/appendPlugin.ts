@@ -39,7 +39,7 @@ export default {
 				.setName("release")
 				.setDescription("Whether to only show stable releases"),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		await interaction.deferReply();
 		const userPermission = await readPermission(interaction.user);
 

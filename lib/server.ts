@@ -2,9 +2,10 @@ import { spawn, type Subprocess } from "bun";
 import { CacheItem } from "./cache";
 import { isServerAlive, type LogLine } from "./request";
 import { join } from "node:path";
-import { createDecodeWritableStream, safeFetch } from "./utils";
+import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
 import { EventEmitter } from "node:events";
 import { stripVTControlCharacters } from "node:util";
+import { SuspendingEventEmitter } from "./suspend";
 
 if (
 	!process.env.SERVER_DIR ||
@@ -13,7 +14,8 @@ if (
 	throw new Error("SERVER_DIR environment variable is not set");
 
 interface ServerManagerOptions {
-	shutdownAllowedTime?: number;
+	shutdownAllowedTime: number;
+	defaultSuspending: boolean;
 }
 
 const serverTypeRef = {
@@ -37,7 +39,7 @@ class ServerMessageEmitter extends EventEmitter {
 	}
 }
 
-class ServerManager {
+export class ServerManager {
 	private instance: Subprocess<"ignore", "pipe", "inherit"> | null;
 	private waitingToShutdown: boolean;
 	isOnline: CacheItem<boolean>;
@@ -45,12 +47,18 @@ class ServerManager {
 	outputLines: LogLine[];
 	shutdownAllowedTime: number;
 	timeouts: NodeJS.Timeout[];
+	suspendingEvent: SuspendingEventEmitter;
 
-	constructor({ shutdownAllowedTime }: ServerManagerOptions) {
+	constructor({
+		shutdownAllowedTime,
+		defaultSuspending = isTrueValue(process.env.DEFAULT_SUSPENDING || "") ||
+			false,
+	}: Partial<ServerManagerOptions>) {
 		this.instance = null;
 		this.outputLines = [];
 		this.timeouts = [];
 		this.serverMessageEmitter = new ServerMessageEmitter();
+		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
 		this.isOnline = new CacheItem<boolean>(false, {
 			interval: 1000 * 5,
 			ttl: 1000 * 5,
@@ -238,5 +246,3 @@ class ServerManager {
 		this.outputLines = [];
 	}
 }
-
-export const serverManager = new ServerManager({});

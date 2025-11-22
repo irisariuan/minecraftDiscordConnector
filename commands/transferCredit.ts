@@ -36,7 +36,7 @@ export default {
 				.setRequired(true)
 				.setMinValue(1),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		const user = interaction.options.getUser("user", true);
 		const amount = interaction.options.getNumber("amount", true);
 		const fromUserCredit = await getCredit(interaction.user.id);

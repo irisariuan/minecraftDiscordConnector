@@ -21,7 +21,7 @@ export default {
 				.setDescription("The user to check the credit of")
 				.setRequired(false),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		await interaction.deferReply({
 			flags: [MessageFlags.Ephemeral],
 		});
@@ -47,6 +47,11 @@ export default {
 		}
 
 		const creditData = await getCredit(user.id);
+		if (!creditData) {
+			return await interaction.editReply({
+				content: "User has no credit data",
+			});
+		}
 
 		await interaction.editReply({
 			embeds: [

@@ -9,17 +9,24 @@ import type {
 } from "discord.js";
 import { join } from "node:path";
 import type { Permission } from "./permission";
+import { ServerManager } from "./server";
+
+interface ExecuteParams {
+	interaction: ChatInputCommandInteraction;
+	client: Client;
+	serverManager: ServerManager;
+}
+interface ExecuteReactionParams {
+	interaction: MessageReaction | PartialMessageReaction;
+	user: User | PartialUser;
+	client: Client;
+}
 
 export interface CommandFile {
 	command: SlashCommandBuilder;
-	execute: (
-		interaction: ChatInputCommandInteraction,
-		client: Client,
-	) => unknown | Promise<unknown>;
+	execute: (params: ExecuteParams) => unknown | Promise<unknown>;
 	executeReaction?: (
-		interaction: MessageReaction | PartialMessageReaction,
-		user: User | PartialUser,
-		client: Client,
+		params: ExecuteReactionParams,
 	) => unknown | Promise<unknown>;
 	permissions?: Permission;
 }

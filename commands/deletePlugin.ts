@@ -25,7 +25,7 @@ export default {
 				.setDescription("The plugin to delete")
 				.setRequired(true),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction }) {
 		const plugin = interaction.options.getString("plugin", true);
 		await interaction.deferReply();
 		const deleteFunc = async () => {
