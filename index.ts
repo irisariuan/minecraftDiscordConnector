@@ -12,19 +12,18 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "./lib/permission";
-import { serverManager } from "./lib/server";
 import {
 	changeCreditSettings,
 	loadCreditSettings,
 	settings,
 } from "./lib/settings";
-import { isSuspending, suspendingEvent } from "./lib/suspend";
 import { getNextTimestamp } from "./lib/time";
 import { setActivity } from "./lib/utils";
 import { isApprovalMessageComponentId } from "./lib/approval/component";
+import { ServerManager } from "./lib/server";
 
 const commands = await loadCommands();
-
+const serverManager = new ServerManager({});
 const client = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
@@ -93,7 +92,7 @@ client.once("ready", async () => {
 	setActivity(
 		client,
 		(await serverManager.isOnline.getData()) || false,
-		isSuspending(),
+		serverManager.suspendingEvent.isSuspending(),
 	);
 	if (giveCredits > 0) {
 		const users = await getUsersWithMatchedPermission(PermissionFlags.use);
@@ -147,7 +146,7 @@ client.on("interactionCreate", async (interaction) => {
 			});
 		}
 		if (
-			isSuspending() &&
+			serverManager.suspendingEvent.isSuspending() &&
 			!comparePermission(
 				await readPermission(interaction.user),
 				PermissionFlags.suspend,
@@ -159,33 +158,32 @@ client.on("interactionCreate", async (interaction) => {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await Promise.try(() => command.execute(interaction, client)).catch(
-			(err) => {
-				console.error(err);
-				interaction
-					.reply({
-						content:
-							"An error occurred while executing the command",
-						flags: [MessageFlags.Ephemeral],
-					})
-					.catch((err) => {
-						console.error(err);
-						interaction
-							.editReply({
+		await Promise.try(() =>
+			command.execute({ interaction, client, serverManager }),
+		).catch((err) => {
+			console.error(err);
+			interaction
+				.reply({
+					content: "An error occurred while executing the command",
+					flags: [MessageFlags.Ephemeral],
+				})
+				.catch((err) => {
+					console.error(err);
+					interaction
+						.editReply({
+							content:
+								"An error occurred while executing the command",
+						})
+						.catch((err) => {
+							console.error(err);
+							interaction.followUp({
 								content:
 									"An error occurred while executing the command",
-							})
-							.catch((err) => {
-								console.error(err);
-								interaction.followUp({
-									content:
-										"An error occurred while executing the command",
-									flags: [MessageFlags.Ephemeral],
-								});
+								flags: [MessageFlags.Ephemeral],
 							});
-					});
-			},
-		);
+						});
+				});
+		});
 	} else if (interaction.isMessageComponent() && interaction.isButton()) {
 		if (
 			interaction.user.bot ||
@@ -195,16 +193,16 @@ client.on("interactionCreate", async (interaction) => {
 		)
 			return;
 		if (isApprovalMessageComponentId(interaction.customId)) {
-			return updateApprovalMessage(interaction);
+			return updateApprovalMessage(interaction, serverManager.suspendingEvent);
 		}
 	}
 });
 
 serverManager.isOnline.cacheEvent.on("setData", (data) => {
-	setActivity(client, data || false, isSuspending());
+	setActivity(client, data || false, serverManager.suspendingEvent.isSuspending());
 });
 
-suspendingEvent.on("update", async (data) => {
+serverManager.suspendingEvent.on("update", async (data) => {
 	setActivity(
 		client,
 		(await serverManager.isOnline.getData()) || false,

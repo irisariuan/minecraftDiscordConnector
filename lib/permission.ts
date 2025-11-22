@@ -73,6 +73,9 @@ export function createPermission(permissions: number[]) {
 	return permissions.reduce((acc, cur) => acc | cur, 0);
 }
 
+/**
+ * Slow function, change to use native db query if possible (raw sql)
+ */
 export async function getUsersWithMatchedPermission(permission: Permission) {
 	const allPerm = await getAllUserPermissions();
 	return Object.entries(allPerm)

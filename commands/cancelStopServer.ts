@@ -1,6 +1,5 @@
 import { MessageFlags, Poll, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { serverManager } from "../lib/server";
 import {
 	compareAnyPermissions,
 	PermissionFlags,
@@ -15,7 +14,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("cancelstopserver")
 		.setDescription("Cancel stop the server"),
-	async execute(interaction, client) {
+	async execute({ interaction, serverManager }) {
 		if (!interaction.guild) {
 			return await interaction.reply({
 				content: "This command can only be used in a server",

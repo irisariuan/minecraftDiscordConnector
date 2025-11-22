@@ -1,7 +1,6 @@
 import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { sendPaginationMessage } from "../lib/pagination";
-import { serverManager } from "../lib/server";
 import { PermissionFlags } from "../lib/permission";
 
 export default {
@@ -14,7 +13,7 @@ export default {
 				.setDescription("Filter the log by keyword")
 				.setRequired(false),
 		),
-	async execute(interaction, client) {
+	async execute({ interaction, serverManager }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		const filter = interaction.options.getString("filter");
