@@ -31,8 +31,10 @@ model Transaction {
 
 model Server {
     id           Int           @id @default(autoincrement())
+    port         Int[]         @default([25565])
     path         String        @unique
     pluginPath   String        @unique
+    apiPort      Int?
     loaderType   String
     modType      String
     version      String

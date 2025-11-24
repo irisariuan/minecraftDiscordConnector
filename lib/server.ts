@@ -1,6 +1,6 @@
 import { spawn, type Subprocess } from "bun";
 import { CacheItem } from "./cache";
-import { isServerAlive, type LogLine } from "./request";
+import { type LogLine } from "./request";
 import { join } from "node:path";
 import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
 import { EventEmitter } from "node:events";
@@ -77,7 +77,9 @@ export class Server {
 		this.isOnline = new CacheItem<boolean>(false, {
 			interval: 1000 * 5,
 			ttl: 1000 * 5,
-			updateMethod: isServerAlive,
+			updateMethod: async () => {
+				return this.instance?.exitCode === null;
+			},
 		});
 		this.waitingToShutdown = false;
 		this.shutdownAllowedTime = shutdownAllowedTime ?? 3000;
@@ -118,7 +120,7 @@ export class Server {
 	async start() {
 		if (this.instance || (await this.isOnline.getData(true))) return null;
 		this.instance = spawn(["sh", "./start.sh"], {
-			cwd: process.env.SERVER_DIR,
+			cwd: this.config.serverDir,
 			stdin: "ignore",
 			stdout: "pipe",
 			onExit: (subprocess, exitCode, signalCode, error) => {
@@ -157,7 +159,7 @@ export class Server {
 		return this.instance.pid;
 	}
 
-	async forceStop() {
+	async forceStop(exitCode: number | NodeJS.Signals = "SIGKILL") {
 		if (this.instance?.exitCode === null) {
 			this.instance?.kill("SIGKILL");
 			await this.instance?.exited;
@@ -177,13 +179,39 @@ export class Server {
 			return { success: false };
 		}
 		this.waitingToShutdown = true;
-		const response = await safeFetch("http://localhost:6001/shutdown", {
-			body: JSON.stringify({ tick }),
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
+		if (this.config.apiPort === null) {
+			return {
+				success: true,
+				promise: new Promise<void>((r) => {
+					setTimeout(
+						async () => {
+							if (this.instance?.exitCode !== null) return;
+							if (
+								this.waitingToShutdown &&
+								(await this.forceStop(0))
+							) {
+								console.log(
+									"Server process forcefully stopped",
+								);
+							}
+							this.waitingToShutdown = false;
+							r();
+						},
+						(tick * 1000) / 20,
+					);
+				}),
+			};
+		}
+		const response = await safeFetch(
+			`http://localhost:${this.config.apiPort}/shutdown`,
+			{
+				body: JSON.stringify({ tick }),
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
 			},
-		});
+		);
 		if (!response) {
 			console.error("Failed to fetch shutdown response");
 			return { success: false };
@@ -224,7 +252,7 @@ export class Server {
 
 	async haveServerSideScheduledShutdown() {
 		const response = await safeFetch(
-			"http://localhost:6001/shuttingDown",
+			`http://localhost:${this.config.apiPort}/shuttingDown`,
 		).catch();
 		if (!response) return false;
 		const { result } = (await response.json()) as { result: boolean };
@@ -243,9 +271,13 @@ export class Server {
 	}
 
 	async cancelServerSideShutdown() {
-		if (!(await this.haveServerSideScheduledShutdown())) return false;
+		if (
+			this.config.apiPort === null ||
+			!(await this.haveServerSideScheduledShutdown())
+		)
+			return false;
 		const response = await safeFetch(
-			"http://localhost:6001/cancelShutdown",
+			`http://localhost:${this.config.apiPort}/cancelShutdown`,
 		);
 		if (!response) return false;
 		const { success } = (await response.json()) as { success: boolean };
@@ -291,6 +323,8 @@ export class ServerManager {
 						pluginDir: server.pluginPath,
 						serverDir: server.path,
 						tag: server.tag,
+						port: server.port,
+						apiPort: server.apiPort,
 					},
 				}),
 			);
@@ -314,6 +348,16 @@ export class ServerManager {
 	}
 	getServerCount() {
 		return this.servers.size;
+	}
+
+	async getAllUsingPorts() {
+		const ports: number[] = [];
+		for (const server of this.servers.values()) {
+			if (await server.isOnline.getData(true)) {
+				ports.push(...server.config.port);
+			}
+		}
+		return ports;
 	}
 
 	async exitAllServers(client: Client) {

@@ -37,7 +37,7 @@ export default {
 		),
 	async execute({ interaction, client, server }) {
 		if (!interaction.guild) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "This command can only be used in a server",
 				flags: [MessageFlags.Ephemeral],
 			});
@@ -45,17 +45,18 @@ export default {
 
 		const seconds = interaction.options.getInteger("seconds") ?? 0;
 		const force = interaction.options.getBoolean("force") || false;
-		if (!(await isServerAlive()))
-			return await interaction.reply({
+		if (!(await server.isOnline.getData(true)))
+			return await interaction.followUp({
 				content: "Server is already offline",
 				flags: [MessageFlags.Ephemeral],
 			});
 
 		if (
-			(await server.haveServerSideScheduledShutdown()) ||
-			server.haveLocalSideScheduledShutdown()
+			server.config.apiPort !== null &&
+			((await server.haveServerSideScheduledShutdown()) ||
+				server.haveLocalSideScheduledShutdown())
 		) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content:
 					"Server is already scheduled to shutdown, please cancel it first",
 				flags: [MessageFlags.Ephemeral],
@@ -69,7 +70,6 @@ export default {
 				PermissionFlags.stopServer,
 			)
 		) {
-			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 			const { success, promise } = await server.stop(seconds * 20);
 			if (!success) {
 				await interaction.editReply({ content: "Failed to shutdown" });
@@ -89,6 +89,7 @@ export default {
 				content: "Server stopped successfully",
 			});
 		}
+		await interaction.deleteReply();
 		const displayString =
 			seconds > 0 ? `Stop Server in ${seconds} seconds` : "Stop Server";
 
@@ -159,4 +160,5 @@ export default {
 			server,
 		});
 	},
+	ephemeral: true,
 } as CommandFile<true>;

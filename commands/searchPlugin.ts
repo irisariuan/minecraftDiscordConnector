@@ -22,8 +22,6 @@ export default {
 				.setDescription("Whether to only show stable releases"),
 		),
 	async execute({ interaction, server }) {
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-
 		const pluginOption = interaction.options.getString("plugin");
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
 
@@ -125,4 +123,5 @@ export default {
 			},
 		});
 	},
+	ephemeral: true,
 } as CommandFile<true>;

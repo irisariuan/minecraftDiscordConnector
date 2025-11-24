@@ -14,19 +14,22 @@ export default {
 		),
 	async execute({ interaction, server }) {
 		const useAPI = interaction.options.getBoolean("api", true);
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 		const activePlugins = await getActivePlugins(
 			server.config.pluginDir,
+			server.config.apiPort,
 			useAPI,
 		);
 		if (activePlugins === null)
-			return await interaction.editReply(
-				"Failed to fetch active plugins from server.",
-			);
-		await interaction.editReply(
-			activePlugins.length > 0
-				? activePlugins.join(", ")
-				: "No active plugins found.",
-		);
+			return await interaction.followUp({
+				content: "Failed to fetch active plugins from server.",
+				flags: [MessageFlags.Ephemeral],
+			});
+		await interaction.followUp({
+			content:
+				activePlugins.length > 0
+					? activePlugins.join(", ")
+					: "No active plugins found.",
+			flags: [MessageFlags.Ephemeral],
+		});
 	},
 } as CommandFile<true>;

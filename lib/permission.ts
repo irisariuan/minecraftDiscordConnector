@@ -31,6 +31,7 @@ export const PermissionFlags = {
 	voteDownloadPlugin: 1 << 17,
 	voteDeletePlugin: 1 << 18,
 	receiveNotification: 1 << 19,
+	editFiles: 1 << 20,
 } as const;
 
 export const allPermission = Object.values(PermissionFlags).reduce(

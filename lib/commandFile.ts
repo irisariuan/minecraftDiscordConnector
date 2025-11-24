@@ -9,7 +9,7 @@ import type {
 } from "discord.js";
 import { join } from "node:path";
 import type { Permission } from "./permission";
-import { Server } from "./server";
+import { Server, ServerManager } from "./server";
 
 interface ExecuteParams {
 	interaction: ChatInputCommandInteraction;
@@ -18,6 +18,7 @@ interface ExecuteParams {
 
 interface ExecuteParamsWithServer extends ExecuteParams {
 	server: Server;
+	serverManager: ServerManager;
 }
 
 interface ExecuteReactionParams {
@@ -38,6 +39,7 @@ export interface CommandFile<RequireServer extends boolean> {
 		params: ExecuteReactionParams,
 	) => unknown | Promise<unknown>;
 	permissions?: Permission;
+	ephemeral?: boolean;
 }
 
 export async function loadCommands() {

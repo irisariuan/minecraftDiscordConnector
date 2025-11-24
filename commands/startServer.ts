@@ -13,7 +13,6 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
-import { isServerAlive } from "../lib/request";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
 import { sendMessagesToUsersById } from "../lib/utils";
@@ -28,21 +27,29 @@ export default {
 				.setDescription("Force start the server without polling")
 				.setRequired(false),
 		),
-	async execute({ interaction, client, server }) {
+	async execute({ interaction, client, server, serverManager }) {
 		if (!interaction.guild) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "This command can only be used in a server",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
 
 		const force = interaction.options.getBoolean("force") || false;
-		if (await isServerAlive())
-			return await interaction.reply({
+		if (await server.isOnline.getData(true))
+			return await interaction.followUp({
 				content: "Server is already online",
 				flags: [MessageFlags.Ephemeral],
 			});
-
+		const allUsingPorts = await serverManager.getAllUsingPorts();
+		for (const port of allUsingPorts) {
+			if (server.config.port.includes(port)) {
+				return await interaction.followUp({
+					content: `Cannot start server because port \`${port}\` is already in use by another server`,
+					flags: [MessageFlags.Ephemeral],
+				});
+			}
+		}
 		if (
 			force &&
 			comparePermission(
@@ -50,7 +57,6 @@ export default {
 				PermissionFlags.startServer,
 			)
 		) {
-			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 			const pid = await server.start();
 			if (!pid) {
 				return await interaction.editReply({
@@ -62,6 +68,7 @@ export default {
 				content: "Server started successfully",
 			});
 		}
+		await interaction.deleteReply();
 
 		if (
 			!(await spendCredit({
@@ -71,7 +78,7 @@ export default {
 				serverId: server.id,
 			}))
 		) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "You don't have enough credit to start the server",
 				flags: [MessageFlags.Ephemeral],
 			});
@@ -119,4 +126,5 @@ export default {
 			server,
 		});
 	},
+	ephemeral: true,
 } as CommandFile<true>;

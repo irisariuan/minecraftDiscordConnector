@@ -35,7 +35,6 @@ export default {
 				.setDescription("Whether to only show stable releases"),
 		),
 	async execute({ interaction, server }) {
-		await interaction.deferReply();
 		const userPermission = await readPermission(interaction.user);
 
 		const pluginOption = interaction.options.getString("plugin", true);
