@@ -125,11 +125,11 @@ export default {
 				PermissionFlags.upload,
 			)
 		) {
-			token = uploadserver.createToken();
+			token = uploadserver.createFileToken();
 			await thread.send(
 				`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
 			);
-			promises.push(uploadserver.awaitToken(token, 1000 * 60 * 30));
+			promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
 		}
 		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction) {
