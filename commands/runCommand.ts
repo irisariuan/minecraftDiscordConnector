@@ -52,8 +52,14 @@ export default {
 		),
 	async execute({ interaction, client, server }) {
 		if (!interaction.guild) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "This command can only be used in a server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		if (server.config.apiPort === null) {
+			return await interaction.followUp({
+				content: "Running commands is not supported on this server",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
@@ -68,13 +74,16 @@ export default {
 		);
 
 		if (canRunCommand && force) {
-			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 			const output = server.captureSomeOutput(capture);
-			const { success } = await runCommandOnServer(command);
+			const { success } = await runCommandOnServer(
+				server.config.apiPort,
+				command,
+			);
 			await interaction.editReply(
 				parseCommandOutput((await output)?.join("\n") || null, success),
 			);
 		}
+		await interaction.deleteReply();
 		if (
 			!(await spendCredit({
 				userId: interaction.user.id,
@@ -83,7 +92,7 @@ export default {
 				serverId: server.id,
 			}))
 		) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "You don't have enough credit to run this command",
 				flags: [MessageFlags.Ephemeral],
 			});
@@ -101,8 +110,13 @@ export default {
 				callerId: interaction.user.id,
 				description: `Command: \`${command}\``,
 				async onSuccess(approval, message) {
+					if (!server.config.apiPort)
+						return await message.reply(
+							"Running commands is not supported on this server",
+						);
 					const output = server.captureSomeOutput(capture);
 					const { success } = await runCommandOnServer(
+						server.config.apiPort,
 						approval.content,
 					);
 					const users = await getUsersWithMatchedPermission(
@@ -132,4 +146,5 @@ export default {
 			server,
 		});
 	},
+	ephemeral: true,
 } as CommandFile<true>;

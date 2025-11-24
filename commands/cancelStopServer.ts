@@ -22,11 +22,18 @@ export default {
 			});
 		}
 
-		if (!(await isServerAlive()))
+		if (!(await server.isOnline.getData(true)))
 			return await interaction.followUp({
 				content: "Server is offline",
 				flags: [MessageFlags.Ephemeral],
 			});
+		if (server.config.apiPort === null) {
+			return await interaction.followUp({
+				content:
+					"Server-side scheduled shutdown is not supported on this server",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
 		if (
 			!(await server.haveServerSideScheduledShutdown()) &&
 			!server.haveLocalSideScheduledShutdown()

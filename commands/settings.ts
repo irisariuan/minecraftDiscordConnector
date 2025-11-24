@@ -69,4 +69,4 @@ export default {
 			});
 		}
 	},
-} as CommandFile<true>;
+} as CommandFile<false>;

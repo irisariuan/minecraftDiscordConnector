@@ -23,7 +23,6 @@ import {
 	settings,
 } from "./lib/settings";
 import { getNextTimestamp } from "./lib/time";
-import { setActivity } from "./lib/utils";
 import { isApprovalMessageComponentId } from "./lib/approval/component";
 import { createServerManager, Server } from "./lib/server";
 import { createServer, hasAnyServer } from "./lib/db";
@@ -41,6 +40,8 @@ if (!(await hasAnyServer())) {
 		path: serverConfig.serverDir,
 		pluginPath: serverConfig.pluginDir,
 		modType: serverConfig.modType,
+		port: serverConfig.port,
+		tag: "Default Server",
 	});
 	console.log("Default server created.");
 }
@@ -220,12 +221,16 @@ client.on("interactionCreate", async (interaction) => {
 				});
 			}
 			server = servers[0][1];
+			await interaction.deferReply({
+				flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
+			});
 		} else {
 			const reply = await interaction.reply({
 				content: "Please select a server:",
 				components: [
 					createServerSelectionMenu(serverManager.getAllTagPairs()),
 				],
+				flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
 			});
 			try {
 				const selection = await reply.awaitMessageComponent({
@@ -243,6 +248,12 @@ client.on("interactionCreate", async (interaction) => {
 				const selectedServer = serverManager.getServer(
 					parseInt(serverId),
 				);
+				console.log(
+					"Selected",
+					serverId,
+					"returned:",
+					selectedServer?.id,
+				);
 				if (!selectedServer) {
 					return selection.update({
 						content: "Selected server not found",
@@ -254,9 +265,14 @@ client.on("interactionCreate", async (interaction) => {
 					content: "Server selected",
 					components: [],
 				});
+				await interaction.editReply({
+					components: [],
+					content: "Loading...",
+				});
 			} catch (e) {
-				return interaction.editReply({
-					content: "No server selected in time",
+				console.error(e);
+				return await interaction.editReply({
+					content: "No server selected in time or an error occurred",
 					components: [],
 				});
 			}
@@ -275,8 +291,9 @@ client.on("interactionCreate", async (interaction) => {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
+
 		await Promise.try(() =>
-			command.execute({ interaction, client, server }),
+			command.execute({ interaction, client, server, serverManager }),
 		).catch(errorHandler);
 	} else if (interaction.isMessageComponent() && interaction.isButton()) {
 		if (

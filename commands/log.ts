@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
+import { SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { sendPaginationMessage } from "../lib/pagination";
 import { PermissionFlags } from "../lib/permission";
@@ -14,8 +14,6 @@ export default {
 				.setRequired(false),
 		),
 	async execute({ interaction, server }) {
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-
 		const filter = interaction.options.getString("filter");
 
 		sendPaginationMessage({
@@ -41,4 +39,5 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.readLog,
+	ephemeral: true,
 } as CommandFile<true>;

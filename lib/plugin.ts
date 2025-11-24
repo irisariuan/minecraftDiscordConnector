@@ -24,6 +24,8 @@ export interface ServerConfig {
 	loaderType: string;
 	pluginDir: string;
 	tag: string | null;
+	port: number[];
+	apiPort: number | null;
 }
 
 export const serverConfig: ServerConfig = {
@@ -33,8 +35,9 @@ export const serverConfig: ServerConfig = {
 	loaderType: process.env.LOADER_TYPE,
 	pluginDir: join(process.env.SERVER_DIR, "plugins"),
 	tag: process.env.SERVER_TAG || null,
+	port: [parseInt(process.env.SERVER_PORT || "25565")],
+	apiPort: parseInt(process.env.SERVER_API_PORT ?? "6001"),
 };
-
 type SideValue = "required" | "optional" | "unsupported" | "unknown";
 type ProjectType = "mod" | "modpack" | "resourcepack" | "shader";
 type ProjectStatus =
@@ -202,14 +205,15 @@ export async function searchPlugins({
  */
 export async function getActivePlugins(
 	pluginDir: string,
+	apiPort: number | null,
 	localCheck = false,
 ): Promise<string[] | null> {
-	if (localCheck) {
+	if (localCheck && apiPort === null) {
 		return (await readdir(pluginDir))
 			.filter((file) => file.endsWith(".jar"))
 			.map((file) => removeSuffix(file, ".jar"));
 	}
-	const res = await safeFetch("http://localhost:6001/plugins");
+	const res = await safeFetch(`http://localhost:${apiPort}/plugins`);
 	if (!res?.ok) return null;
 	const data = (await res.json()) as string[];
 	return data;

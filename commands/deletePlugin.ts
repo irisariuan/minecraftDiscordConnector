@@ -27,7 +27,6 @@ export default {
 		),
 	async execute({ interaction, server }) {
 		const plugin = interaction.options.getString("plugin", true);
-		await interaction.deferReply();
 		const deleteFunc = async () => {
 			if (await removePluginByFileName(server.config.pluginDir, plugin)) {
 				await interaction.editReply({

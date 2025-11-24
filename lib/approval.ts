@@ -346,16 +346,11 @@ export async function sendApprovalPoll(
 		0x0099ff,
 		"Pending",
 	);
-	const message = await interaction.reply({
+	const message = await interaction.followUp({
 		embeds: [embed],
 		components: [createApprovalMessageComponent()],
 		withResponse: true,
 	});
-	const messageId = message.resource?.message?.id;
-	if (!messageId || !message.resource?.message) {
-		console.error("Failed to send approval message");
-		return interaction.editReply({ content: "Unknown error occurred" });
-	}
 	newApproval(
 		{
 			createdAt: Date.now(),
@@ -363,20 +358,16 @@ export async function sendApprovalPoll(
 			validTill,
 			duration,
 			options,
-			message: message.resource?.message,
-			originalMessageId: messageId,
+			message,
+			originalMessageId: message.id,
 			server: approvalOptions.server,
 		},
 		// clean up function
 		async () => {
 			console.log("Running user defined clean up function");
-			if (!messageId)
-				return console.error(
-					"Message ID not found, failed to clean up",
-				);
 			const approval = getApproval(
 				approvalOptions.server,
-				messageId,
+				message.id,
 				true,
 			);
 			if (!approval)
@@ -390,8 +381,8 @@ export async function sendApprovalPoll(
 		},
 		// transferring function
 		async () => {
-			if (!messageId) return;
-			const approval = getApproval(approvalOptions.server, messageId);
+			if (!message.id) return;
+			const approval = getApproval(approvalOptions.server, message.id);
 			if (!approval?.message.channel.isSendable()) return;
 			if (approval.message.deletable) {
 				approval.message.delete().catch(console.error);
@@ -404,7 +395,7 @@ export async function sendApprovalPoll(
 		},
 	);
 	console.log(
-		`Polling for command ${interaction.commandName} with message id ${message.resource?.message?.id}`,
+		`Polling for command ${interaction.commandName} with message id ${message.id}`,
 	);
 }
 

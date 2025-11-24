@@ -45,13 +45,12 @@ export default {
 		.setDescription("Upload a custom plugin to the server"),
 	async execute({ interaction, client, server }) {
 		if (interaction.channel?.type !== ChannelType.GuildText) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content:
 					"This command can only be used in a guild text channel",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		if (
 			!(await spendCredit({
@@ -325,4 +324,5 @@ export default {
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),
+	ephemeral: true,
 } as CommandFile<true>;
