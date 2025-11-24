@@ -17,12 +17,23 @@ if (
 )
 	throw new Error("SERVER_DIR environment variable is not set");
 
-export const MOD_TYPE = process.env.MOD_TYPE;
-export const SERVER_DIR = process.env.SERVER_DIR;
-export const MINECRAFT_VERSION = process.env.MINECRAFT_VERSION;
-export const LOADER_TYPE = process.env.LOADER_TYPE;
-export const PLUGIN_DIR = join(SERVER_DIR, "plugins");
-export const PLUGIN_JSON_PATH = join(process.cwd(), "data", "plugins.json");
+export interface ServerConfig {
+	modType: string;
+	serverDir: string;
+	minecraftVersion: string;
+	loaderType: string;
+	pluginDir: string;
+	tag: string | null;
+}
+
+export const serverConfig: ServerConfig = {
+	modType: process.env.MOD_TYPE,
+	serverDir: process.env.SERVER_DIR,
+	minecraftVersion: process.env.MINECRAFT_VERSION,
+	loaderType: process.env.LOADER_TYPE,
+	pluginDir: join(process.env.SERVER_DIR, "plugins"),
+	tag: process.env.SERVER_TAG || null,
+};
 
 type SideValue = "required" | "optional" | "unsupported" | "unknown";
 type ProjectType = "mod" | "modpack" | "resourcepack" | "shader";
@@ -164,15 +175,11 @@ function buildFacets(facets: Partial<SearchPluginFacets>) {
 	return result;
 }
 
-export async function searchPlugins(
-	{ offset = 0, query, facets }: SearchPluginProps = {
-		facets: {
-			categories: [LOADER_TYPE],
-			project_type: [MOD_TYPE],
-			versions: [MINECRAFT_VERSION],
-		},
-	},
-) {
+export async function searchPlugins({
+	offset = 0,
+	query,
+	facets,
+}: SearchPluginProps) {
 	const url = new URL("https://api.modrinth.com/v2/search");
 	url.searchParams.set("limit", "100");
 	url.searchParams.set("offset", offset.toString());
@@ -194,10 +201,11 @@ export async function searchPlugins(
  * Get a list of active plugins from the server, either fetching from the server API or reading from the local plugin directory.
  */
 export async function getActivePlugins(
+	pluginDir: string,
 	localCheck = false,
 ): Promise<string[] | null> {
 	if (localCheck) {
-		return (await readdir(PLUGIN_DIR))
+		return (await readdir(pluginDir))
 			.filter((file) => file.endsWith(".jar"))
 			.map((file) => removeSuffix(file, ".jar"));
 	}
@@ -260,6 +268,7 @@ export async function listPluginVersions(
 }
 
 export async function downloadPluginFile(
+	pluginDir: string,
 	id: string,
 	force = false,
 ): Promise<{ filename: string | null; newDownload: boolean }> {
@@ -267,7 +276,7 @@ export async function downloadPluginFile(
 	if (!metadata || !metadata.files[0]) {
 		return { filename: null, newDownload: false };
 	}
-	await addPluginToJson({
+	await addPluginToJson(pluginDir, {
 		downloadedAt: Date.now(),
 		fileName: metadata.files[0].filename,
 		projectId: metadata.project_id,
@@ -275,7 +284,9 @@ export async function downloadPluginFile(
 	});
 	if (
 		!force &&
-		existsSync(createPathForPluginFile(metadata.files[0].filename))
+		existsSync(
+			createPathForPluginFile(pluginDir, metadata.files[0].filename),
+		)
 	) {
 		console.log(
 			`File ${metadata.files[0].filename} already exists, skipping download`,
@@ -285,7 +296,7 @@ export async function downloadPluginFile(
 	const res = await safeFetch(metadata.files[0].url);
 	if (!res?.ok) return { filename: null, newDownload: false };
 	const stream = createWriteStream(
-		createPathForPluginFile(metadata.files[0].filename),
+		createPathForPluginFile(pluginDir, metadata.files[0].filename),
 	);
 	const data = res.body;
 	if (!data) return { filename: null, newDownload: false };
@@ -297,8 +308,8 @@ export async function downloadPluginFile(
 	return { filename: metadata.files[0].filename, newDownload: true };
 }
 
-export function createPathForPluginFile(fileName: string) {
-	return safeJoin(PLUGIN_DIR, fileName);
+export function createPathForPluginFile(pluginDir: string, fileName: string) {
+	return safeJoin(pluginDir, fileName);
 }
 
 interface PluginJsonEntry {
@@ -308,28 +319,36 @@ interface PluginJsonEntry {
 	downloadedAt: number;
 }
 
-async function readPluginsJson(): Promise<PluginJsonEntry[]> {
+async function readPluginsJson(
+	pluginJsonPath: string,
+): Promise<PluginJsonEntry[]> {
 	try {
-		return JSON.parse(await readFile(PLUGIN_JSON_PATH, "utf-8"));
+		return JSON.parse(await readFile(pluginJsonPath, "utf-8"));
 	} catch {
 		return [];
 	}
 }
 
-async function addPluginToJson(plugin: PluginJsonEntry) {
-	const json = await readPluginsJson();
+async function addPluginToJson(
+	pluginJsonPath: string,
+	plugin: PluginJsonEntry,
+) {
+	const json = await readPluginsJson(pluginJsonPath);
 	if (json.find((p) => p.fileName === plugin.fileName)) return;
-	await writePluginsJson([...json, plugin]);
+	await writePluginsJson(pluginJsonPath, [...json, plugin]);
 }
 
-async function writePluginsJson(plugins: PluginJsonEntry[]) {
-	await writeFile(PLUGIN_JSON_PATH, JSON.stringify(plugins, null, 4));
+async function writePluginsJson(
+	pluginJsonPath: string,
+	plugins: PluginJsonEntry[],
+) {
+	await writeFile(pluginJsonPath, JSON.stringify(plugins, null, 4));
 }
 
 /**
  * Returning the filename of a downloaded plugin, not including custom plugins
  */
-export async function getPluginFileName(slugOrId: string) {
+export async function getPluginFileName(pluginDir: string, slugOrId: string) {
 	const metadata = await getPlugin(slugOrId);
 	if (!metadata) return null;
 	const versions = (
@@ -344,26 +363,33 @@ export async function getPluginFileName(slugOrId: string) {
 				removeSuffix(v.files[0].filename, ".jar"),
 		)
 		.filter((v) => !!v);
-	const dir = await readdir(PLUGIN_DIR);
+	const dir = await readdir(pluginDir);
 	for (const file of dir) {
 		if (versionNames.includes(ensureSuffix(file, ".jar"))) return file;
 	}
 	return null;
 }
 
-export async function removePluginByFileName(fileName: string) {
-	const path = createPathForPluginFile(ensureSuffix(fileName, ".jar"));
+export async function removePluginByFileName(
+	pluginDir: string,
+	fileName: string,
+) {
+	const path = createPathForPluginFile(
+		pluginDir,
+		ensureSuffix(fileName, ".jar"),
+	);
 	if (existsSync(path)) {
 		await rm(path);
 		return true;
 	}
-	const json = await readPluginsJson();
+	const json = await readPluginsJson(pluginDir);
 	const filtered = json.filter(
 		(p) =>
 			removeSuffix(p.fileName, ".jar") !== removeSuffix(fileName, ".jar"),
 	);
 	if (json.length !== filtered.length) {
 		await writePluginsJson(
+			pluginDir,
 			json.filter(
 				(p) =>
 					removeSuffix(p.fileName, ".jar") !==
@@ -374,10 +400,13 @@ export async function removePluginByFileName(fileName: string) {
 	return false;
 }
 
-export async function removePluginBySlugOrId(slugOrId: string) {
-	const fileName = await getPluginFileName(slugOrId);
+export async function removePluginBySlugOrId(
+	pluginDir: string,
+	slugOrId: string,
+) {
+	const fileName = await getPluginFileName(pluginDir, slugOrId);
 	if (fileName) {
-		return await removePluginByFileName(fileName);
+		return await removePluginByFileName(pluginDir, fileName);
 	}
 	return false;
 }

@@ -115,18 +115,22 @@ export default {
 			});
 		}
 
-		const success = await spendCredit(
-			interaction.user.id,
-			amount + totalTransferringFee,
-			"Transfer Credit",
-		);
+		const success = await spendCredit({
+			userId: interaction.user.id,
+			cost: amount + totalTransferringFee,
+			reason: "Transfer Credit",
+		});
 		if (!success) {
 			return await interaction.editReply({
 				content: `You do not have enough credit (Requires ${totalTransferringFee}, current: ${fromUserCredit.currentCredit}) to transfer ${amount} credit to ${userMention(user.id)}`,
 				components: [],
 			});
 		}
-		await changeCredit(user.id, amount, "Received Transfer Credit");
+		await changeCredit({
+			userId: user.id,
+			change: amount,
+			reason: "Received Transfer Credit",
+		});
 		await sendCreditNotification({
 			user: interaction.user,
 			creditChanged: -amount,
@@ -145,11 +149,11 @@ export default {
 			cancellable: true,
 			maxRefund: amount,
 			onRefund: async (refundAmount) => {
-				await changeCredit(
-					interaction.user.id,
-					-refundAmount,
-					"Transfer Credit Refund",
-				);
+				await changeCredit({
+					userId: interaction.user.id,
+					change: -refundAmount,
+					reason: "Transfer Credit Refund",
+				});
 				await sendCreditNotification({
 					user: interaction.user,
 					creditChanged: refundAmount,
@@ -162,4 +166,4 @@ export default {
 			components: [],
 		});
 	},
-} as CommandFile;
+} as CommandFile<false>;

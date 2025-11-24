@@ -14,24 +14,24 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("cancelstopserver")
 		.setDescription("Cancel stop the server"),
-	async execute({ interaction, serverManager }) {
+	async execute({ interaction, server }) {
 		if (!interaction.guild) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "This command can only be used in a server",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
 
 		if (!(await isServerAlive()))
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "Server is offline",
 				flags: [MessageFlags.Ephemeral],
 			});
 		if (
-			!(await serverManager.haveServerSideScheduledShutdown()) &&
-			!serverManager.haveLocalSideScheduledShutdown()
+			!(await server.haveServerSideScheduledShutdown()) &&
+			!server.haveLocalSideScheduledShutdown()
 		)
-			return await interaction.reply({
+			return await interaction.followUp({
 				content: "No scheduled shutdown found",
 				flags: [MessageFlags.Ephemeral],
 			});
@@ -41,31 +41,33 @@ export default {
 				PermissionFlags.startServer,
 			])
 		) {
-			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 			let success = false;
-			if (serverManager.haveLocalSideScheduledShutdown()) {
-				serverManager.cancelLocalScheduledShutdown();
+			if (server.haveLocalSideScheduledShutdown()) {
+				server.cancelLocalScheduledShutdown();
 				success = true;
 			}
-			if (await serverManager.cancelServerSideShutdown()) {
+			if (await server.cancelServerSideShutdown()) {
 				success = true;
 			}
 			if (!success)
-				return await interaction.editReply({
+				return await interaction.followUp({
 					content: "Failed to cancel scheduled shutdown",
+					flags: [MessageFlags.Ephemeral],
 				});
-			return await interaction.editReply({
+			return await interaction.followUp({
 				content: "Cancelled scheduled shutdown",
+				flags: [MessageFlags.Ephemeral],
 			});
 		}
 		if (
-			!(await spendCredit(
-				interaction.user.id,
-				settings.newCancelStopServerPollFee,
-				"New Cancel Stop Server Poll",
-			))
+			!(await spendCredit({
+				userId: interaction.user.id,
+				cost: settings.newCancelStopServerPollFee,
+				serverId: server.id,
+				reason: "New Cancel Stop Server Poll",
+			}))
 		) {
-			return await interaction.reply({
+			return await interaction.followUp({
 				content:
 					"You don't have enough credit to cancel the server shutdown",
 				flags: [MessageFlags.Ephemeral],
@@ -75,6 +77,7 @@ export default {
 			user: interaction.user,
 			creditChanged: -settings.newCancelStopServerPollFee,
 			reason: "New Cancel Stop Server Poll",
+			serverId: server.id,
 		});
 
 		sendApprovalPoll(interaction, {
@@ -85,11 +88,11 @@ export default {
 				description: "Cancel Server Shutdown",
 				async onSuccess(approval, message) {
 					let success = false;
-					if (serverManager.haveLocalSideScheduledShutdown()) {
-						serverManager.cancelLocalScheduledShutdown();
+					if (server.haveLocalSideScheduledShutdown()) {
+						server.cancelLocalScheduledShutdown();
 						success = true;
 					}
-					if (await serverManager.cancelServerSideShutdown()) {
+					if (await server.cancelServerSideShutdown()) {
 						success = true;
 					}
 					if (!success)
@@ -104,6 +107,7 @@ export default {
 				disapprovalCount: 2,
 				credit: settings.cancelStopServerVoteFee,
 			},
+			server,
 		});
 	},
-} as CommandFile;
+} as CommandFile<true>;

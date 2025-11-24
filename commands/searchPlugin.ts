@@ -1,9 +1,6 @@
 import { SlashCommandBuilder, MessageFlags, time } from "discord.js";
 import {
-	getPlugin,
 	listPluginVersions,
-	LOADER_TYPE,
-	MINECRAFT_VERSION,
 	searchPlugins,
 	type PluginListVersionItem,
 	type PluginSearchQueryItem,
@@ -24,7 +21,7 @@ export default {
 				.setName("release")
 				.setDescription("Whether to only show stable releases"),
 		),
-	async execute({ interaction }) {
+	async execute({ interaction, server }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		const pluginOption = interaction.options.getString("plugin");
@@ -38,7 +35,9 @@ export default {
 					const plugins = await searchPlugins({
 						offset: i * 20,
 						query: filter,
-						facets: { categories: [LOADER_TYPE] },
+						facets: {
+							categories: [server.config.loaderType],
+						},
 					});
 					if ("error" in plugins) {
 						continue;
@@ -49,8 +48,8 @@ export default {
 			},
 			formatter: (plugin) => {
 				const usable =
-					plugin.versions.includes(MINECRAFT_VERSION) &&
-					plugin.categories.includes(LOADER_TYPE);
+					plugin.versions.includes(server.config.minecraftVersion) &&
+					plugin.categories.includes(server.config.loaderType);
 				return {
 					name: plugin.title,
 					value: `${plugin.description}\nSlug: \`${plugin.slug}\`, Project ID: \`${plugin.project_id}\`, ${usable ? "✅Usable on this server" : "❌Not usable on this server"}, Latest Version ID: \`${plugin.latest_version}\``,
@@ -92,7 +91,17 @@ export default {
 						(await listPluginVersions(value)) || [],
 					formatter: (version) => ({
 						name: version.version_number,
-						value: `ID: \`${version.id}\`, Published on ${time(new Date(version.date_published))}, ${version.game_versions.includes(MINECRAFT_VERSION) && version.loaders.includes(LOADER_TYPE) ? "✅Usable on this server" : "❌Not usable on this server"}, Release Type: \`${version.version_type}\``,
+						value: `ID: \`${version.id}\`, Published on ${time(
+							new Date(version.date_published),
+						)},
+						${
+							version.game_versions.includes(
+								server.config.minecraftVersion,
+							) &&
+							version.loaders.includes(server.config.loaderType)
+								? "✅Usable on this server"
+								: "❌Not usable on this server"
+						}, Release Type: \`${version.version_type}\``,
 					}),
 					options: {
 						title: `Versions of ${value}`,
@@ -116,4 +125,4 @@ export default {
 			},
 		});
 	},
-} as CommandFile;
+} as CommandFile<true>;

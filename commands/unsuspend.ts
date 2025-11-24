@@ -7,12 +7,13 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("unsuspend")
 		.setDescription("Unsuspend the server"),
-	async execute({ interaction, client, serverManager }) {
-		serverManager.suspendingEvent.setSuspending(false);
+	async execute({ interaction, client, server }) {
+		server.suspendingEvent.setSuspending(false);
 		setActivity(
 			client,
-			(await serverManager.isOnline.getData()) || false,
-			serverManager.suspendingEvent.isSuspending(),
+			(await server.isOnline.getData()) || false,
+			server.suspendingEvent.isSuspending(),
+			server.config.minecraftVersion,
 		);
 		return await interaction.reply({
 			content: "Server is resumed",
@@ -20,4 +21,4 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.suspend,
-} as CommandFile;
+} as CommandFile<true>;

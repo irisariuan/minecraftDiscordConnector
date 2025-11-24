@@ -28,7 +28,7 @@ export default {
 				.setDescription("Force start the server without polling")
 				.setRequired(false),
 		),
-	async execute({ interaction, client, serverManager }) {
+	async execute({ interaction, client, server }) {
 		if (!interaction.guild) {
 			return await interaction.reply({
 				content: "This command can only be used in a server",
@@ -51,7 +51,7 @@ export default {
 			)
 		) {
 			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-			const pid = await serverManager.start();
+			const pid = await server.start();
 			if (!pid) {
 				return await interaction.editReply({
 					content: "Server is already online",
@@ -64,11 +64,12 @@ export default {
 		}
 
 		if (
-			!(await spendCredit(
-				interaction.user.id,
-				settings.newStartServerPollFee,
-				"New Start Server Poll",
-			))
+			!(await spendCredit({
+				userId: interaction.user.id,
+				cost: settings.newStartServerPollFee,
+				reason: "New Start Server Poll",
+				serverId: server.id,
+			}))
 		) {
 			return await interaction.reply({
 				content: "You don't have enough credit to start the server",
@@ -79,6 +80,7 @@ export default {
 			user: interaction.user,
 			creditChanged: -settings.newStartServerPollFee,
 			reason: "New Start Server Poll",
+			serverId: server.id,
 		});
 
 		sendApprovalPoll(interaction, {
@@ -88,7 +90,7 @@ export default {
 				callerId: interaction.user.id,
 				description: "Start Server",
 				async onSuccess(approval, message) {
-					const pid = await serverManager.start();
+					const pid = await server.start();
 					if (!pid) {
 						await message.reply({
 							content: "Server is already online",
@@ -114,6 +116,7 @@ export default {
 				disapprovalCount: 3,
 				credit: settings.startServerVoteFee,
 			},
+			server,
 		});
 	},
-} as CommandFile;
+} as CommandFile<true>;

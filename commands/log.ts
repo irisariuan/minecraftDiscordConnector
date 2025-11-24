@@ -13,7 +13,7 @@ export default {
 				.setDescription("Filter the log by keyword")
 				.setRequired(false),
 		),
-	async execute({ interaction, serverManager }) {
+	async execute({ interaction, server }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		const filter = interaction.options.getString("filter");
@@ -24,7 +24,7 @@ export default {
 				filter: filter || undefined,
 			},
 			async getResult() {
-				return serverManager.outputLines;
+				return server.outputLines;
 			},
 			filterFunc: (filter) => (log) => {
 				if (!filter) return true;
@@ -41,4 +41,4 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.readLog,
-} as CommandFile;
+} as CommandFile<true>;

@@ -85,11 +85,11 @@ export default {
 		if (subCommand === "set") {
 			const promises = [];
 			for (const user of users) {
-				const original = await setCredit(
-					user.id,
-					amount,
-					"Set by admin",
-				);
+				const original = await setCredit({
+					userId: user.id,
+					credit: amount,
+					reason: "Set by admin",
+				});
 				if (original === null) continue;
 				console.log(`Set ${user.displayName} credit to ${amount}`);
 				if (!silent)
@@ -109,11 +109,11 @@ export default {
 		} else if (subCommand === "change") {
 			const promises = [];
 			for (const user of users) {
-				const result = await changeCredit(
-					user.id,
-					amount,
-					"Changed by admin",
-				);
+				const result = await changeCredit({
+					userId: user.id,
+					change: amount,
+					reason: "Changed by admin",
+				});
 				if (result === null) continue;
 				console.log(`Changed ${user.displayName} credit by ${amount}`);
 				if (!silent)
@@ -133,4 +133,4 @@ export default {
 		}
 	},
 	permissions: PermissionFlags.creditEdit,
-} as CommandFile;
+} as CommandFile<false>;

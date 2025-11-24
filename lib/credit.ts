@@ -31,11 +31,17 @@ export interface Change {
 	trackingId: string;
 }
 
-export async function setCredit(
-	userId: string,
-	credit: number,
-	reason: string,
-) {
+export async function setCredit({
+	userId,
+	credit,
+	serverId,
+	reason,
+}: {
+	userId: string;
+	credit: number;
+	serverId?: number;
+	reason: string;
+}) {
 	const userCreditFetched = await getCredit(userId);
 	if (!userCreditFetched) return null;
 	await newTransaction({
@@ -46,23 +52,39 @@ export async function setCredit(
 		beforeAmount: userCreditFetched.currentCredit,
 		amount: credit - userCreditFetched.currentCredit,
 		reason,
+		server: {
+			connect: {
+				id: serverId,
+			},
+		},
 		timestamp: new Date(),
 	});
 	await setUserCredits(userId, credit);
 	return userCreditFetched.currentCredit;
 }
 
-export async function changeCredit(
-	userId: string,
-	change: number,
-	reason: string,
-) {
+export async function changeCredit({
+	userId,
+	change,
+	serverId,
+	reason,
+}: {
+	userId: string;
+	change: number;
+	serverId?: number;
+	reason: string;
+}) {
 	const userCreditFetched = await getCredit(userId);
 	if (!userCreditFetched) return null;
 
 	await newTransaction({
 		user: {
 			connectOrCreate: { create: { id: userId }, where: { id: userId } },
+		},
+		server: {
+			connect: {
+				id: serverId,
+			},
 		},
 		afterAmount: userCreditFetched.currentCredit + change,
 		beforeAmount: userCreditFetched.currentCredit,
@@ -115,13 +137,19 @@ export async function canSpendCredit(userId: string, cost: number) {
 	);
 }
 
-export async function spendCredit(
-	userId: string,
-	cost: number,
-	reason: string,
-) {
+export async function spendCredit({
+	userId,
+	cost,
+	serverId,
+	reason,
+}: {
+	userId: string;
+	cost: number;
+	serverId?: number;
+	reason: string;
+}) {
 	if (!canSpendCredit(userId, cost)) return false;
-	await changeCredit(userId, -Math.abs(cost), reason);
+	await changeCredit({ userId, change: -Math.abs(cost), serverId, reason });
 	return true;
 }
 
@@ -129,6 +157,7 @@ export async function sendCreditNotification({
 	user,
 	creditChanged,
 	reason,
+	serverId,
 	silent = false,
 	cancellable = false,
 	maxRefund = 0,
@@ -137,6 +166,7 @@ export async function sendCreditNotification({
 	user: User | PartialUser | GuildMember;
 	creditChanged: number;
 	reason: string;
+	serverId?: number;
 	silent?: boolean;
 	cancellable?: boolean;
 	maxRefund?: number;
@@ -185,11 +215,12 @@ export async function sendCreditNotification({
 		});
 		collector.on("collect", async () => {
 			onRefund?.(refund);
-			const newCredit = await changeCredit(
-				user.id,
-				refund,
-				`Cancelled: ${reason}`,
-			);
+			const newCredit = await changeCredit({
+				userId: user.id,
+				change: refund,
+				serverId,
+				reason: `Cancelled: ${reason}`,
+			});
 			console.log(
 				`User ${user.id} cancelled a transaction of ${creditChanged}, refunded ${-refund}, new credit: ${newCredit}`,
 			);

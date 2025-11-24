@@ -7,7 +7,7 @@ import cors from "cors";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
 import { join } from "path";
 
-function createUploadServer(manager: UploadServerManager) {
+function createUploadServer(manager: Uploadserver) {
 	const app = express();
 	const upload = multer({
 		limits: {
@@ -87,7 +87,7 @@ export interface File {
 	filename: string;
 }
 
-export class UploadServerManager extends EventEmitter {
+export class Uploadserver extends EventEmitter {
 	port: number;
 	hosting: boolean;
 	hostAddress: string;
@@ -102,7 +102,7 @@ export class UploadServerManager extends EventEmitter {
 	constructor(
 		port = 6003,
 		hostAddress = "0.0.0.0",
-		extensions = [".jar", ".yaml", ".yml", ".conf", '.zip'],
+		extensions = [".jar", ".yaml", ".yml", ".conf", ".zip"],
 	) {
 		super();
 		this.port = port;
@@ -216,4 +216,4 @@ export class UploadServerManager extends EventEmitter {
 	}
 }
 
-export const uploadServerManager = new UploadServerManager();
+export const uploadserver = new Uploadserver();

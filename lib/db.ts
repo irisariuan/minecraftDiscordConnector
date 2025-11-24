@@ -1,11 +1,10 @@
-import { Prisma, PrismaClient } from "../generated/prisma";
+import { prisma } from "./prisma";
 import {
 	comparePermission,
 	PermissionFlags,
 	readPermission,
 } from "./permission";
-
-const prisma = new PrismaClient();
+import type { Prisma } from "../generated/prisma/client";
 
 export async function createUser(data: Prisma.UserCreateInput) {
 	return prisma.user.create({ data });
@@ -59,4 +58,24 @@ export async function getAllUserPermissions() {
 		(acc, user) => ({ ...acc, [user.id]: user.permission }),
 		{} as Record<string, number>,
 	);
+}
+
+export async function selectServerById(id: number) {
+	return prisma.server.findUnique({ where: { id } });
+}
+
+export async function createServer(data: Prisma.ServerCreateInput) {
+	return prisma.server.create({ data });
+}
+
+export async function getAllServers() {
+	return prisma.server.findMany();
+}
+
+export async function getAllServerIds() {
+	return prisma.server.findMany({ select: { id: true } });
+}
+
+export async function hasAnyServer() {
+	return (await prisma.server.count()) > 0;
 }

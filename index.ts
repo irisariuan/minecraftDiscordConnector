@@ -1,8 +1,13 @@
 import { input } from "@inquirer/prompts";
-import { Client, GatewayIntentBits, MessageFlags } from "discord.js";
+import {
+	Client,
+	ComponentType,
+	GatewayIntentBits,
+	MessageFlags,
+} from "discord.js";
 import "dotenv/config";
-import { approvalList, updateApprovalMessage } from "./lib/approval";
-import { loadCommands } from "./lib/commandFile";
+import { updateApprovalMessage } from "./lib/approval";
+import { doNotRequireServer, loadCommands } from "./lib/commandFile";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { updateDnsRecord } from "./lib/dnsRecord";
 import {
@@ -20,10 +25,27 @@ import {
 import { getNextTimestamp } from "./lib/time";
 import { setActivity } from "./lib/utils";
 import { isApprovalMessageComponentId } from "./lib/approval/component";
-import { ServerManager } from "./lib/server";
+import { createServerManager, Server } from "./lib/server";
+import { createServer, hasAnyServer } from "./lib/db";
+import { serverConfig } from "./lib/plugin";
+import { createServerSelectionMenu } from "./lib/embed/server";
 
 const commands = await loadCommands();
-const serverManager = new ServerManager({});
+if (!(await hasAnyServer())) {
+	console.log(
+		"No server found in database, creating a new server with default configuration...",
+	);
+	await createServer({
+		loaderType: serverConfig.loaderType,
+		version: serverConfig.minecraftVersion,
+		path: serverConfig.serverDir,
+		pluginPath: serverConfig.pluginDir,
+		modType: serverConfig.modType,
+	});
+	console.log("Default server created.");
+}
+
+const serverManager = await createServerManager();
 const client = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
@@ -89,15 +111,14 @@ if (process.argv.includes("-C")) {
 
 client.once("ready", async () => {
 	console.log(`Logged in as ${client.user?.tag}`);
-	setActivity(
-		client,
-		(await serverManager.isOnline.getData()) || false,
-		serverManager.suspendingEvent.isSuspending(),
-	);
 	if (giveCredits > 0) {
 		const users = await getUsersWithMatchedPermission(PermissionFlags.use);
 		for (const userId of users) {
-			await changeCredit(userId, giveCredits, "System Gift");
+			await changeCredit({
+				userId,
+				change: giveCredits,
+				reason: "System Gift",
+			});
 			const user = await client.users.fetch(userId).catch(() => null);
 			if (user) {
 				await sendCreditNotification({
@@ -145,22 +166,14 @@ client.on("interactionCreate", async (interaction) => {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		if (
-			serverManager.suspendingEvent.isSuspending() &&
-			!comparePermission(
-				await readPermission(interaction.user),
-				PermissionFlags.suspend,
-			)
-		) {
+
+		if (!interaction.channel?.isSendable()) {
 			return interaction.reply({
-				content:
-					"Server is suspending, you do not have permission to use this command",
+				content: "Cannot send messages in this channel",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await Promise.try(() =>
-			command.execute({ interaction, client, serverManager }),
-		).catch((err) => {
+		const errorHandler = (err: Error) => {
 			console.error(err);
 			interaction
 				.reply({
@@ -183,7 +196,88 @@ client.on("interactionCreate", async (interaction) => {
 							});
 						});
 				});
-		});
+		};
+
+		if (doNotRequireServer(command)) {
+			return await Promise.try(() =>
+				command.execute({ interaction, client }),
+			).catch(errorHandler);
+		}
+		const serverCount = serverManager.getServerCount();
+		if (serverCount === 0) {
+			return interaction.reply({
+				content: "No servers available",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		let server: Server;
+		if (serverCount === 1) {
+			const servers = serverManager.getAllServerEntries();
+			if (!servers[0]) {
+				return interaction.reply({
+					content: "No servers available",
+					flags: [MessageFlags.Ephemeral],
+				});
+			}
+			server = servers[0][1];
+		} else {
+			const reply = await interaction.reply({
+				content: "Please select a server:",
+				components: [
+					createServerSelectionMenu(serverManager.getAllTagPairs()),
+				],
+			});
+			try {
+				const selection = await reply.awaitMessageComponent({
+					time: 60000,
+					filter: (i) => i.user.id === interaction.user.id,
+					componentType: ComponentType.StringSelect,
+				});
+				const serverId = selection.values[0];
+				if (!serverId) {
+					return selection.update({
+						content: "No server selected",
+						components: [],
+					});
+				}
+				const selectedServer = serverManager.getServer(
+					parseInt(serverId),
+				);
+				if (!selectedServer) {
+					return selection.update({
+						content: "Selected server not found",
+						components: [],
+					});
+				}
+				server = selectedServer;
+				await selection.update({
+					content: "Server selected",
+					components: [],
+				});
+			} catch (e) {
+				return interaction.editReply({
+					content: "No server selected in time",
+					components: [],
+				});
+			}
+		}
+
+		if (
+			server.suspendingEvent.isSuspending() &&
+			!comparePermission(
+				await readPermission(interaction.user),
+				PermissionFlags.suspend,
+			)
+		) {
+			return interaction.reply({
+				content:
+					"Server is suspending, you do not have permission to use this command",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		await Promise.try(() =>
+			command.execute({ interaction, client, server }),
+		).catch(errorHandler);
 	} else if (interaction.isMessageComponent() && interaction.isButton()) {
 		if (
 			interaction.user.bot ||
@@ -193,21 +287,9 @@ client.on("interactionCreate", async (interaction) => {
 		)
 			return;
 		if (isApprovalMessageComponentId(interaction.customId)) {
-			return updateApprovalMessage(interaction, serverManager.suspendingEvent);
+			return updateApprovalMessage(serverManager, interaction);
 		}
 	}
-});
-
-serverManager.isOnline.cacheEvent.on("setData", (data) => {
-	setActivity(client, data || false, serverManager.suspendingEvent.isSuspending());
-});
-
-serverManager.suspendingEvent.on("update", async (data) => {
-	setActivity(
-		client,
-		(await serverManager.isOnline.getData()) || false,
-		data,
-	);
 });
 
 setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
@@ -229,7 +311,11 @@ setTimeout(async () => {
 			}
 
 			console.log(`Gifted ${userId} ${giftAmount} credits`);
-			await changeCredit(userId, giftAmount, "Daily Gift");
+			await changeCredit({
+				userId,
+				change: giftAmount,
+				reason: "Daily Gift",
+			});
 			const user = await client.users.fetch(userId).catch(() => null);
 			if (user) {
 				await sendCreditNotification({
@@ -247,70 +333,6 @@ setTimeout(async () => {
 
 console.log(`Time before first run: ${Math.round(timeBeforeFirstRun / 1000)}s`);
 
-async function exitHandler() {
-	const { success, promise } = await serverManager.stop(0);
-	if (success) {
-		console.log("Server process shutting down");
-		await promise;
-		console.log("Server process stopped");
-	}
-	for (const [id, approval] of approvalList.entries()) {
-		console.log(`Found approval ${id}, trying to clean up...`);
-		if (approval.options.startPollFee) {
-			console.log(
-				`Refund ${approval.options.startPollFee} to caller ${approval.options.callerId}`,
-			);
-			await changeCredit(
-				approval.options.callerId,
-				approval.options.startPollFee,
-				"New Approval Poll Refund",
-			);
-			const user = await client.users
-				.fetch(approval.options.callerId)
-				.catch(() => null);
-			if (user) {
-				await sendCreditNotification({
-					user,
-					creditChanged: approval.options.startPollFee,
-					reason: "New Approval Poll Refund",
-					silent: true,
-				});
-			}
-		}
-		if (approval.options.credit) {
-			for (const id of approval.approvalIds.concat(
-				approval.disapprovalIds,
-			)) {
-				await changeCredit(
-					id,
-					approval.options.credit,
-					"Approval Reaction Refund",
-				);
-				const user = await client.users.fetch(id).catch(() => null);
-				if (user) {
-					await sendCreditNotification({
-						user,
-						creditChanged: approval.options.credit,
-						reason: "Approval Reaction Refund",
-						silent: true,
-					});
-				}
-			}
-		}
-		if (approval.message.editable) {
-			await approval.message.reactions.removeAll();
-			await approval.message.edit({
-				content: "Approval Canceled",
-				embeds: [],
-			});
-			continue;
-		}
-		if (approval.message.deletable) {
-			await approval.message.delete();
-		}
-	}
-}
-
 process.on("unhandledRejection", (reason) => {
 	console.error("Unhandled Rejection:", reason);
 });
@@ -319,17 +341,17 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("SIGINT", async () => {
-	await exitHandler().catch((err) =>
-		console.error("Error occurred during SIGINT:", err),
-	);
+	await serverManager
+		.exitAllServers(client)
+		.catch((err) => console.error("Error occurred before exit:", err));
 	process.exit(64);
 });
 
 process.on("beforeExit", async (code) => {
 	if (code === 64) return;
-	await exitHandler().catch((err) =>
-		console.error("Error occurred before exit:", err),
-	);
+	await serverManager
+		.exitAllServers(client)
+		.catch((err) => console.error("Error occurred before exit:", err));
 	process.exit(code);
 });
 

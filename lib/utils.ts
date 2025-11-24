@@ -4,7 +4,6 @@ import {
 	type Client,
 	type MessageCreateOptions,
 } from "discord.js";
-import { MINECRAFT_VERSION } from "./plugin";
 import { join } from "path";
 
 export type PickAndOptional<
@@ -100,11 +99,12 @@ export function setActivity(
 	client: Client,
 	online: boolean,
 	suspended: boolean,
+	minecraftVersion: string,
 ) {
 	client.user?.setActivity({
 		name: `${
 			online
-				? `Running Minecraft Server ${MINECRAFT_VERSION}`
+				? `Running Minecraft Server ${minecraftVersion}`
 				: "Server offline"
 		}${suspended ? " (Suspending)" : "(Public)"}`,
 		type: ActivityType.Custom,
