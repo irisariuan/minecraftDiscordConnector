@@ -27,7 +27,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import type { File } from "../lib/plugin/uploadServer";
+import type { FileBuffer } from "../lib/plugin/uploadServer";
 import { uploadserver } from "../lib/plugin/uploadServer";
 import {
 	copyLocalPluginFileToServer,
@@ -100,7 +100,7 @@ export default {
 			],
 		});
 		const promises: Promise<
-			Collection<Snowflake, Message> | ButtonInteraction | File
+			Collection<Snowflake, Message> | ButtonInteraction | FileBuffer
 		>[] = [
 			cancelMessage.awaitMessageComponent({
 				filter: (componentInteraction) =>

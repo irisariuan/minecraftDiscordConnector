@@ -7,14 +7,25 @@ import EventEmitter from "events";
 import type { Server } from "http";
 import cors from "cors";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { copyFile } from "fs/promises";
 import { writeFile } from "fs/promises";
+import { rename } from "fs/promises";
 
-const UploadRequestSchema = z.object({
-	editedContent: z.string(),
-	createCopy: z.boolean().optional(),
-});
+const UploadRequestSchema = z.discriminatedUnion("action", [
+	z.object({
+		action: z.literal("edit"),
+		editedContent: z.string(),
+		createCopy: z.boolean().optional(),
+	}),
+	z.object({
+		action: z.literal("rename"),
+		newFilename: z.string(),
+	}),
+	z.object({
+		action: z.literal("delete"),
+	}),
+]);
 
 function createUploadServer(uploadServer: UploadServer) {
 	const app = express();
@@ -89,7 +100,7 @@ function createUploadServer(uploadServer: UploadServer) {
 				);
 		}
 		console.log(`Received file: ${req.file?.originalname}`);
-		const file: File = {
+		const file: FileBuffer = {
 			buffer: req.file.buffer,
 			filename: req.file.originalname,
 		};
@@ -110,37 +121,74 @@ function createUploadServer(uploadServer: UploadServer) {
 		if (!req.body || !parsed.success) {
 			return res.status(400).send("Invalid request body");
 		}
-		const { editedContent, createCopy } = parsed.data;
-		const filename = uploadServer.editTokenFilenameMap.get(req.params.id);
+		const file = uploadServer.editTokenFilenameMap.get(req.params.id);
 		/**
 		 * @description with dot
 		 */
-		const extension = filename?.substring(filename.lastIndexOf("."));
-		const rawFilename = filename?.substring(0, filename.lastIndexOf("."));
-		if (!filename || !extension || !rawFilename) {
+		const extension = file?.filename.substring(
+			file.filename.lastIndexOf("."),
+		);
+		const action = parsed.data.action;
+		if (!file || !extension) {
 			return res
 				.status(500)
 				.send("Unexpected missing filename or extension");
 		}
-		console.log(`Received edited file: ${filename}`);
-		if (createCopy) {
-			await copyFile(filename, `${rawFilename}_edited${extension}`);
-		}
-		await writeFile(filename, editedContent, "utf-8").catch((err) => {
-			console.error("Error writing edited file:", err);
-		});
-		if (uploadServer.useEditToken(req.params.id)) {
-			return res.status(200).send("File edited successfully");
-		} else {
-			return res.status(500).send("Unexpected token usage failed");
+		switch (action) {
+			case "edit": {
+				const { editedContent, createCopy } = parsed.data;
+				const rawFilename = file.filename.substring(
+					0,
+					file.filename.lastIndexOf("."),
+				);
+				console.log(`Received edited file: ${file}`);
+				if (createCopy) {
+					await copyFile(
+						file.filename,
+						`${rawFilename}_edited${extension}`,
+					);
+				}
+				await writeFile(file.filename, editedContent, "utf-8").catch(
+					(err) => {
+						console.error("Error writing edited file:", err);
+					},
+				);
+				if (uploadServer.useEditToken(req.params.id)) {
+					return res.status(200).send("File edited successfully");
+				} else {
+					return res
+						.status(500)
+						.send("Unexpected token usage failed");
+				}
+			}
+			case "rename": {
+				const { newFilename } = parsed.data;
+				const finalPath = resolve(newFilename);
+				// prevent path traversal
+				if (!finalPath.startsWith(resolve(file.containingFolderPath))) {
+					return res.status(400).send("Invalid new filename path");
+				}
+				await rename(file.filename, newFilename);
+				return res.status(200).send("File renamed successfully");
+			}
+			case "delete": {
+				await rename(file.filename, `${file}.deleted`);
+				return res.status(200).send("File deleted successfully");
+			}
+			default:
+				return res.status(400).send("Invalid action");
 		}
 	});
 	return app;
 }
 
-export interface File {
+export interface FileBuffer {
 	buffer: Buffer;
 	filename: string;
+}
+export interface File {
+	filename: string;
+	containingFolderPath: string;
 }
 
 export enum TokenType {
@@ -155,8 +203,8 @@ export class UploadServer extends EventEmitter {
 	activeTokens: Set<string>;
 	allTokens: Set<string>;
 	tokenTypeMap: Map<string, TokenType>;
-	fileTokenMap: Map<string, File>;
-	editTokenFilenameMap: Map<string, string>;
+	fileTokenMap: Map<string, FileBuffer>;
+	editTokenFilenameMap: Map<string, File>;
 	autoHost: boolean;
 	acceptedExtensions: string[];
 	private app: Express;
@@ -207,9 +255,9 @@ export class UploadServer extends EventEmitter {
 		return this.createToken(TokenType.FileToken);
 	}
 
-	createEditToken(filename: string) {
+	createEditToken(file: File) {
 		const token = this.createToken(TokenType.EditToken);
-		this.editTokenFilenameMap.set(token, filename);
+		this.editTokenFilenameMap.set(token, file);
 		return token;
 	}
 
@@ -230,8 +278,8 @@ export class UploadServer extends EventEmitter {
 	awaitFileToken(token: string, timeout = 1000 * 60 * 5) {
 		if (!this.hasActiveToken(token, TokenType.FileToken))
 			return Promise.reject(new Error("Invalid token"));
-		return new Promise<File>((resolve, reject) => {
-			const listener = (usedToken: string, file?: File) => {
+		return new Promise<FileBuffer>((resolve, reject) => {
+			const listener = (usedToken: string, file?: FileBuffer) => {
 				if (usedToken === token) {
 					this.off("tokenUsed", listener);
 					this.off("tokenDeleted", listener);
@@ -289,7 +337,7 @@ export class UploadServer extends EventEmitter {
 	/**
 	 * @param timeout The time in milliseconds before the file expires (default 1 hour, let staff check the file)
 	 */
-	useFileToken(token: string, file: File, timeout = 1000 * 60 * 60) {
+	useFileToken(token: string, file: FileBuffer, timeout = 1000 * 60 * 60) {
 		if (this.hasActiveToken(token, TokenType.FileToken)) {
 			this.activeTokens.delete(token);
 			this.fileTokenMap.set(token, file);
@@ -333,7 +381,7 @@ export class UploadServer extends EventEmitter {
 	on(event: "tokenDeleted", listener: (token: string) => unknown): this;
 	on(
 		event: "tokenUsed",
-		listener: (token: string, file: File) => unknown,
+		listener: (token: string, file: FileBuffer) => unknown,
 	): this;
 	on(event: string, listener: (...args: any[]) => unknown): this {
 		return super.on(event, listener);
