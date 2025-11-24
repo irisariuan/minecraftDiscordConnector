@@ -9,22 +9,31 @@ import type {
 } from "discord.js";
 import { join } from "node:path";
 import type { Permission } from "./permission";
-import { ServerManager } from "./server";
+import { Server } from "./server";
 
 interface ExecuteParams {
 	interaction: ChatInputCommandInteraction;
 	client: Client;
-	serverManager: ServerManager;
 }
+
+interface ExecuteParamsWithServer extends ExecuteParams {
+	server: Server;
+}
+
 interface ExecuteReactionParams {
 	interaction: MessageReaction | PartialMessageReaction;
 	user: User | PartialUser;
 	client: Client;
 }
 
-export interface CommandFile {
+export interface CommandFile<RequireServer extends boolean> {
 	command: SlashCommandBuilder;
-	execute: (params: ExecuteParams) => unknown | Promise<unknown>;
+	requireServer: RequireServer;
+	execute: (
+		params: RequireServer extends true
+			? ExecuteParamsWithServer
+			: ExecuteParams,
+	) => unknown | Promise<unknown>;
 	executeReaction?: (
 		params: ExecuteReactionParams,
 	) => unknown | Promise<unknown>;
@@ -33,7 +42,7 @@ export interface CommandFile {
 
 export async function loadCommands() {
 	const glob = new Bun.Glob("commands/**/*.ts");
-	const commands: CommandFile[] = [];
+	const commands: CommandFile<boolean>[] = [];
 
 	for (const path of glob.scanSync(process.cwd())) {
 		const commandFile = (await import(join(process.cwd(), path))).default;
@@ -42,4 +51,10 @@ export async function loadCommands() {
 	}
 
 	return commands;
+}
+
+export function doNotRequireServer(
+	commandFile: CommandFile<boolean>,
+): commandFile is CommandFile<false> {
+	return commandFile.requireServer === false;
 }

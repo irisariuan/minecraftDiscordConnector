@@ -7,13 +7,14 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("suspend")
 		.setDescription("Suspend the server"),
-	async execute({ interaction, client, serverManager }) {
-		serverManager.suspendingEvent.setSuspending(true);
+	async execute({ interaction, client, server }) {
+		server.suspendingEvent.setSuspending(true);
 		console.log("Server online status updated, suspending");
 		setActivity(
 			client,
-			(await serverManager.isOnline.getData()) || false,
-			serverManager.suspendingEvent.isSuspending(),
+			(await server.isOnline.getData()) || false,
+			server.suspendingEvent.isSuspending(),
+			server.config.minecraftVersion,
 		);
 		return await interaction.reply({
 			content: "Server is suspending",
@@ -21,4 +22,4 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.suspend,
-} as CommandFile;
+} as CommandFile<true>;

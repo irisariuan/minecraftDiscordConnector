@@ -6,6 +6,11 @@ import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
 import { EventEmitter } from "node:events";
 import { stripVTControlCharacters } from "node:util";
 import { SuspendingEventEmitter } from "./suspend";
+import { type ServerConfig } from "./plugin";
+import { getAllServers } from "./db";
+import type { Approval } from "./approval";
+import { changeCredit, sendCreditNotification } from "./credit";
+import type { Client } from "discord.js";
 
 if (
 	!process.env.SERVER_DIR ||
@@ -13,9 +18,11 @@ if (
 )
 	throw new Error("SERVER_DIR environment variable is not set");
 
-interface ServerManagerOptions {
-	shutdownAllowedTime: number;
-	defaultSuspending: boolean;
+interface CreateServerOptions {
+	shutdownAllowedTime?: number;
+	defaultSuspending?: boolean;
+	config: ServerConfig;
+	serverId: number;
 }
 
 const serverTypeRef = {
@@ -39,7 +46,7 @@ class ServerMessageEmitter extends EventEmitter {
 	}
 }
 
-export class ServerManager {
+export class Server {
 	private instance: Subprocess<"ignore", "pipe", "inherit"> | null;
 	private waitingToShutdown: boolean;
 	isOnline: CacheItem<boolean>;
@@ -48,15 +55,23 @@ export class ServerManager {
 	shutdownAllowedTime: number;
 	timeouts: NodeJS.Timeout[];
 	suspendingEvent: SuspendingEventEmitter;
+	approvalList: Map<string, Approval>;
+	readonly config: ServerConfig;
+	readonly id: number;
 
 	constructor({
 		shutdownAllowedTime,
 		defaultSuspending = isTrueValue(process.env.DEFAULT_SUSPENDING || "") ||
 			false,
-	}: Partial<ServerManagerOptions>) {
+		serverId,
+		config,
+	}: CreateServerOptions) {
 		this.instance = null;
 		this.outputLines = [];
 		this.timeouts = [];
+		this.approvalList = new Map();
+		this.config = config;
+		this.id = serverId;
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
 		this.isOnline = new CacheItem<boolean>(false, {
@@ -244,5 +259,139 @@ export class ServerManager {
 		this.isOnline.setData(false);
 		this.waitingToShutdown = false;
 		this.outputLines = [];
+	}
+}
+
+export async function createServerManager() {
+	const manager = new ServerManager();
+	await manager.loadServers();
+	return manager;
+}
+
+/**
+ * Call `createServerManager` to create instance, **DO NOT** create it directly.
+ */
+export class ServerManager {
+	private servers: Map<number, Server>;
+
+	constructor() {
+		this.servers = new Map();
+	}
+	async loadServers() {
+		this.servers.clear();
+		for (const server of await getAllServers()) {
+			this.servers.set(
+				server.id,
+				new Server({
+					serverId: server.id,
+					config: {
+						loaderType: server.loaderType,
+						minecraftVersion: server.version,
+						modType: server.modType,
+						pluginDir: server.pluginPath,
+						serverDir: server.path,
+						tag: server.tag,
+					},
+				}),
+			);
+		}
+		return this.servers;
+	}
+
+	getServer(serverId: number) {
+		return this.servers.get(serverId);
+	}
+	getAllServerEntries() {
+		return Array.from(this.servers.entries());
+	}
+
+	getAllTagPairs() {
+		const result: TagPair[] = [];
+		for (const [id, server] of this.servers.entries()) {
+			result.push({ id, tag: server.config.tag });
+		}
+		return result;
+	}
+	getServerCount() {
+		return this.servers.size;
+	}
+
+	async exitAllServers(client: Client) {
+		for (const server of this.servers.values()) {
+			await exitServer(client, server);
+		}
+	}
+}
+
+export interface TagPair {
+	id: number;
+	tag: string | null;
+}
+
+async function exitServer(client: Client, server: Server) {
+	const { success, promise } = await server.stop(0);
+	if (success) {
+		console.log("Server process shutting down");
+		await promise;
+		console.log("Server process stopped");
+	}
+	for (const [id, approval] of server.approvalList.entries()) {
+		console.log(`Found approval ${id}, trying to clean up...`);
+		if (approval.options.startPollFee) {
+			console.log(
+				`Refund ${approval.options.startPollFee} to caller ${approval.options.callerId}`,
+			);
+			await changeCredit({
+				userId: approval.options.callerId,
+				change: approval.options.startPollFee,
+				serverId: server.id,
+				reason: "New Approval Poll Refund",
+			});
+			const user = await client.users
+				.fetch(approval.options.callerId)
+				.catch(() => null);
+			if (user) {
+				await sendCreditNotification({
+					user,
+					creditChanged: approval.options.startPollFee,
+					reason: "New Approval Poll Refund",
+					serverId: server.id,
+					silent: true,
+				});
+			}
+		}
+		if (approval.options.credit) {
+			for (const id of approval.approvalIds.concat(
+				approval.disapprovalIds,
+			)) {
+				await changeCredit({
+					userId: id,
+					change: approval.options.credit,
+					reason: "Approval Reaction Refund",
+					serverId: server.id,
+				});
+				const user = await client.users.fetch(id).catch(() => null);
+				if (user) {
+					await sendCreditNotification({
+						user,
+						creditChanged: approval.options.credit,
+						reason: "Approval Reaction Refund",
+						silent: true,
+						serverId: server.id,
+					});
+				}
+			}
+		}
+		if (approval.message.editable) {
+			await approval.message.reactions.removeAll();
+			await approval.message.edit({
+				content: "Approval Canceled",
+				embeds: [],
+			});
+			continue;
+		}
+		if (approval.message.deletable) {
+			await approval.message.delete();
+		}
 	}
 }

@@ -1,17 +1,10 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-    provider = "prisma-client-js"
+    provider = "prisma-client"
     output   = "../generated/prisma"
 }
 
 datasource db {
     provider = "postgresql"
-    url      = env("DATABASE_URL")
 }
 
 model User {
@@ -28,8 +21,21 @@ model Transaction {
     afterAmount  Int
     reason       String?
     timestamp    DateTime @default(now())
-    user         User     @relation(fields: [userId], references: [id])
     userId       String
+    serverId     Int?
+    server       Server?  @relation(fields: [serverId], references: [id])
+    user         User     @relation(fields: [userId], references: [id])
 
     @@index([userId])
+}
+
+model Server {
+    id           Int           @id @default(autoincrement())
+    path         String        @unique
+    pluginPath   String        @unique
+    loaderType   String
+    modType      String
+    version      String
+    tag          String?
+    transactions Transaction[]
 }

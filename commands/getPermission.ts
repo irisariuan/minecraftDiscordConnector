@@ -23,11 +23,11 @@ export default {
 
 		if (user.id !== interaction.user.id) {
 			if (
-				!(await spendCredit(
-					interaction.user.id,
-					settings.checkUserPermissionFee,
-					"Check Permission Of Other Users",
-				))
+				!(await spendCredit({
+					userId: interaction.user.id,
+					cost: settings.checkUserPermissionFee,
+					reason: "Check Permission Of Other Users",
+				}))
 			) {
 				return await interaction.reply({
 					content:
@@ -54,4 +54,4 @@ export default {
 			});
 		}
 	},
-} as CommandFile;
+} as CommandFile<false>;

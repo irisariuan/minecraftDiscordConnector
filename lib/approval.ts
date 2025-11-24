@@ -21,7 +21,7 @@ import {
 	readPermission,
 } from "./permission";
 import type { PickAndOptional } from "./utils";
-import type { SuspendingEventEmitter } from "./suspend";
+import type { Server, ServerManager } from "./server";
 
 /**
  * All core components needed for the approval system to work
@@ -32,6 +32,7 @@ export interface CoreApproval {
 	duration: number;
 	approvalIds: string[];
 	disapprovalIds: string[];
+	server: Server;
 }
 
 export interface Approval extends CoreApproval {
@@ -73,7 +74,6 @@ export interface ApprovalOptions {
 export const MESSAGE_VALID_TIME = 14 * 60 * 1000; // 14 minutes, since discord message valid time is 15 minutes
 export const DELETE_AFTER_MS = 3 * 1000;
 
-export const approvalList: Map<string, Approval> = new Map();
 export const globalDisapprovalCount =
 	Number(process.env.DISAPPROVAL_COUNT) || 1;
 export const globalApprovalCount = Number(process.env.APPROVAL_COUNT) || 1;
@@ -86,7 +86,7 @@ export function newApproval(
 	cleanUp: () => unknown | Promise<unknown>,
 	update: () => unknown | Promise<unknown>,
 ) {
-	const existingApproval = getApproval(approval.message.id);
+	const existingApproval = getApproval(approval.server, approval.message.id);
 	if (existingApproval) {
 		console.log(`Approval ${approval.message.id} already exists`);
 		return existingApproval;
@@ -96,7 +96,11 @@ export function newApproval(
 		console.log(
 			`Removing approval ${approval.message.id} (timeout/interval)`,
 		);
-		const fetchedApproval = getApproval(approval.message.id, true);
+		const fetchedApproval = getApproval(
+			approval.server,
+			approval.message.id,
+			true,
+		);
 		if (!fetchedApproval)
 			return console.log("Approval not found (timeout/interval)");
 		await removeApproval(fetchedApproval);
@@ -122,7 +126,7 @@ export function newApproval(
 			}
 		}, MESSAGE_VALID_TIME);
 	}
-	approvalList.set(approval.message.id, newApproval);
+	approval.server.approvalList.set(approval.message.id, newApproval);
 	return newApproval;
 }
 
@@ -135,12 +139,17 @@ export function transferApproval(
 	);
 	const oldMessageId = approval.message.id;
 	approval.message = newMessage;
-	approvalList.set(oldMessageId, approval);
-	approvalList.set(newMessage.id, approval);
+	approval.server.approvalList.set(oldMessageId, approval);
+	approval.server.approvalList.set(newMessage.id, approval);
 }
 
-export function approve(messageId: string, userId: string, force = false) {
-	const approval = getApproval(messageId);
+export function approve(
+	server: Server,
+	messageId: string,
+	userId: string,
+	force = false,
+) {
+	const approval = getApproval(server, messageId);
 	if (!approval) return;
 	approval.approvalIds.push(userId);
 	if (force) {
@@ -148,8 +157,13 @@ export function approve(messageId: string, userId: string, force = false) {
 	}
 	return checkApprovalStatus(approval);
 }
-export function disapprove(messageId: string, userId: string, force = false) {
-	const approval = getApproval(messageId);
+export function disapprove(
+	server: Server,
+	messageId: string,
+	userId: string,
+	force = false,
+) {
+	const approval = getApproval(server, messageId);
 	if (!approval) return;
 	approval.disapprovalIds.push(userId);
 	if (force) {
@@ -163,13 +177,16 @@ export async function removeApproval(approval: Approval) {
 	clearTimeout(approval.timeout);
 	clearInterval(approval.updateInterval);
 	await approval.cleanUp();
-	approvalList.delete(approval.message.id);
-	for (const [id, fetchedApproval] of approvalList.entries()) {
+	approval.server.approvalList.delete(approval.message.id);
+	for (const [
+		id,
+		fetchedApproval,
+	] of approval.server.approvalList.entries()) {
 		if (approval.originalMessageId === fetchedApproval.originalMessageId) {
 			console.log(
 				`Removing ${fetchedApproval.message.id}, linked to approval ${approval.message.id} (${approval.originalMessageId})`,
 			);
-			approvalList.delete(id);
+			approval.server.approvalList.delete(id);
 		}
 	}
 }
@@ -197,16 +214,17 @@ function checkApprovalStatus(approval: Approval): ApprovalStatus {
 }
 
 export function getApproval(
+	server: Server,
 	messageId: string,
 	forceReturn = false,
 ): Approval | null {
-	const approval = approvalList.get(messageId);
+	const approval = server.approvalList.get(messageId);
 	if (approval) {
 		if (checkApprovalStatus(approval) !== "pending" && !forceReturn)
 			return null;
 		return approval;
 	}
-	for (const [key, approval] of approvalList.entries()) {
+	for (const [key, approval] of server.approvalList.entries()) {
 		if (
 			key === messageId ||
 			approval.message.id === messageId ||
@@ -305,7 +323,7 @@ export async function sendApprovalPoll(
 	interaction: CommandInteraction,
 	approvalOptions: PickAndOptional<
 		Approval,
-		"content" | "options",
+		"content" | "options" | "server",
 		"duration"
 	>,
 ) {
@@ -323,6 +341,7 @@ export async function sendApprovalPoll(
 			approvalIds: [],
 			disapprovalIds: [],
 			options,
+			server: approvalOptions.server,
 		},
 		0x0099ff,
 		"Pending",
@@ -346,6 +365,7 @@ export async function sendApprovalPoll(
 			options,
 			message: message.resource?.message,
 			originalMessageId: messageId,
+			server: approvalOptions.server,
 		},
 		// clean up function
 		async () => {
@@ -354,7 +374,11 @@ export async function sendApprovalPoll(
 				return console.error(
 					"Message ID not found, failed to clean up",
 				);
-			const approval = getApproval(messageId, true);
+			const approval = getApproval(
+				approvalOptions.server,
+				messageId,
+				true,
+			);
 			if (!approval)
 				return console.error("Approval not found, failed to clean up");
 			if (approval.message.editable) {
@@ -367,7 +391,7 @@ export async function sendApprovalPoll(
 		// transferring function
 		async () => {
 			if (!messageId) return;
-			const approval = getApproval(messageId);
+			const approval = getApproval(approvalOptions.server, messageId);
 			if (!approval?.message.channel.isSendable()) return;
 			if (approval.message.deletable) {
 				approval.message.delete().catch(console.error);
@@ -384,9 +408,26 @@ export async function sendApprovalPoll(
 	);
 }
 
-export async function updateApprovalMessage(reaction: ButtonInteraction, suspendingEvent: SuspendingEventEmitter) {
-	const approval = getApproval(reaction.message.id);
-	if (!approval) return;
+export function findApproval(
+	serverManager: ServerManager,
+	id: string,
+): { approval: Approval; server: Server } | null {
+	for (const [_, server] of serverManager.getAllServerEntries()) {
+		const approval = getApproval(server, id);
+		if (approval) {
+			return { approval, server };
+		}
+	}
+	return null;
+}
+
+export async function updateApprovalMessage(
+	serverManager: ServerManager,
+	reaction: ButtonInteraction,
+) {
+	const result = findApproval(serverManager, reaction.message.id);
+	if (!result) return;
+	const { approval, server } = result;
 	const userPerm = await readPermission(reaction.user);
 	let approving: boolean;
 	let disapproving: boolean;
@@ -449,7 +490,7 @@ export async function updateApprovalMessage(reaction: ButtonInteraction, suspend
 		superApprove = false;
 	}
 	if (
-		suspendingEvent.isSuspending() &&
+		server.suspendingEvent.isSuspending() &&
 		!comparePermission(userPerm, PermissionFlags.suspend)
 	) {
 		return await reaction.followUp({
@@ -488,16 +529,17 @@ export async function updateApprovalMessage(reaction: ButtonInteraction, suspend
 				prevCount -
 				approval.approvalIds.length -
 				approval.disapprovalIds.length;
-			await changeCredit(
-				reaction.user.id,
-				approval.options.credit * voted,
-				"Approval Reaction Refund",
-			);
+			await changeCredit({
+				userId: reaction.user.id,
+				change: approval.options.credit * voted,
+				reason: "Approval Reaction Refund",
+			});
 			await sendCreditNotification({
 				user: reaction.user,
 				creditChanged: approval.options.credit * voted,
 				reason: "Approval Reaction Refund",
 				silent: true,
+				serverId: approval.server.id,
 			});
 		}
 		return await reaction.followUp({
@@ -549,11 +591,12 @@ export async function updateApprovalMessage(reaction: ButtonInteraction, suspend
 		);
 		// Check if need to spend credit for new reaction
 	} else if (approval.options.credit) {
-		const success = await spendCredit(
-			reaction.user.id,
-			approval.options.credit,
-			"Approval Reaction",
-		);
+		const success = await spendCredit({
+			userId: reaction.user.id,
+			cost: approval.options.credit,
+			reason: "Approval Reaction",
+			serverId: approval.server.id,
+		});
 		if (!success) {
 			return await reaction.followUp({
 				content: `You do not have enough credit to approve this poll`,
@@ -564,16 +607,19 @@ export async function updateApprovalMessage(reaction: ButtonInteraction, suspend
 			user: reaction.user,
 			creditChanged: -approval.options.credit,
 			reason: "Approval Reaction",
+			serverId: approval.server.id,
 		});
 	}
 
 	const status = approving
 		? approve(
+				server,
 				reaction.message.id,
 				reaction.user.id,
 				canSuperApprove && superApprove,
 			)
 		: disapprove(
+				server,
 				reaction.message.id,
 				reaction.user.id,
 				canSuperApprove && superApprove,

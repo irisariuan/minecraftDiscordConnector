@@ -149,4 +149,4 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.editPerm,
-} as CommandFile;
+} as CommandFile<false>;

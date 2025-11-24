@@ -12,10 +12,13 @@ export default {
 				.setDescription("Use API to query active plugins")
 				.setRequired(true),
 		),
-	async execute({ interaction, client, serverManager }) {
+	async execute({ interaction, server }) {
 		const useAPI = interaction.options.getBoolean("api", true);
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		const activePlugins = await getActivePlugins(useAPI);
+		const activePlugins = await getActivePlugins(
+			server.config.pluginDir,
+			useAPI,
+		);
 		if (activePlugins === null)
 			return await interaction.editReply(
 				"Failed to fetch active plugins from server.",
@@ -26,4 +29,4 @@ export default {
 				: "No active plugins found.",
 		);
 	},
-} as CommandFile;
+} as CommandFile<true>;

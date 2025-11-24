@@ -37,4 +37,4 @@ export default {
 			}),
 		});
 	},
-} as CommandFile;
+} as CommandFile<true>;

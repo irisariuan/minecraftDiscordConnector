@@ -28,7 +28,7 @@ import {
 	readPermission,
 } from "../lib/permission";
 import type { File } from "../lib/plugin/uploadServer";
-import { uploadServerManager } from "../lib/plugin/uploadServer";
+import { uploadserver } from "../lib/plugin/uploadServer";
 import {
 	copyLocalPluginFileToServer,
 	downloadWebPluginFileToLocal,
@@ -43,7 +43,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("uploadplugin")
 		.setDescription("Upload a custom plugin to the server"),
-	async execute({ interaction, client }) {
+	async execute({ interaction, client, server }) {
 		if (interaction.channel?.type !== ChannelType.GuildText) {
 			return await interaction.reply({
 				content:
@@ -54,11 +54,12 @@ export default {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
 		if (
-			!(await spendCredit(
-				interaction.user.id,
-				settings.uploadFileFee,
-				"Upload Custom Mod to Server",
-			))
+			!(await spendCredit({
+				userId: interaction.user.id,
+				cost: settings.uploadFileFee,
+				reason: "Upload Custom Mod to Server",
+				serverId: server.id,
+			}))
 		) {
 			return await interaction.editReply({
 				content: "You don't have enough credit to upload mod to server",
@@ -68,6 +69,7 @@ export default {
 			user: interaction.user,
 			creditChanged: -settings.uploadFileFee,
 			reason: "Upload Custom Mod to Server",
+			serverId: server.id,
 		});
 		const thread = await interaction.channel.threads.create({
 			name: "Upload File",
@@ -123,29 +125,29 @@ export default {
 				PermissionFlags.upload,
 			)
 		) {
-			token = uploadServerManager.createToken();
+			token = uploadserver.createToken();
 			await thread.send(
 				`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
 			);
-			promises.push(
-				uploadServerManager.awaitToken(token, 1000 * 60 * 30),
-			);
+			promises.push(uploadserver.awaitToken(token, 1000 * 60 * 30));
 		}
 		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction) {
 			await thread.send("Upload cancelled.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
-			if (token) uploadServerManager.disposeToken(token);
-			changeCredit(
-				interaction.user.id,
-				settings.uploadFileFee,
-				"Refund for cancelled Upload Custom Mod to Server",
-			);
+			if (token) uploadserver.disposeToken(token);
+			changeCredit({
+				userId: interaction.user.id,
+				change: settings.uploadFileFee,
+				reason: "Refund for cancelled Upload Custom Mod to Server",
+				serverId: server.id,
+			});
 			sendCreditNotification({
 				user: interaction.user,
 				creditChanged: settings.uploadFileFee,
 				reason: "Refund for cancelled Upload Custom Mod to Server",
+				serverId: server.id,
 			});
 			setTimeout(cleanUp, 1000 * 10);
 			return;
@@ -166,11 +168,12 @@ export default {
 				);
 				await thread.setLocked(true);
 				await thread.setArchived(true);
-				changeCredit(
-					interaction.user.id,
-					settings.uploadFileFee,
-					"Refund for cancelled Upload Custom Mod to Server",
-				);
+				changeCredit({
+					userId: interaction.user.id,
+					change: settings.uploadFileFee,
+					serverId: server.id,
+					reason: "Refund for cancelled Upload Custom Mod to Server",
+				});
 				sendCreditNotification({
 					user: interaction.user,
 					creditChanged: settings.uploadFileFee,
@@ -195,23 +198,28 @@ export default {
 		) {
 			await thread.send(`The file will be added to the server shortly.`);
 			const finalFilename = isFile
-				? await copyLocalPluginFileToServer(messages)
+				? await copyLocalPluginFileToServer(
+						server.config.pluginDir,
+						messages,
+					)
 				: await downloadWebPluginFileToLocal(downloadingUrl, filename);
-			if (token) uploadServerManager.disposeToken(token);
+			if (token) uploadserver.disposeToken(token);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
 			} else {
 				await thread.send(
 					`Failed to download the file, please check the URL or attachment.`,
 				);
-				changeCredit(
-					interaction.user.id,
-					settings.uploadFileFee,
-					"Refund for failed to add uploaded Custom Mod to Server",
-				);
+				changeCredit({
+					userId: interaction.user.id,
+					change: settings.uploadFileFee,
+					serverId: server.id,
+					reason: "Refund for failed to add uploaded Custom Mod to Server",
+				});
 				sendCreditNotification({
 					user: interaction.user,
 					creditChanged: settings.uploadFileFee,
+					serverId: server.id,
 					reason: "Refund for failed to add uploaded Custom Mod to Server",
 				});
 			}
@@ -261,12 +269,15 @@ export default {
 						`The file will be added to the server shortly.`,
 					);
 					const finalFilename = isFile
-						? await copyLocalPluginFileToServer(messages)
+						? await copyLocalPluginFileToServer(
+								server.config.serverDir,
+								messages,
+							)
 						: await downloadWebPluginFileToLocal(
 								downloadingUrl,
 								filename,
 							);
-					if (token) uploadServerManager.disposeToken(token);
+					if (token) uploadserver.disposeToken(token);
 					if (finalFilename) {
 						await thread.send(`File added to server.`);
 						await interaction.user.send(
@@ -279,19 +290,21 @@ export default {
 						await interaction.user.send(
 							`Failed to add your uploaded file (${filename ?? downloadingUrl}) to the server, please check the URL or attachment.`,
 						);
-						changeCredit(
-							interaction.user.id,
-							settings.uploadFileFee,
-							"Refund for failed to add uploaded Custom Mod to Server",
-						);
+						changeCredit({
+							userId: interaction.user.id,
+							change: settings.uploadFileFee,
+							serverId: server.id,
+							reason: "Refund for failed to add uploaded Custom Mod to Server",
+						});
 						sendCreditNotification({
 							user: interaction.user,
 							creditChanged: settings.uploadFileFee,
+							serverId: server.id,
 							reason: "Refund for failed to add uploaded Custom Mod to Server",
 						});
 					}
 				} else {
-					if (token) uploadServerManager.disposeToken(token);
+					if (token) uploadserver.disposeToken(token);
 					await thread.send(
 						`File rejected by ${userMention(user.id)}.`,
 					);
@@ -312,4 +325,4 @@ export default {
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),
-} as CommandFile;
+} as CommandFile<true>;

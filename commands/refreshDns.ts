@@ -13,11 +13,11 @@ export default {
 	async execute({ interaction }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 		if (
-			await spendCredit(
-				interaction.user.id,
-				settings.refreshDnsFee,
-				"Refresh DNS Record",
-			)
+			await spendCredit({
+				userId: interaction.user.id,
+				cost: settings.refreshDnsFee,
+				reason: "Refresh DNS Record",
+			})
 		) {
 			await sendCreditNotification({
 				user: interaction.user,
@@ -48,4 +48,4 @@ export default {
 			}
 		}
 	},
-} as CommandFile;
+} as CommandFile<false>;

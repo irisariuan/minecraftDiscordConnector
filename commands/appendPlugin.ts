@@ -1,28 +1,23 @@
 import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
 	ComponentType,
 	MessageFlags,
 	SlashCommandBuilder,
 	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import {
-	downloadPluginFile,
-	listPluginVersions,
-	LOADER_TYPE,
-	MINECRAFT_VERSION,
-	type PluginListVersionItem,
-} from "../lib/plugin";
+import { createRequestComponent, RequestComponentId } from "../lib/components";
+import { sendPaginationMessage } from "../lib/pagination";
 import {
 	anyPerm,
 	comparePermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { sendPaginationMessage } from "../lib/pagination";
-import { createRequestComponent, RequestComponentId } from "../lib/components";
+import {
+	downloadPluginFile,
+	listPluginVersions,
+	type PluginListVersionItem,
+} from "../lib/plugin";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -39,7 +34,7 @@ export default {
 				.setName("release")
 				.setDescription("Whether to only show stable releases"),
 		),
-	async execute({ interaction }) {
+	async execute({ interaction, server }) {
 		await interaction.deferReply();
 		const userPermission = await readPermission(interaction.user);
 
@@ -55,8 +50,8 @@ export default {
 			getResult: async () =>
 				(
 					(await listPluginVersions(pluginOption, {
-						loaders: [LOADER_TYPE],
-						game_versions: [MINECRAFT_VERSION],
+						loaders: [server.config.loaderType],
+						game_versions: [server.config.minecraftVersion],
 					})) || []
 				).filter((v) => !onlyRelease || v.version_type === "release"),
 			options: {
@@ -126,7 +121,10 @@ export default {
 						components: [],
 					});
 				}
-				const { newDownload } = await downloadPluginFile(value);
+				const { newDownload } = await downloadPluginFile(
+					server.config.pluginDir,
+					value,
+				);
 				if (!newDownload) {
 					await menuInteraction.editReply({
 						content:
@@ -160,4 +158,4 @@ export default {
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),
-} as CommandFile;
+} as CommandFile<true>;

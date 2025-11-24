@@ -1,4 +1,4 @@
-import { ComponentType, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { ComponentType, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { removePluginByFileName } from "../lib/plugin";
 import {
@@ -25,11 +25,11 @@ export default {
 				.setDescription("The plugin to delete")
 				.setRequired(true),
 		),
-	async execute({ interaction }) {
+	async execute({ interaction, server }) {
 		const plugin = interaction.options.getString("plugin", true);
 		await interaction.deferReply();
 		const deleteFunc = async () => {
-			if (await removePluginByFileName(plugin)) {
+			if (await removePluginByFileName(server.config.pluginDir, plugin)) {
 				await interaction.editReply({
 					content: `Plugin \`${plugin}\` deleted successfully.`,
 					components: [],
@@ -49,11 +49,12 @@ export default {
 		)
 			return await deleteFunc();
 		if (
-			!(await spendCredit(
-				interaction.user.id,
-				settings.deletePluginFee,
-				"Delete Plugin Request",
-			))
+			!(await spendCredit({
+				userId: interaction.user.id,
+				cost: settings.deletePluginFee,
+				reason: "Delete Plugin Request",
+				serverId: server.id,
+			}))
 		) {
 			return await interaction.editReply({
 				content: `You don't have enough credit to delete a plugin. Deleting a plugin costs ${settings.deletePluginFee} credits.`,
@@ -64,6 +65,7 @@ export default {
 			user: interaction.user,
 			creditChanged: -settings.deletePluginFee,
 			reason: "Delete Plugin Request",
+			serverId: server.id,
 		});
 
 		const message = await interaction.editReply({
@@ -88,15 +90,17 @@ export default {
 			});
 		}
 		if (reply.customId === RequestComponentId.Deny) {
-			await changeCredit(
-				interaction.user.id,
-				settings.deletePluginFee,
-				"Delete Plugin Request Denied Refund",
-			);
+			await changeCredit({
+				userId: interaction.user.id,
+				change: settings.deletePluginFee,
+				serverId: server.id,
+				reason: "Delete Plugin Request Denied Refund",
+			});
 			await sendCreditNotification({
 				user: interaction.user,
 				creditChanged: settings.deletePluginFee,
 				reason: "Delete Plugin Request Denied Refund",
+				serverId: server.id,
 			});
 			return await interaction.editReply({
 				content: "Request denied.",
@@ -113,4 +117,4 @@ export default {
 		PermissionFlags.deletePlugin,
 		PermissionFlags.voteDeletePlugin,
 	),
-} as CommandFile;
+} as CommandFile<true>;

@@ -35,7 +35,7 @@ export default {
 				.setDescription("Force stopping the server without polling")
 				.setRequired(false),
 		),
-	async execute({ interaction, client, serverManager }) {
+	async execute({ interaction, client, server }) {
 		if (!interaction.guild) {
 			return await interaction.reply({
 				content: "This command can only be used in a server",
@@ -52,8 +52,8 @@ export default {
 			});
 
 		if (
-			(await serverManager.haveServerSideScheduledShutdown()) ||
-			serverManager.haveLocalSideScheduledShutdown()
+			(await server.haveServerSideScheduledShutdown()) ||
+			server.haveLocalSideScheduledShutdown()
 		) {
 			return await interaction.reply({
 				content:
@@ -70,7 +70,7 @@ export default {
 			)
 		) {
 			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-			const { success, promise } = await serverManager.stop(seconds * 20);
+			const { success, promise } = await server.stop(seconds * 20);
 			if (!success) {
 				await interaction.editReply({ content: "Failed to shutdown" });
 				return;
@@ -93,11 +93,12 @@ export default {
 			seconds > 0 ? `Stop Server in ${seconds} seconds` : "Stop Server";
 
 		if (
-			!(await spendCredit(
-				interaction.user.id,
-				settings.newStopServerPollFee,
-				"New Stop Server Poll",
-			))
+			!(await spendCredit({
+				userId: interaction.user.id,
+				cost: settings.newStopServerPollFee,
+				reason: "New Stop Server Poll",
+				serverId: server.id,
+			}))
 		) {
 			return await interaction.reply({
 				content: "You don't have enough credit to stop the server",
@@ -108,6 +109,7 @@ export default {
 			user: interaction.user,
 			creditChanged: -settings.newStopServerPollFee,
 			reason: "New Stop Server Poll",
+			serverId: server.id,
 		});
 		sendApprovalPoll(interaction, {
 			content: displayString,
@@ -116,7 +118,7 @@ export default {
 				callerId: interaction.user.id,
 				description: displayString,
 				async onSuccess(approval, message) {
-					const { success, promise } = await serverManager.stop(
+					const { success, promise } = await server.stop(
 						seconds * 20,
 					);
 					if (!success)
@@ -154,6 +156,7 @@ export default {
 				disapprovalCount: 2,
 				credit: settings.stopServerVoteFee,
 			},
+			server,
 		});
 	},
-} as CommandFile;
+} as CommandFile<true>;

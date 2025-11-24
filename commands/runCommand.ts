@@ -50,7 +50,7 @@ export default {
 				.setMinValue(1000)
 				.setMaxValue(60000),
 		),
-	async execute({ interaction, client, serverManager }) {
+	async execute({ interaction, client, server }) {
 		if (!interaction.guild) {
 			return await interaction.reply({
 				content: "This command can only be used in a server",
@@ -69,18 +69,19 @@ export default {
 
 		if (canRunCommand && force) {
 			await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-			const output = serverManager.captureSomeOutput(capture);
+			const output = server.captureSomeOutput(capture);
 			const { success } = await runCommandOnServer(command);
 			await interaction.editReply(
 				parseCommandOutput((await output)?.join("\n") || null, success),
 			);
 		}
 		if (
-			!(await spendCredit(
-				interaction.user.id,
-				settings.newRunCommandPollFee,
-				"New Run Command Poll",
-			))
+			!(await spendCredit({
+				userId: interaction.user.id,
+				cost: settings.newRunCommandPollFee,
+				reason: "New Run Command Poll",
+				serverId: server.id,
+			}))
 		) {
 			return await interaction.reply({
 				content: "You don't have enough credit to run this command",
@@ -91,6 +92,7 @@ export default {
 			user: interaction.user,
 			creditChanged: -settings.newRunCommandPollFee,
 			reason: "New Run Command Poll",
+			serverId: server.id,
 		});
 		return await sendApprovalPoll(interaction, {
 			content: command,
@@ -99,7 +101,7 @@ export default {
 				callerId: interaction.user.id,
 				description: `Command: \`${command}\``,
 				async onSuccess(approval, message) {
-					const output = serverManager.captureSomeOutput(capture);
+					const output = server.captureSomeOutput(capture);
 					const { success } = await runCommandOnServer(
 						approval.content,
 					);
@@ -127,6 +129,7 @@ export default {
 				credit: settings.runCommandVoteFee,
 			},
 			duration: timeout || undefined,
+			server,
 		});
 	},
-} as CommandFile;
+} as CommandFile<true>;

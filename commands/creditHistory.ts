@@ -28,11 +28,11 @@ export default {
 		const user = interaction.options.getUser("user") || interaction.user;
 		if (user.id !== interaction.user.id) {
 			if (
-				!(await spendCredit(
-					interaction.user.id,
-					settings.checkUserCreditFee,
-					"Check Credit of Other Users",
-				))
+				!(await spendCredit({
+					userId: interaction.user.id,
+					cost: settings.checkUserCreditFee,
+					reason: "Check Credit of Other Users",
+				}))
 			) {
 				return await interaction.editReply({
 					content:
@@ -77,4 +77,4 @@ export default {
 			],
 		});
 	},
-} as CommandFile;
+} as CommandFile<false>;
