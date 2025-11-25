@@ -453,6 +453,7 @@ export async function updateApprovalMessage(
 					showReject: rejectVote,
 				}),
 			],
+			flags: [MessageFlags.Ephemeral],
 		});
 		const res = await answer
 			.awaitMessageComponent({

@@ -92,7 +92,7 @@ export default {
 		});
 
 		sendApprovalPoll(interaction, {
-			content: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
+			content: `Start Server at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
 				startPollFee: settings.newStartServerPollFee,
 				callerId: interaction.user.id,
