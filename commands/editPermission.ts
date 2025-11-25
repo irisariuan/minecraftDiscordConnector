@@ -379,7 +379,7 @@ export default {
 						return;
 					}
 					return;
-				} catch (e) {
+				} catch {
 					return await interaction.editReply({
 						content:
 							"No permissions selected in time or an error occurred",
