@@ -282,12 +282,6 @@ export async function downloadPluginFile(
 	if (!metadata || !metadata.files[0]) {
 		return { filename: null, newDownload: false };
 	}
-	await addPluginToJson(pluginDir, {
-		downloadedAt: Date.now(),
-		fileName: metadata.files[0].filename,
-		projectId: metadata.project_id,
-		versionId: metadata.id,
-	});
 	if (
 		!force &&
 		existsSync(
@@ -317,40 +311,6 @@ export async function downloadPluginFile(
 export function createPathForPluginFile(pluginDir: string, fileName: string) {
 	return safeJoin(pluginDir, fileName);
 }
-
-interface PluginJsonEntry {
-	projectId: string;
-	versionId: string;
-	fileName: string;
-	downloadedAt: number;
-}
-
-async function readPluginsJson(
-	pluginJsonPath: string,
-): Promise<PluginJsonEntry[]> {
-	try {
-		return JSON.parse(await readFile(pluginJsonPath, "utf-8"));
-	} catch {
-		return [];
-	}
-}
-
-async function addPluginToJson(
-	pluginJsonPath: string,
-	plugin: PluginJsonEntry,
-) {
-	const json = await readPluginsJson(pluginJsonPath);
-	if (json.find((p) => p.fileName === plugin.fileName)) return;
-	await writePluginsJson(pluginJsonPath, [...json, plugin]);
-}
-
-async function writePluginsJson(
-	pluginJsonPath: string,
-	plugins: PluginJsonEntry[],
-) {
-	await writeFile(pluginJsonPath, JSON.stringify(plugins, null, 4));
-}
-
 /**
  * Returning the filename of a downloaded plugin, not including custom plugins
  */
