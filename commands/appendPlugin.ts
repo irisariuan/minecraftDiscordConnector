@@ -124,7 +124,10 @@ export default {
 						components: [],
 					});
 				}
-				const { newDownload } = await downloadPluginFile(server.config.pluginDir, value);
+				const { newDownload } = await downloadPluginFile(
+					server.config.pluginDir,
+					value,
+				);
 				if (!newDownload) {
 					await menuInteraction.editReply({
 						content:
@@ -144,9 +147,16 @@ export default {
 				const found = (await result.getData())?.find(
 					(v) => v.id === value,
 				);
-				if (found && found.dependencies.length > 0) {
+				const filteredDependencies = found?.dependencies.filter(
+					(v) => !!v.file_name,
+				);
+				if (
+					found &&
+					filteredDependencies &&
+					filteredDependencies.length > 0
+				) {
 					await menuInteraction.followUp({
-						content: `Note: This plugin has dependencies: ${found.dependencies.map((d) => `\`${d.file_name}\` (Version \`${d.version_id}\`)`).join(", ")}. You may need to download and append them as well.`,
+						content: `Note: This plugin has dependencies: ${filteredDependencies.map((d) => `\`${d.file_name}\` (Version \`${d.version_id}\`)`).join(", ")}. You may need to download and append them as well.`,
 						flags: [MessageFlags.Ephemeral],
 					});
 				}

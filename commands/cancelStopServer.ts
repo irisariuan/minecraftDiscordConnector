@@ -88,7 +88,7 @@ export default {
 		});
 
 		sendApprovalPoll(interaction, {
-			content: `Cancel Server Shutdown (${server.config.tag ?? `Server #${server.id}`})`,
+			content: `Cancel Server Shutdown at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
 				startPollFee: settings.newCancelStopServerPollFee,
 				callerId: interaction.user.id,
