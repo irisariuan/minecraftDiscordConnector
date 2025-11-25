@@ -58,31 +58,8 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 		</div>
 	</div>
 	<script>
-		async function verifyId(id: string) {
-			const res = await fetch("/verify/" + id, {
-				mode: "cors",
-			});
-			if (res.ok) {
-				const data: { valid: boolean; uploaded: boolean } =
-					await res.json();
-				return data;
-			}
-			return { valid: false, uploaded: false };
-		}
-		async function uploadFiles(id: string, file: File) {
-			const formData = new FormData();
-			formData.append("upload", file);
-			const res = await fetch("/upload/" + id, {
-				method: "POST",
-				body: formData,
-				mode: "cors",
-			});
-			if (res.ok) {
-				return { success: true };
-			} else {
-				return { success: false, reason: await res.text() };
-			}
-		}
+		import { verifyId, uploadFiles } from "../lib/request";
+
 		let selectedFile: File | null = null;
 
 		window.onload = async () => {

@@ -279,6 +279,7 @@ client.on("interactionCreate", async (interaction) => {
 		}
 
 		if (
+			command.features?.suspendable === false &&
 			server.suspendingEvent.isSuspending() &&
 			!comparePermission(
 				await readPermission(interaction.user),
