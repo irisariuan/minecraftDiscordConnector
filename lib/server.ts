@@ -431,6 +431,7 @@ async function exitServer(client: Client, server: Server) {
 			await approval.message.edit({
 				content: "Approval Canceled",
 				embeds: [],
+				components: [],
 			});
 			continue;
 		}
