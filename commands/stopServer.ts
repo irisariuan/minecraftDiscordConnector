@@ -13,7 +13,6 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
-import { isServerAlive } from "../lib/request";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
 import { sendMessagesToUsersById } from "../lib/utils";
@@ -92,7 +91,9 @@ export default {
 		}
 		await interaction.deleteReply();
 		const displayString =
-			seconds > 0 ? `Stop Server in ${seconds} seconds` : "Stop Server";
+			seconds > 0
+				? `Stop Server in ${seconds} seconds (${server.config.tag ?? `Server #${server.id}`})`
+				: `Stop Server (${server.config.tag ?? `Server #${server.id}`})`;
 
 		if (
 			!(await spendCredit({

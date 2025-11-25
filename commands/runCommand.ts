@@ -109,7 +109,7 @@ export default {
 			options: {
 				startPollFee: settings.newRunCommandPollFee,
 				callerId: interaction.user.id,
-				description: `Command: \`${command}\``,
+				description: `Command: \`${command}\` (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
 					if (!server.config.apiPort)
 						return await message.reply(
