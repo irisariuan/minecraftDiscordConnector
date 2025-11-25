@@ -1,11 +1,22 @@
-import { italic, MessageFlags, SlashCommandBuilder } from "discord.js";
+import {
+	ComponentType,
+	italic,
+	MessageFlags,
+	SlashCommandBuilder,
+} from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { changeCreditSettings, settings } from "../lib/settings";
+import {
+	changeCreditSettings,
+	editServerCreditSetting,
+	settings,
+} from "../lib/settings";
 import {
 	comparePermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
+import { createServerSelectionMenu } from "../lib/embed/server";
+import type { Server } from "../lib/server";
 export default {
 	command: new SlashCommandBuilder()
 		.setName("settings")
@@ -25,14 +36,75 @@ export default {
 						.setName("value")
 						.setDescription("The value to set the setting to")
 						.setRequired(true),
+				)
+				.addBooleanOption((option) =>
+					option
+						.setName("local")
+						.setDescription(
+							"Whether to edit local permission (default: false)",
+						),
 				),
 		)
 		.addSubcommand((command) =>
-			command.setName("get").setDescription("Get settings of the bot"),
+			command
+				.setName("get")
+				.setDescription("Get settings of the bot")
+				.addBooleanOption((option) =>
+					option
+						.setName("local")
+						.setDescription(
+							"Whether to edit local permission (default: false)",
+						),
+				),
 		),
 	requireServer: false,
-	async execute({ interaction }) {
+	async execute({ interaction, serverManager }) {
 		const subcommand = interaction.options.getSubcommand(true);
+		const local = interaction.options.getBoolean("local") ?? false;
+		let server: Server | undefined = undefined;
+		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		if (local) {
+			const reply = await interaction.editReply({
+				content: "Please select a server:",
+				components: [
+					createServerSelectionMenu(serverManager.getAllTagPairs()),
+				],
+			});
+			try {
+				const selection = await reply.awaitMessageComponent({
+					time: 60000,
+					filter: (i) => i.user.id === interaction.user.id,
+					componentType: ComponentType.StringSelect,
+				});
+				const selectedServerId = selection.values[0];
+				if (!selectedServerId) {
+					return selection.update({
+						content: "No server selected",
+						components: [],
+					});
+				}
+				const selectedServer = serverManager.getServer(
+					parseInt(selectedServerId),
+				);
+				if (!selectedServer) {
+					return selection.update({
+						content: "Selected server not found",
+						components: [],
+					});
+				}
+				server = selectedServer;
+				await selection.update({
+					content: "Server selected",
+					components: [],
+				});
+			} catch (e) {
+				console.error(e);
+				return await interaction.editReply({
+					content: "No server selected in time or an error occurred",
+					components: [],
+				});
+			}
+		}
 		if (subcommand === "set") {
 			if (
 				!comparePermission(
@@ -54,6 +126,15 @@ export default {
 					flags: [MessageFlags.Ephemeral],
 				});
 			}
+			if (server !== undefined) {
+				await editServerCreditSetting(server.id, {
+					[setting]: value,
+				});
+				return await interaction.reply({
+					content: `Setting ${setting} changed to ${value} for server ${server.config.tag ?? `Server #${server.id}`}`,
+					flags: [MessageFlags.Ephemeral],
+				});
+			}
 			changeCreditSettings({ [setting]: value });
 			return await interaction.reply({
 				content: `Setting ${setting} changed to ${value}`,
@@ -61,11 +142,17 @@ export default {
 			});
 		}
 		if (subcommand === "get") {
-			const settingsList = Object.entries(settings)
+			const settingsList = Object.entries(
+				server ? server.creditSettings : settings,
+			)
 				.map(([key, value]) => `${italic(key)}: \`${value}\``)
 				.join("\n");
 			return await interaction.reply({
-				content: `**Settings**:\n\n${settingsList}`,
+				content: `**Settings${
+					server
+						? ` for ${server.config.tag ?? `Server #${server.id}`}**`
+						: "**"
+				}:\n\n${settingsList}`,
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
