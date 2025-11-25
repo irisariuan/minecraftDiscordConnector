@@ -10,6 +10,7 @@ import {
 } from "./db";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
+const APPROVAL_SETTINGS = `${process.cwd()}/data/approvalSettings.json`;
 
 export interface ServerCreditSettings {
 	newCancelStopServerPollFee: number;
@@ -58,6 +59,32 @@ export interface ApprovalSettings {
 }
 
 export let settings: CreditSettings = defaultCreditSettings;
+export let approvalSettings: ApprovalSettings = defaultApprovalSettings;
+
+export function setApprovalSettings(changes: Partial<ApprovalSettings>) {
+	approvalSettings = { ...approvalSettings, ...changes };
+}
+
+function saveApprovalSettings(settings: Partial<ApprovalSettings>) {
+	const currentLocalSettings = approvalSettings;
+	const newSettings = { ...currentLocalSettings, ...settings };
+	return Bun.write(APPROVAL_SETTINGS, JSON.stringify(newSettings, null, 4));
+}
+export async function changeApprovalSettings(
+	changes: Partial<ApprovalSettings>,
+) {
+	setApprovalSettings(changes);
+	return await saveApprovalSettings(changes);
+}
+
+export async function loadApprovalSettings(): Promise<
+	Partial<ApprovalSettings>
+> {
+	const settings = Bun.file(APPROVAL_SETTINGS);
+	if (!(await settings.exists())) return {};
+	const data = await settings.json().catch(() => ({}));
+	return data;
+}
 
 export function setCreditSettings(changes: Partial<CreditSettings>) {
 	settings = { ...settings, ...changes };
