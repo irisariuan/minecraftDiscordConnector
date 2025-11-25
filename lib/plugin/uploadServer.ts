@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Express } from "express";
 import multer from "multer";
 import bodyParser from "body-parser";
@@ -37,7 +38,7 @@ function createUploadServer(uploadServer: UploadServer) {
 	});
 	const jsonParser = bodyParser.json();
 
-	app.use(cors({ origin: "*" }));
+	app.use(cors({ origin: process.env.CORS_ORIGIN ?? "*" }));
 	app.use(
 		"/",
 		express.static(join(process.cwd(), "webUi", "dist", "client")),

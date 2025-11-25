@@ -82,7 +82,9 @@ export async function getUserLocalCombinedPermission(
 		where: { userId, serverId },
 		include: { user: true },
 	});
-	if (!serverPerm) return null;
+	if (!serverPerm) {
+		return await getUserGlobalPermission(userId);
+	}
 	if (serverPerm.force) return serverPerm.permission;
 	return serverPerm.user.permission | serverPerm.permission;
 }
