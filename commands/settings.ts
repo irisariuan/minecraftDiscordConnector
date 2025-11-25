@@ -140,7 +140,7 @@ export default {
 					});
 				}
 				if (server !== undefined) {
-					await editServerApprovalSetting(server.id, {
+					await editServerApprovalSetting(server, {
 						[setting]: value,
 					});
 					return await interaction.editReply({
@@ -161,7 +161,7 @@ export default {
 				});
 			}
 			if (server !== undefined) {
-				await editServerCreditSetting(server.id, {
+				await editServerCreditSetting(server, {
 					[setting]: value,
 				});
 				return await interaction.editReply({
