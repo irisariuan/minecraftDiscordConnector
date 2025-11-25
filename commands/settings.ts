@@ -6,7 +6,10 @@ import {
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
+	approvalSettings,
+	changeApprovalSettings,
 	changeCreditSettings,
+	editServerApprovalSetting,
 	editServerCreditSetting,
 	settings,
 } from "../lib/settings";
@@ -125,7 +128,33 @@ export default {
 			}
 
 			const setting = interaction.options.getString("setting", true);
+			const approval =
+				interaction.options.getBoolean("approval") ?? false;
 			const value = interaction.options.getNumber("value", true);
+			if (approval) {
+				if (!Object.keys(approvalSettings).includes(setting)) {
+					return await interaction.editReply({
+						content: `Approval setting ${setting} not found, settings available: \`${Object.keys(
+							approvalSettings,
+						).join(", ")}\``,
+					});
+				}
+				if (server !== undefined) {
+					await editServerApprovalSetting(server.id, {
+						[setting]: value,
+					});
+					return await interaction.editReply({
+						content: `Approval setting ${setting} changed to ${value} for server ${
+							server.config.tag ?? `Server #${server.id}`
+						}`,
+					});
+				}
+				changeApprovalSettings({ [setting]: value });
+				return await interaction.editReply({
+					content: `Approval setting ${setting} changed to ${value}`,
+				});
+			}
+
 			if (!Object.keys(settings).includes(setting)) {
 				return await interaction.editReply({
 					content: `Setting ${setting} not found, settings available: \`${Object.keys(settings).join(", ")}\``,
@@ -145,8 +174,13 @@ export default {
 			});
 		}
 		if (subcommand === "get") {
-			const settingsList = Object.entries(
+			const creditSettingsList = Object.entries(
 				server ? server.creditSettings : settings,
+			)
+				.map(([key, value]) => `${italic(key)}: \`${value}\``)
+				.join("\n");
+			const approvalSettingsList = Object.entries(
+				server ? server.approvalSettings : approvalSettings,
 			)
 				.map(([key, value]) => `${italic(key)}: \`${value}\``)
 				.join("\n");
@@ -155,7 +189,7 @@ export default {
 					server
 						? ` for ${server.config.tag ?? `Server #${server.id}`}**`
 						: "**"
-				}:\n\n${settingsList}`,
+				}:\n\n${creditSettingsList}\n\n**Approval Settings**:\n\n${approvalSettingsList}`,
 			});
 		}
 	},

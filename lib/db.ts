@@ -175,7 +175,6 @@ export async function upsertServerApprovalSettings(
 ) {
 	return await prisma.approvalSetting.upsert(data);
 }
-
 export async function upsertNewPlugin(data: Prisma.PluginUpsertArgs) {
 	return await prisma.plugin.upsert(data);
 }
