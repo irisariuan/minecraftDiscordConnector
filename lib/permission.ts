@@ -3,6 +3,7 @@ import {
 	getAllUserPermissions,
 	getUserGlobalPermission,
 	getUserLocalCombinedPermission,
+	getUserLocalPermission,
 	updateUserPermission,
 	type UserPermission,
 } from "./db";
@@ -131,7 +132,9 @@ export async function appendPermission(
 	serverId?: number,
 	force?: boolean,
 ) {
-	const currentPermission = await readPermission(user, serverId);
+	const currentPermission = serverId
+		? ((await getUserLocalPermission(user, serverId)) ?? 0)
+		: await readPermission(user);
 	const newPermission = Array.isArray(permission)
 		? createPermission(permission)
 		: permission;
@@ -146,7 +149,9 @@ export async function removePermission(
 	serverId?: number,
 	force?: boolean,
 ) {
-	const currentPermission = await readPermission(user, serverId);
+	const currentPermission = serverId
+		? ((await getUserLocalPermission(user, serverId)) ?? 0)
+		: await readPermission(user);
 	const newPermission = Array.isArray(permission)
 		? createPermission(permission)
 		: permission;
