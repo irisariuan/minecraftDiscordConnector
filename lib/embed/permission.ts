@@ -22,7 +22,8 @@ export function createPermissionSelectionMenu(page = 0) {
 				label: name.toUpperCase(),
 				value: value.toString(),
 			})),
-		);
+		)
+		.setMaxValues(Math.min(options.length, 25));
 	return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 		selectMenu,
 	);
