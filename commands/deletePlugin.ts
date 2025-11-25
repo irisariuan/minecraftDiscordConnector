@@ -43,7 +43,7 @@ export default {
 		};
 		if (
 			comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.deletePlugin,
 			)
 		)
@@ -76,7 +76,7 @@ export default {
 			.awaitMessageComponent({
 				filter: async (i) =>
 					comparePermission(
-						await readPermission(i.user),
+						await readPermission(i.user, server.id),
 						PermissionFlags.deletePlugin,
 					),
 				componentType: ComponentType.Button,

@@ -12,6 +12,7 @@ model User {
     credits      Int           @default(0)
     permission   Int           @default(0)
     transactions Transaction[]
+    permissions  Permission[]
 }
 
 model Transaction {
@@ -29,6 +30,17 @@ model Transaction {
     @@index([userId])
 }
 
+model Permission {
+    userId     String  @id
+    user       User    @relation(fields: [userId], references: [id])
+    serverId   Int
+    server     Server  @relation(fields: [serverId], references: [id])
+    permission Int
+    force      Boolean @default(false)
+
+    @@index([userId])
+}
+
 model Server {
     id           Int           @id @default(autoincrement())
     port         Int[]         @default([25565])
@@ -40,4 +52,5 @@ model Server {
     version      String
     tag          String?
     transactions Transaction[]
+    permissions  Permission[]
 }

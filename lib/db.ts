@@ -10,10 +10,16 @@ export async function createUser(data: Prisma.UserCreateInput) {
 	return prisma.user.create({ data });
 }
 
-export async function getUserById(id: string, includeTransactions = false) {
+export async function getUserByIdWithoutTransactions(id: string) {
+	return prisma.user.findUnique({ where: { id } });
+}
+
+export async function getUserById(id: string) {
 	return prisma.user.findUnique({
 		where: { id },
-		include: { transactions: includeTransactions },
+		include: {
+			transactions: { include: { server: true } },
+		},
 	});
 }
 
@@ -21,8 +27,14 @@ export async function newTransaction(data: Prisma.TransactionCreateInput) {
 	return prisma.transaction.create({ data });
 }
 
-export async function getTransactionsByUserId(userId: string) {
-	return prisma.transaction.findMany({ where: { userId } });
+export async function getTransactionsByUserId(
+	userId: string,
+	includeServer = true,
+) {
+	return prisma.transaction.findMany({
+		where: { userId },
+		include: { server: includeServer },
+	});
 }
 
 export async function setUserCredits(userId: string, credits: number) {
@@ -35,29 +47,91 @@ export async function setUserCredits(userId: string, credits: number) {
 	});
 }
 
-export async function updateUserPermission(userId: string, permission: number) {
+export async function updateUserPermission(
+	userId: string,
+	permission: number,
+	serverId?: number,
+	force?: boolean,
+) {
+	if (serverId) {
+		return prisma.permission.upsert({
+			create: { userId, serverId, permission, force },
+			update: { permission, force },
+			where: { userId, serverId },
+		});
+	}
 	return prisma.user.upsert({
 		create: { id: userId, permission },
 		update: { permission },
 		where: { id: userId },
 	});
 }
-export async function getUserPermission(userId: string) {
+
+export async function getUserLocalPermission(userId: string, serverId: number) {
+	const serverPerm = await prisma.permission.findUnique({
+		where: { userId, serverId },
+	});
+	return serverPerm?.permission ?? null;
+}
+
+export async function getUserLocalCombinedPermission(
+	userId: string,
+	serverId: number,
+) {
+	const serverPerm = await prisma.permission.findUnique({
+		where: { userId, serverId },
+		include: { user: true },
+	});
+	if (!serverPerm) return null;
+	if (serverPerm.force) return serverPerm.permission;
+	return serverPerm.user.permission | serverPerm.permission;
+}
+
+export async function getUserGlobalPermission(userId: string) {
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
-		select: { permission: true },
+		select: {
+			permission: true,
+			permissions: { include: { server: true } },
+		},
 	});
 	return user?.permission ?? null;
 }
 
-export async function getAllUserPermissions() {
+export interface UserServerPermission {
+	permission: number;
+	serverId: number;
+	serverTag: string | null;
+	force: boolean;
+}
+export interface UserPermission {
+	permission: number;
+	serverPermissions: UserServerPermission[];
+}
+
+export async function getAllUserPermissions(): Promise<
+	Record<string, UserPermission>
+> {
 	const users = await prisma.user.findMany({
-		select: { id: true, permission: true },
+		select: {
+			id: true,
+			permission: true,
+			permissions: { include: { server: true } },
+		},
 	});
-	return users.reduce(
-		(acc, user) => ({ ...acc, [user.id]: user.permission }),
-		{} as Record<string, number>,
-	);
+	const result: Record<string, UserPermission> = {};
+	for (const user of users) {
+		result[user.id] = {
+			permission: user.permission,
+			serverPermissions: user.permissions.map((perm) => ({
+				permission: perm.permission,
+				serverId: perm.serverId,
+				serverTag: perm.server?.tag,
+				force: perm.force,
+			})),
+		};
+	}
+	return result;
 }
 
 export async function selectServerById(id: number) {

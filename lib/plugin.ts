@@ -38,7 +38,12 @@ export const serverConfig: ServerConfig = {
 	port: [parseInt(process.env.SERVER_PORT || "25565")],
 	apiPort: parseInt(process.env.SERVER_API_PORT ?? "6001"),
 };
-type SideValue = "required" | "optional" | "unsupported" | "unknown";
+export enum SideValue {
+	Required = "required",
+	Optional = "optional",
+	Unsupported = "unsupported",
+	Unknown = "unknown",
+}
 type ProjectType = "mod" | "modpack" | "resourcepack" | "shader";
 type ProjectStatus =
 	| "approved"
@@ -139,6 +144,7 @@ export interface PluginSearchQueryItem<Transformed extends boolean = false>
 	date_modified: Transformed extends true ? number : string;
 	// latest game version
 	latest_version: string;
+	server_side: SideValue;
 }
 
 export interface PluginSearchQueryResponse {
@@ -164,17 +170,22 @@ interface SearchPluginFacets {
 	project_type: string[];
 }
 
-function buildFacets(facets: Partial<SearchPluginFacets>) {
+function buildFacets(facets?: Partial<SearchPluginFacets>) {
 	const result: string[][] = [];
-	if (facets.categories) {
+	if (facets?.categories) {
 		result.push([...facets.categories.map((v) => `categories:${v}`)]);
 	}
-	if (facets.versions) {
+	if (facets?.versions) {
 		result.push([...facets.versions.map((v) => `versions:${v}`)]);
 	}
-	if (facets.project_type) {
+	if (facets?.project_type) {
 		result.push([...facets.project_type.map((v) => `project_type:${v}`)]);
 	}
+
+	result.push([
+		`server_side:${SideValue.Optional}`,
+		`server_side:${SideValue.Required}`,
+	]);
 	return result;
 }
 
@@ -186,9 +197,8 @@ export async function searchPlugins({
 	const url = new URL("https://api.modrinth.com/v2/search");
 	url.searchParams.set("limit", "100");
 	url.searchParams.set("offset", offset.toString());
-	if (facets) {
-		url.searchParams.set("facets", JSON.stringify(buildFacets(facets)));
-	}
+	url.searchParams.set("facets", JSON.stringify(buildFacets(facets)));
+
 	if (query) {
 		url.searchParams.set("query", query);
 	}
@@ -205,18 +215,10 @@ export async function searchPlugins({
  */
 export async function getActivePlugins(
 	pluginDir: string,
-	apiPort: number | null,
-	localCheck = false,
 ): Promise<string[] | null> {
-	if (localCheck && apiPort === null) {
-		return (await readdir(pluginDir))
-			.filter((file) => file.endsWith(".jar"))
-			.map((file) => removeSuffix(file, ".jar"));
-	}
-	const res = await safeFetch(`http://localhost:${apiPort}/plugins`);
-	if (!res?.ok) return null;
-	const data = (await res.json()) as string[];
-	return data;
+	return (await readdir(pluginDir))
+		.filter((file) => file.endsWith(".jar"))
+		.map((file) => removeSuffix(file, ".jar"));
 }
 
 export async function getPlugin(slugOrId: string) {
@@ -385,32 +387,6 @@ export async function removePluginByFileName(
 	if (existsSync(path)) {
 		await rm(path);
 		return true;
-	}
-	const json = await readPluginsJson(pluginDir);
-	const filtered = json.filter(
-		(p) =>
-			removeSuffix(p.fileName, ".jar") !== removeSuffix(fileName, ".jar"),
-	);
-	if (json.length !== filtered.length) {
-		await writePluginsJson(
-			pluginDir,
-			json.filter(
-				(p) =>
-					removeSuffix(p.fileName, ".jar") !==
-					removeSuffix(fileName, ".jar"),
-			),
-		);
-	}
-	return false;
-}
-
-export async function removePluginBySlugOrId(
-	pluginDir: string,
-	slugOrId: string,
-) {
-	const fileName = await getPluginFileName(pluginDir, slugOrId);
-	if (fileName) {
-		return await removePluginByFileName(pluginDir, fileName);
 	}
 	return false;
 }

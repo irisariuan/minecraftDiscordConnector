@@ -42,4 +42,7 @@ export default {
 			}),
 		});
 	},
+	features: {
+		requireStartedServer: true,
+	},
 } satisfies CommandFile<true>;
