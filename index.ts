@@ -253,15 +253,14 @@ client.on("interactionCreate", async (interaction) => {
 				}
 				server = selectedServer;
 				await selection.update({
-					content: "Server selected",
+					content: "Loading...",
 					components: [],
 				});
-				await interaction.editReply({
-					components: [],
-					content: "Loading...",
+				await selection.followUp({
+					content: `Selected ${server.config.tag || `*Server #${server.id}*`}`,
+					flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
 				});
 			} catch (e) {
-				console.error(e);
 				return await interaction.editReply({
 					content: "No server selected in time or an error occurred",
 					components: [],
