@@ -112,33 +112,29 @@ export default {
 					PermissionFlags.editSetting,
 				)
 			) {
-				return await interaction.reply({
+				return await interaction.editReply({
 					content: "You don't have permission to change settings",
-					flags: [MessageFlags.Ephemeral],
 				});
 			}
 
 			const setting = interaction.options.getString("setting", true);
 			const value = interaction.options.getNumber("value", true);
 			if (!Object.keys(settings).includes(setting)) {
-				return await interaction.reply({
+				return await interaction.editReply({
 					content: `Setting ${setting} not found, settings available: \`${Object.keys(settings).join(", ")}\``,
-					flags: [MessageFlags.Ephemeral],
 				});
 			}
 			if (server !== undefined) {
 				await editServerCreditSetting(server.id, {
 					[setting]: value,
 				});
-				return await interaction.reply({
+				return await interaction.editReply({
 					content: `Setting ${setting} changed to ${value} for server ${server.config.tag ?? `Server #${server.id}`}`,
-					flags: [MessageFlags.Ephemeral],
 				});
 			}
 			changeCreditSettings({ [setting]: value });
-			return await interaction.reply({
+			return await interaction.editReply({
 				content: `Setting ${setting} changed to ${value}`,
-				flags: [MessageFlags.Ephemeral],
 			});
 		}
 		if (subcommand === "get") {
@@ -147,13 +143,12 @@ export default {
 			)
 				.map(([key, value]) => `${italic(key)}: \`${value}\``)
 				.join("\n");
-			return await interaction.reply({
+			return await interaction.editReply({
 				content: `**Settings${
 					server
 						? ` for ${server.config.tag ?? `Server #${server.id}`}**`
 						: "**"
 				}:\n\n${settingsList}`,
-				flags: [MessageFlags.Ephemeral],
 			});
 		}
 	},
