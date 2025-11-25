@@ -4,7 +4,7 @@ import {
 	type Client,
 	type MessageCreateOptions,
 } from "discord.js";
-import { join, resolve } from "path";
+import { join, relative, resolve } from "path";
 
 export type PickAndOptional<
 	T,
@@ -134,10 +134,29 @@ export function clamp(value: number, min: number, max: number) {
 }
 
 export function safeJoin(...paths: string[]) {
-	const finalPath = resolve(join(...paths));
-	if (!paths[0] || !finalPath.startsWith(paths[0])) {
-		throw new Error("Unsafe path detected");
+	const [basePath, ...remainingPaths] = paths;
+	if (!basePath) throw new Error("Base path is required");
+	// Normalize and resolve the base path first
+	const normalizedBase = resolve(basePath);
+
+	// Join all paths
+	const joinedPath = join(basePath, ...remainingPaths);
+
+	// Resolve the final path
+	const finalPath = resolve(joinedPath);
+
+	// Check if the resolved path is within the base directory
+	const relativePath = relative(normalizedBase, finalPath);
+
+	// Ensure the relative path doesn't start with ".." or is absolute
+	if (
+		relativePath.startsWith("..") ||
+		relativePath.startsWith("/") ||
+		relativePath.includes(":")
+	) {
+		throw new Error("Path traversal detected");
 	}
+
 	return finalPath;
 }
 
