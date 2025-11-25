@@ -153,3 +153,21 @@ export async function getAllServerIds() {
 export async function hasAnyServer() {
 	return (await prisma.server.count()) > 0;
 }
+
+export async function upsertNewPlugin(data: Prisma.PluginUpsertArgs) {
+	return await prisma.plugin.upsert(data);
+}
+export async function getPluginByIds(
+	projectId: string,
+	versionId: string,
+	serverId: number,
+) {
+	return await prisma.plugin.findUnique({
+		where: {
+			projectId_versionId_serverId: { projectId, versionId, serverId },
+		},
+	});
+}
+export async function deletePluginByPath(path: string) {
+	return await prisma.plugin.deleteMany({ where: { filePath: path } });
+}

@@ -53,4 +53,21 @@ model Server {
     tag          String?
     transactions Transaction[]
     permissions  Permission[]
+    plugins      Plugin[]
+}
+
+model Plugin {
+    id Int @unique @default(autoincrement())
+
+    projectId String
+    versionId String
+
+    serverId Int
+    server   Server @relation(fields: [serverId], references: [id])
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    filePath  String
+
+    @@id([projectId, versionId, serverId])
 }

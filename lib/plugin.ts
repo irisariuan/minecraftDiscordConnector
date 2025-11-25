@@ -2,6 +2,8 @@ import { createWriteStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import { ensureSuffix, removeSuffix, safeFetch, safeJoin } from "./utils";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { deletePluginByPath, upsertNewPlugin } from "./db";
+import type { Server } from "./server";
 
 if (
 	!process.env.MINECRAFT_VERSION ||
@@ -79,6 +81,10 @@ export interface PluginListVersionItem<Transformed extends boolean = false> {
 }
 
 export interface PluginGetVersionItem {
+	version_number: string;
+	/**
+	 * Version ID, base62 encoded
+	 */
 	id: string;
 	project_id: string;
 	files: PluginGetVersionFileItem[];
@@ -274,6 +280,7 @@ export async function listPluginVersions(
 }
 
 export async function downloadPluginFile(
+	server: Server,
 	pluginDir: string,
 	id: string,
 	force = false,
@@ -282,12 +289,11 @@ export async function downloadPluginFile(
 	if (!metadata || !metadata.files[0]) {
 		return { filename: null, newDownload: false };
 	}
-	if (
-		!force &&
-		existsSync(
-			createPathForPluginFile(pluginDir, metadata.files[0].filename),
-		)
-	) {
+	const filePath = createPathForPluginFile(
+		pluginDir,
+		metadata.files[0].filename,
+	);
+	if (!force && existsSync(filePath)) {
 		console.log(
 			`File ${metadata.files[0].filename} already exists, skipping download`,
 		);
@@ -295,9 +301,7 @@ export async function downloadPluginFile(
 	}
 	const res = await safeFetch(metadata.files[0].url);
 	if (!res?.ok) return { filename: null, newDownload: false };
-	const stream = createWriteStream(
-		createPathForPluginFile(pluginDir, metadata.files[0].filename),
-	);
+	const stream = createWriteStream(filePath);
 	const data = res.body;
 	if (!data) return { filename: null, newDownload: false };
 	for await (const chunk of data) {
@@ -305,6 +309,22 @@ export async function downloadPluginFile(
 	}
 	stream.end();
 	console.log(`Downloaded ${metadata.files[0].filename}`);
+	await upsertNewPlugin({
+		create: {
+			projectId: metadata.project_id,
+			filePath,
+			versionId: id,
+			serverId: server.id,
+		},
+		update: { filePath, versionId: id },
+		where: {
+			projectId_versionId_serverId: {
+				versionId: id,
+				serverId: server.id,
+				projectId: metadata.project_id,
+			},
+		},
+	});
 	return { filename: metadata.files[0].filename, newDownload: true };
 }
 
@@ -344,6 +364,7 @@ export async function removePluginByFileName(
 		pluginDir,
 		ensureSuffix(fileName, ".jar"),
 	);
+	await deletePluginByPath(path);
 	if (existsSync(path)) {
 		await rm(path);
 		return true;
