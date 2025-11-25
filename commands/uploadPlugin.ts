@@ -118,25 +118,17 @@ export default {
 			}),
 		];
 
-		let token: string | null = null;
-		if (
-			comparePermission(
-				await readPermission(interaction.user, server.id),
-				PermissionFlags.upload,
-			)
-		) {
-			token = uploadserver.createFileToken();
-			await thread.send(
-				`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
-			);
-			promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
-		}
+		const token = uploadserver.createFileToken();
+		await thread.send(
+			`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
+		);
+		promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
 		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction) {
-			await thread.send("Upload cancelled.");
+			await messages.reply("Upload cancelled.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
-			if (token) uploadserver.disposeToken(token);
+			uploadserver.disposeToken(token);
 			changeCredit({
 				userId: interaction.user.id,
 				change: settings.uploadFileFee,
@@ -193,7 +185,7 @@ export default {
 		if (
 			comparePermission(
 				await readPermission(interaction.user, server.id),
-				PermissionFlags.downloadPlugin,
+				PermissionFlags.upload,
 			)
 		) {
 			await thread.send(`The file will be added to the server shortly.`);
@@ -202,7 +194,11 @@ export default {
 						server.config.pluginDir,
 						messages,
 					)
-				: await downloadWebPluginFileToLocal(downloadingUrl, filename);
+				: await downloadWebPluginFileToLocal(
+						downloadingUrl,
+						server.config.pluginDir,
+						filename,
+					);
 			if (token) uploadserver.disposeToken(token);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
@@ -270,11 +266,12 @@ export default {
 					);
 					const finalFilename = isFile
 						? await copyLocalPluginFileToServer(
-								server.config.serverDir,
+								server.config.pluginDir,
 								messages,
 							)
 						: await downloadWebPluginFileToLocal(
 								downloadingUrl,
+								server.config.pluginDir,
 								filename,
 							);
 					if (token) uploadserver.disposeToken(token);
@@ -324,6 +321,7 @@ export default {
 	permissions: anyPerm(
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
+		PermissionFlags.upload,
 	),
 	ephemeral: true,
 } satisfies CommandFile<true>;
