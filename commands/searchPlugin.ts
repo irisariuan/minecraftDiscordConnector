@@ -21,6 +21,7 @@ export default {
 				.setName("release")
 				.setDescription("Whether to only show stable releases"),
 		),
+	requireServer: true,
 	async execute({ interaction, server }) {
 		const pluginOption = interaction.options.getString("plugin");
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
@@ -124,4 +125,4 @@ export default {
 		});
 	},
 	ephemeral: true,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

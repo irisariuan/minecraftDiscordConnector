@@ -12,6 +12,7 @@ export default {
 				.setDescription("Use API to query active plugins")
 				.setRequired(true),
 		),
+	requireServer: true,
 	async execute({ interaction, server }) {
 		const useAPI = interaction.options.getBoolean("api", true);
 		const activePlugins = await getActivePlugins(
@@ -32,4 +33,4 @@ export default {
 			flags: [MessageFlags.Ephemeral],
 		});
 	},
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

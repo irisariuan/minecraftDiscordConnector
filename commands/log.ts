@@ -13,6 +13,7 @@ export default {
 				.setDescription("Filter the log by keyword")
 				.setRequired(false),
 		),
+	requireServer: true,
 	async execute({ interaction, server }) {
 		const filter = interaction.options.getString("filter");
 
@@ -40,4 +41,4 @@ export default {
 	},
 	permissions: PermissionFlags.readLog,
 	ephemeral: true,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

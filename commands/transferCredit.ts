@@ -36,6 +36,7 @@ export default {
 				.setRequired(true)
 				.setMinValue(1),
 		),
+	requireServer: false,
 	async execute({ interaction }) {
 		const user = interaction.options.getUser("user", true);
 		const amount = interaction.options.getNumber("amount", true);
@@ -166,4 +167,4 @@ export default {
 			components: [],
 		});
 	},
-} as CommandFile<false>;
+} satisfies CommandFile<false>;

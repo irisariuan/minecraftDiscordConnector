@@ -63,6 +63,7 @@ export default {
 						),
 				),
 		),
+	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({
 			flags: [MessageFlags.Ephemeral],
@@ -133,4 +134,4 @@ export default {
 		}
 	},
 	permissions: PermissionFlags.creditEdit,
-} as CommandFile<false>;
+} satisfies CommandFile<false>;

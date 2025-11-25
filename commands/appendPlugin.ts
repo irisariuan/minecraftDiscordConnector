@@ -34,6 +34,7 @@ export default {
 				.setName("release")
 				.setDescription("Whether to only show stable releases"),
 		),
+	requireServer: true,
 	async execute({ interaction, server }) {
 		const userPermission = await readPermission(interaction.user);
 
@@ -157,4 +158,5 @@ export default {
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),
-} as CommandFile<true>;
+	
+} satisfies CommandFile<true>;

@@ -69,6 +69,7 @@ export default {
 						.setMaxValue(allPermission),
 				),
 		),
+	requireServer: false,
 	async execute({ interaction }) {
 		const subcommand = interaction.options.getSubcommand(true);
 		const users = interaction.options.getMentionable("users", true);
@@ -149,4 +150,4 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.editPerm,
-} as CommandFile<false>;
+} satisfies CommandFile<false>;

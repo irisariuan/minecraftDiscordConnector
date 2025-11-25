@@ -35,6 +35,7 @@ export default {
 				.setDescription("Force stopping the server without polling")
 				.setRequired(false),
 		),
+	requireServer: true,
 	async execute({ interaction, client, server }) {
 		if (!interaction.guild) {
 			return await interaction.followUp({
@@ -161,4 +162,4 @@ export default {
 		});
 	},
 	ephemeral: true,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

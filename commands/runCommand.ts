@@ -50,6 +50,7 @@ export default {
 				.setMinValue(1000)
 				.setMaxValue(60000),
 		),
+	requireServer: true,
 	async execute({ interaction, client, server }) {
 		if (!interaction.guild) {
 			return await interaction.followUp({
@@ -147,4 +148,4 @@ export default {
 		});
 	},
 	ephemeral: true,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

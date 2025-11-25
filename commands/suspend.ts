@@ -7,6 +7,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("suspend")
 		.setDescription("Suspend the server"),
+	requireServer: true,
 	async execute({ interaction, client, server }) {
 		server.suspendingEvent.setSuspending(true);
 		console.log("Server online status updated, suspending");
@@ -22,4 +23,4 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.suspend,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

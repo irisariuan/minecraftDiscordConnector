@@ -8,6 +8,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("onlineplayers")
 		.setDescription("Get a list of online players"),
+	requireServer: true,
 	async execute({ interaction, server }) {
 		const apiPort = server.config.apiPort;
 		if (apiPort === null) {
@@ -41,4 +42,4 @@ export default {
 			}),
 		});
 	},
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

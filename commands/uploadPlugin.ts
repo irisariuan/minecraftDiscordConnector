@@ -43,6 +43,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("uploadplugin")
 		.setDescription("Upload a custom plugin to the server"),
+	requireServer: true,
 	async execute({ interaction, client, server }) {
 		if (interaction.channel?.type !== ChannelType.GuildText) {
 			return await interaction.followUp({
@@ -325,4 +326,4 @@ export default {
 		PermissionFlags.voteDownloadPlugin,
 	),
 	ephemeral: true,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;
