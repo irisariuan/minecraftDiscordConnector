@@ -10,8 +10,10 @@ import { getAllServers } from "./db";
 import { type ServerConfig } from "./plugin";
 import { type LogLine } from "./request";
 import {
+	loadServerApprovalSetting,
 	loadServerCreditSetting,
 	settings,
+	type ApprovalSettings,
 	type CreditSettings,
 	type ServerCreditSettings,
 } from "./settings";
@@ -51,6 +53,7 @@ interface CreateServerOptions {
 	config: ServerConfig;
 	serverId: number;
 	creditSettings: ServerCreditSettings;
+	approvalSettings: ApprovalSettings;
 }
 
 export class Server {
@@ -64,6 +67,7 @@ export class Server {
 	suspendingEvent: SuspendingEventEmitter;
 	approvalList: Map<string, Approval>;
 	creditSettings: ServerCreditSettings;
+	approvalSettings: ApprovalSettings;
 	readonly config: ServerConfig;
 	readonly id: number;
 
@@ -74,6 +78,7 @@ export class Server {
 		serverId,
 		config,
 		creditSettings,
+		approvalSettings,
 	}: CreateServerOptions) {
 		this.instance = null;
 		this.outputLines = [];
@@ -82,6 +87,7 @@ export class Server {
 		this.config = config;
 		this.id = serverId;
 		this.creditSettings = creditSettings;
+		this.approvalSettings = approvalSettings;
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
 		this.isOnline = new CacheItem<boolean>(false, {
@@ -337,6 +343,9 @@ export class ServerManager {
 						apiPort: server.apiPort,
 					},
 					creditSettings: await loadServerCreditSetting(server.id),
+					approvalSettings: await loadServerApprovalSetting(
+						server.id,
+					),
 				}),
 			);
 		}

@@ -1,5 +1,13 @@
-import { defaultCreditSettings } from "../defaultSettings";
-import { getServerCreditSettings, upsertServerCreditSettings } from "./db";
+import {
+	defaultApprovalSettings,
+	defaultCreditSettings,
+} from "../defaultSettings";
+import {
+	getServerApprovalSettings,
+	getServerCreditSettings,
+	upsertServerApprovalSettings,
+	upsertServerCreditSettings,
+} from "./db";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
 
@@ -35,6 +43,20 @@ export interface CreditSettings extends ServerCreditSettings {
 	checkUserPermissionFee: number;
 	refreshDnsFee: number;
 }
+export interface ApprovalSettings {
+	cancelStopServerApproval: number;
+	cancelStopServerDisapproval: number;
+
+	runCommandApproval: number;
+	runCommandDisapproval: number;
+
+	startServerApproval: number;
+	startServerDisapproval: number;
+
+	stopServerApproval: number;
+	stopServerDisapproval: number;
+}
+
 export let settings: CreditSettings = defaultCreditSettings;
 
 export function setCreditSettings(changes: Partial<CreditSettings>) {
@@ -80,6 +102,31 @@ export async function editServerCreditSetting(
 	changes: Partial<ServerCreditSettings>,
 ) {
 	await upsertServerCreditSettings({
+		create: { serverId: id, ...changes },
+		update: { ...changes },
+		where: { serverId: id },
+	});
+}
+export async function loadServerApprovalSetting(
+	id: number,
+): Promise<ApprovalSettings> {
+	const serverSettings = await getServerApprovalSettings(id);
+	if (!serverSettings) {
+		return defaultApprovalSettings;
+	}
+	const filteredServerSettings: Partial<ApprovalSettings> = {};
+	for (const [key, value] of Object.entries(serverSettings)) {
+		if (value !== null && key in defaultApprovalSettings) {
+			filteredServerSettings[key as keyof ApprovalSettings] = value;
+		}
+	}
+	return { ...defaultApprovalSettings, ...filteredServerSettings };
+}
+export async function editServerApprovalSetting(
+	id: number,
+	changes: Partial<ApprovalSettings>,
+) {
+	await upsertServerApprovalSettings({
 		create: { serverId: id, ...changes },
 		update: { ...changes },
 		where: { serverId: id },

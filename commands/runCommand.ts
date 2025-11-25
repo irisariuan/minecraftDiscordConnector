@@ -107,6 +107,8 @@ export default {
 		return await sendApprovalPoll(interaction, {
 			content: command,
 			options: {
+				approvalCount: server.approvalSettings.runCommandApproval,
+				disapprovalCount: server.approvalSettings.runCommandDisapproval,
 				startPollFee: server.creditSettings.newRunCommandPollFee,
 				callerId: interaction.user.id,
 				description: `Command: \`${command}\` (${server.config.tag ?? `Server #${server.id}`})`,

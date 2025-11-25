@@ -39,6 +39,13 @@ export default {
 				)
 				.addBooleanOption((option) =>
 					option
+						.setName("approval")
+						.setDescription(
+							"Whether to edit approval settings or credit settings (default: credit settings (false))",
+						),
+				)
+				.addBooleanOption((option) =>
+					option
 						.setName("local")
 						.setDescription(
 							"Whether to edit local permission (default: false)",

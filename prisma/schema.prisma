@@ -55,6 +55,7 @@ model Server {
     permissions         Permission[]
     plugins             Plugin[]
     serverCreditSetting ServerCreditSetting?
+    approvalSettings    ApprovalSetting[]
 }
 
 model ServerCreditSetting {
@@ -72,6 +73,23 @@ model ServerCreditSetting {
 
     uploadFileFee   Int?
     deletePluginFee Int?
+}
+
+model ApprovalSetting {
+    serverId Int    @id
+    server   Server @relation(fields: [serverId], references: [id])
+
+    cancelStopServerApproval    Int?
+    cancelStopServerDisapproval Int?
+
+    runCommandApproval    Int?
+    runCommandDisapproval Int?
+
+    startServerApproval    Int?
+    startServerDisapproval Int?
+
+    stopServerApproval    Int?
+    stopServerDisapproval Int?
 }
 
 model Plugin {

@@ -155,8 +155,8 @@ export default {
 						content: "Server stopped successfully",
 					});
 				},
-				approvalCount: 2,
-				disapprovalCount: 2,
+				approvalCount: server.approvalSettings.stopServerApproval,
+				disapprovalCount: server.approvalSettings.stopServerDisapproval,
 				credit: server.creditSettings.stopServerVoteFee,
 			},
 			server,

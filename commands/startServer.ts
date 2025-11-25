@@ -120,8 +120,9 @@ export default {
 						content: "Server started successfully",
 					});
 				},
-				approvalCount: 3,
-				disapprovalCount: 3,
+				approvalCount: server.approvalSettings.startServerApproval,
+				disapprovalCount:
+					server.approvalSettings.startServerDisapproval,
 				credit: server.creditSettings.startServerVoteFee,
 			},
 			server,

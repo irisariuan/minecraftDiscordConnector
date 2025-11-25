@@ -51,8 +51,8 @@ export interface Approval extends CoreApproval {
 
 export interface ApprovalOptions {
 	description: string;
-	approvalCount?: number;
-	disapprovalCount?: number;
+	approvalCount: number;
+	disapprovalCount: number;
 	requireSuperApproval?: boolean;
 	callerId: string;
 	startPollFee?: number;
@@ -73,10 +73,6 @@ export interface ApprovalOptions {
 
 export const MESSAGE_VALID_TIME = 14 * 60 * 1000; // 14 minutes, since discord message valid time is 15 minutes
 export const DELETE_AFTER_MS = 3 * 1000;
-
-export const globalDisapprovalCount =
-	Number(process.env.DISAPPROVAL_COUNT) || 1;
-export const globalApprovalCount = Number(process.env.APPROVAL_COUNT) || 1;
 
 export function newApproval(
 	approval: Omit<
@@ -194,9 +190,8 @@ export async function removeApproval(approval: Approval) {
 type ApprovalStatus = "approved" | "disapproved" | "pending" | "timeout";
 
 function checkApprovalStatus(approval: Approval): ApprovalStatus {
-	const approvalCount = approval.options.approvalCount || globalApprovalCount;
-	const disapprovalCount =
-		approval.options.disapprovalCount || globalDisapprovalCount;
+	const approvalCount = approval.options.approvalCount;
+	const disapprovalCount = approval.options.disapprovalCount;
 	const requireSuperApproval = approval.options.requireSuperApproval ?? false;
 	if (approval.validTill > Date.now()) {
 		if (approval.superStatus) return approval.superStatus;
@@ -268,9 +263,8 @@ export function createInternalApprovalEmbed(
 	color: number,
 	title: string,
 ) {
-	const approvalCount = approval.options.approvalCount || globalApprovalCount;
-	const disapprovalCount =
-		approval.options.disapprovalCount || globalDisapprovalCount;
+	const approvalCount = approval.options.approvalCount;
+	const disapprovalCount = approval.options.disapprovalCount;
 	return new EmbedBuilder()
 		.setColor(color)
 		.setTitle(title)
@@ -626,8 +620,8 @@ export async function updateApprovalMessage(
 	}
 
 	const countStr = approving
-		? `${approval.approvalIds.length}/${approval.options.approvalCount || globalApprovalCount}`
-		: `${approval.disapprovalIds.length}/${approval.options.disapprovalCount || globalDisapprovalCount}`;
+		? `${approval.approvalIds.length}/${approval.options.approvalCount}`
+		: `${approval.disapprovalIds.length}/${approval.options.disapprovalCount}`;
 
 	await reaction
 		.followUp({
