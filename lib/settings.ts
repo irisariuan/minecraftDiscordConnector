@@ -8,6 +8,7 @@ import {
 	upsertServerApprovalSettings,
 	upsertServerCreditSettings,
 } from "./db";
+import type { Server } from "./server";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
 const APPROVAL_SETTINGS = `${process.cwd()}/data/approvalSettings.json`;
@@ -125,13 +126,14 @@ export async function loadServerCreditSetting(
 	return { ...defaultCreditSettings, ...filteredServerSettings };
 }
 export async function editServerCreditSetting(
-	id: number,
+	server: Server,
 	changes: Partial<ServerCreditSettings>,
 ) {
+	server.creditSettings = { ...server.creditSettings, ...changes };
 	await upsertServerCreditSettings({
-		create: { serverId: id, ...changes },
+		create: { serverId: server.id, ...changes },
 		update: { ...changes },
-		where: { serverId: id },
+		where: { serverId: server.id },
 	});
 }
 export async function loadServerApprovalSetting(
@@ -150,12 +152,14 @@ export async function loadServerApprovalSetting(
 	return { ...defaultApprovalSettings, ...filteredServerSettings };
 }
 export async function editServerApprovalSetting(
-	id: number,
+	server: Server,
 	changes: Partial<ApprovalSettings>,
 ) {
+	server.approvalSettings = { ...server.approvalSettings, ...changes };
+
 	await upsertServerApprovalSettings({
-		create: { serverId: id, ...changes },
+		create: { serverId: server.id, ...changes },
 		update: { ...changes },
-		where: { serverId: id },
+		where: { serverId: server.id },
 	});
 }
