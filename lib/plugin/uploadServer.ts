@@ -57,13 +57,20 @@ function createUploadServer(uploadServer: UploadServer) {
 				edited: !uploadServer.hasActiveToken(
 					req.params.id,
 					TokenType.EditToken,
-				),
+				), 
 			});
 		}
-		return res.status(200).send({ valid: false, uploaded: false });
+		return res.status(200).send({ valid: false, uploaded: false, edited: false });
 	});
 	app.get("/file/:id", (req, res) => {
 		if (!req.params.id || !uploadServer.fileTokenMap.has(req.params.id)) {
+			if (uploadServer.hasActiveToken(req.params.id, TokenType.EditToken)) {
+				const file = uploadServer.editTokenFilenameMap.get(req.params.id)
+				if (!file) {
+					return res.status(404).send("Not Found");
+				}
+				return res.sendFile(file.filename);
+			}
 			return res.status(404).send("Not Found");
 		}
 		const file = uploadServer.fileTokenMap.get(req.params.id);

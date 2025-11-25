@@ -29,9 +29,16 @@ interface ExecuteReactionParams {
 	client: Client;
 }
 
+export interface CommandFeatures {
+	requireStartedServer: boolean
+	requireStoppedServer: boolean
+	suspendable: boolean
+}
+
 export interface CommandFile<RequireServer extends boolean> {
 	command: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
 	requireServer: RequireServer;
+	features?: Partial<CommandFeatures>;
 	execute: (
 		params: RequireServer extends true
 			? ExecuteParamsWithServer
