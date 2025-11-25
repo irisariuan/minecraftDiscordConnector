@@ -70,7 +70,7 @@ export default {
 		const capture = interaction.options.getInteger("capture") ?? 1000;
 		const timeout = interaction.options.getInteger("timeout");
 		const canRunCommand = compareAllPermissions(
-			await readPermission(interaction.user),
+			await readPermission(interaction.user, server.id),
 			[PermissionFlags.runCommand],
 		);
 
@@ -148,4 +148,7 @@ export default {
 		});
 	},
 	ephemeral: true,
+	features: {
+		requireStartedServer: true,
+	},
 } satisfies CommandFile<true>;

@@ -36,6 +36,7 @@ export default {
 						query: filter,
 						facets: {
 							categories: [server.config.loaderType],
+							versions: [server.config.minecraftVersion],
 						},
 					});
 					if ("error" in plugins) {

@@ -15,12 +15,12 @@ import { Server, ServerManager } from "./server";
 
 interface ExecuteParams {
 	interaction: ChatInputCommandInteraction;
+	serverManager: ServerManager;
 	client: Client;
 }
 
 interface ExecuteParamsWithServer extends ExecuteParams {
 	server: Server;
-	serverManager: ServerManager;
 }
 
 interface ExecuteReactionParams {
@@ -30,13 +30,16 @@ interface ExecuteReactionParams {
 }
 
 export interface CommandFeatures {
-	requireStartedServer: boolean
-	requireStoppedServer: boolean
-	suspendable: boolean
+	requireStartedServer: boolean;
+	requireStoppedServer: boolean;
+	suspendable: boolean;
 }
 
 export interface CommandFile<RequireServer extends boolean> {
-	command: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
+	command:
+		| SlashCommandBuilder
+		| SlashCommandOptionsOnlyBuilder
+		| SlashCommandSubcommandsOnlyBuilder;
 	requireServer: RequireServer;
 	features?: Partial<CommandFeatures>;
 	execute: (

@@ -121,7 +121,7 @@ export default {
 		let token: string | null = null;
 		if (
 			comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.upload,
 			)
 		) {
@@ -192,7 +192,7 @@ export default {
 		);
 		if (
 			comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.downloadPlugin,
 			)
 		) {
@@ -252,7 +252,7 @@ export default {
 						["✅", "❌"].includes(reaction.emoji.name) &&
 						!user.bot &&
 						comparePermission(
-							await readPermission(user),
+							await readPermission(user, server.id),
 							PermissionFlags.downloadPlugin,
 						)
 					),

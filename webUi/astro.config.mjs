@@ -8,13 +8,13 @@ import solidJs from "@astrojs/solid-js";
 
 // https://astro.build/config
 export default defineConfig({
-  vite: {
-      plugins: [tailwindcss()],
+	vite: {
+		plugins: [tailwindcss()],
 	},
 
-  adapter: node({
-      mode: "middleware",
+	adapter: node({
+		mode: "middleware",
 	}),
 
-  integrations: [solidJs()],
+	integrations: [solidJs()],
 });

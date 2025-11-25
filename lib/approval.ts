@@ -419,7 +419,7 @@ export async function updateApprovalMessage(
 	const result = findApproval(serverManager, reaction.message.id);
 	if (!result) return;
 	const { approval, server } = result;
-	const userPerm = await readPermission(reaction.user);
+	const userPerm = await readPermission(reaction.user, approval.server.id);
 	let approving: boolean;
 	let disapproving: boolean;
 	let canceling: boolean;

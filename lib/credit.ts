@@ -29,6 +29,7 @@ export interface Change {
 	timestamp: number;
 	reason?: string;
 	trackingId: string;
+	serverTag: string | null;
 }
 
 export async function setCredit({
@@ -53,9 +54,11 @@ export async function setCredit({
 		amount: credit - userCreditFetched.currentCredit,
 		reason,
 		server: {
-			connect: {
-				id: serverId,
-			},
+			connect: serverId
+				? {
+						id: serverId,
+					}
+				: undefined,
 		},
 		timestamp: new Date(),
 	});
@@ -82,9 +85,11 @@ export async function changeCredit({
 			connectOrCreate: { create: { id: userId }, where: { id: userId } },
 		},
 		server: {
-			connect: {
-				id: serverId,
-			},
+			connect: serverId
+				? {
+						id: serverId,
+					}
+				: undefined,
 		},
 		afterAmount: userCreditFetched.currentCredit + change,
 		beforeAmount: userCreditFetched.currentCredit,
@@ -98,7 +103,7 @@ export async function changeCredit({
 }
 
 export async function getCredit(userId: string): Promise<UserCredit | null> {
-	const user = await getUserById(userId, true);
+	const user = await getUserById(userId);
 	if (!user) {
 		if (
 			!comparePermission(
@@ -115,14 +120,17 @@ export async function getCredit(userId: string): Promise<UserCredit | null> {
 	return {
 		currentCredit: user.credits,
 		histories: user.transactions
-			.map((v) => ({
-				changed: v.amount,
-				creditAfter: v.afterAmount,
-				creditBefore: v.beforeAmount,
-				timestamp: v.timestamp.getTime(),
-				reason: v.reason || undefined,
-				trackingId: v.id.toString(),
-			}))
+			.map(
+				(v): Change => ({
+					changed: v.amount,
+					creditAfter: v.afterAmount,
+					creditBefore: v.beforeAmount,
+					timestamp: v.timestamp.getTime(),
+					reason: v.reason || undefined,
+					trackingId: v.id.toString(),
+					serverTag: v.server?.tag ?? null,
+				}),
+			)
 			.toSorted((a, b) => b.timestamp - a.timestamp),
 	};
 }

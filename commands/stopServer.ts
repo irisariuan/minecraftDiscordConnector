@@ -67,7 +67,7 @@ export default {
 		if (
 			force &&
 			comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.stopServer,
 			)
 		) {
@@ -162,4 +162,7 @@ export default {
 		});
 	},
 	ephemeral: true,
+	features: {
+		requireStartedServer: true,
+	},
 } satisfies CommandFile<true>;

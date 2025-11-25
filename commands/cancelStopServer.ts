@@ -6,7 +6,6 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
-import { isServerAlive } from "../lib/request";
 import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
 
@@ -44,7 +43,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		if (
-			compareAnyPermissions(await readPermission(interaction.user), [
+			compareAnyPermissions(await readPermission(interaction.user, server.id), [
 				PermissionFlags.stopServer,
 				PermissionFlags.startServer,
 			])
@@ -117,5 +116,8 @@ export default {
 			},
 			server,
 		});
+	},
+	features: {
+		requireStartedServer: true,
 	},
 } satisfies CommandFile<true>;

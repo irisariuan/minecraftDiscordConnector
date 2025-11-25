@@ -201,7 +201,7 @@ client.on("interactionCreate", async (interaction) => {
 
 		if (doNotRequireServer(command)) {
 			return await Promise.try(() =>
-				command.execute({ interaction, client }),
+				command.execute({ interaction, client, serverManager }),
 			).catch(errorHandler);
 		}
 		const serverCount = serverManager.getServerCount();
@@ -248,12 +248,6 @@ client.on("interactionCreate", async (interaction) => {
 				const selectedServer = serverManager.getServer(
 					parseInt(serverId),
 				);
-				console.log(
-					"Selected",
-					serverId,
-					"returned:",
-					selectedServer?.id,
-				);
 				if (!selectedServer) {
 					return selection.update({
 						content: "Selected server not found",
@@ -277,18 +271,34 @@ client.on("interactionCreate", async (interaction) => {
 				});
 			}
 		}
-
 		if (
-			command.features?.suspendable === false &&
+			command.features?.suspendable !== false &&
 			server.suspendingEvent.isSuspending() &&
 			!comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.suspend,
 			)
 		) {
 			return interaction.reply({
 				content:
 					"Server is suspending, you do not have permission to use this command",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		if (
+			command.features?.requireStartedServer &&
+			!(await server.isOnline.getData(true))
+		) {
+			return interaction.reply({
+				content: "Server is not online",
+				flags: [MessageFlags.Ephemeral],
+			});
+		} else if (
+			command.features?.requireStoppedServer &&
+			(await server.isOnline.getData(true))
+		) {
+			return interaction.reply({
+				content: "Server is not stopped",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}

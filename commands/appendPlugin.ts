@@ -36,7 +36,7 @@ export default {
 		),
 	requireServer: true,
 	async execute({ interaction, server }) {
-		const userPermission = await readPermission(interaction.user);
+		const userPermission = await readPermission(interaction.user, server.id);
 
 		const pluginOption = interaction.options.getString("plugin", true);
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
@@ -96,7 +96,7 @@ export default {
 							componentType: ComponentType.Button,
 							filter: async (i) =>
 								comparePermission(
-									await readPermission(i.user),
+									await readPermission(i.user, server.id),
 									PermissionFlags.downloadPlugin,
 								),
 							time: 1000 * 60 * 10,
@@ -158,5 +158,4 @@ export default {
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),
-	
 } satisfies CommandFile<true>;
