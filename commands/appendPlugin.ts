@@ -36,7 +36,10 @@ export default {
 		),
 	requireServer: true,
 	async execute({ interaction, server }) {
-		const userPermission = await readPermission(interaction.user, server.id);
+		const userPermission = await readPermission(
+			interaction.user,
+			server.id,
+		);
 
 		const pluginOption = interaction.options.getString("plugin", true);
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
@@ -121,10 +124,7 @@ export default {
 						components: [],
 					});
 				}
-				const { newDownload } = await downloadPluginFile(
-					server.config.pluginDir,
-					value,
-				);
+				const { newDownload } = await downloadPluginFile(server.config.pluginDir, value);
 				if (!newDownload) {
 					await menuInteraction.editReply({
 						content:
