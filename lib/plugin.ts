@@ -281,7 +281,6 @@ export async function listPluginVersions(
 
 export async function downloadPluginFile(
 	server: Server,
-	pluginDir: string,
 	id: string,
 	force = false,
 ): Promise<{ filename: string | null; newDownload: boolean }> {
@@ -290,7 +289,7 @@ export async function downloadPluginFile(
 		return { filename: null, newDownload: false };
 	}
 	const filePath = createPathForPluginFile(
-		pluginDir,
+		server.config.pluginDir,
 		metadata.files[0].filename,
 	);
 	if (!force && existsSync(filePath)) {
