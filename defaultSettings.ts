@@ -1,4 +1,4 @@
-import type { CreditSettings } from "./lib/settings";
+import type { ApprovalSettings, CreditSettings } from "./lib/settings";
 
 export const defaultCreditSettings: CreditSettings = {
 	dailyGift: 20,
@@ -24,5 +24,19 @@ export const defaultCreditSettings: CreditSettings = {
 	cancelStopServerVoteFee: 15,
 	stopServerVoteFee: 15,
 	uploadFileFee: 70,
-	deletePluginFee: 70
-}
+
+	deletePluginFee: 70,
+};
+export const defaultApprovalSettings: ApprovalSettings = {
+	cancelStopServerApproval: 2,
+	cancelStopServerDisapproval: 2,
+
+	runCommandApproval: 4,
+	runCommandDisapproval: 2,
+
+	startServerApproval: 3,
+	startServerDisapproval: 3,
+
+	stopServerApproval: 2,
+	stopServerDisapproval: 2,
+};

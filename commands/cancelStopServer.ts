@@ -43,10 +43,10 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		if (
-			compareAnyPermissions(await readPermission(interaction.user, server.id), [
-				PermissionFlags.stopServer,
-				PermissionFlags.startServer,
-			])
+			compareAnyPermissions(
+				await readPermission(interaction.user, server.id),
+				[PermissionFlags.stopServer, PermissionFlags.startServer],
+			)
 		) {
 			let success = false;
 			if (server.haveLocalSideScheduledShutdown()) {
@@ -110,8 +110,9 @@ export default {
 						content: "Cancelled scheduled shutdown",
 					});
 				},
-				approvalCount: 2,
-				disapprovalCount: 2,
+				approvalCount: server.approvalSettings.cancelStopServerApproval,
+				disapprovalCount:
+					server.approvalSettings.cancelStopServerDisapproval,
 				credit: server.creditSettings.cancelStopServerVoteFee,
 			},
 			server,
