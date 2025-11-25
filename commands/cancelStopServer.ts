@@ -69,7 +69,7 @@ export default {
 		if (
 			!(await spendCredit({
 				userId: interaction.user.id,
-				cost: settings.newCancelStopServerPollFee,
+				cost: server.creditSettings.newCancelStopServerPollFee,
 				serverId: server.id,
 				reason: "New Cancel Stop Server Poll",
 			}))
@@ -82,7 +82,7 @@ export default {
 		}
 		await sendCreditNotification({
 			user: interaction.user,
-			creditChanged: -settings.newCancelStopServerPollFee,
+			creditChanged: -server.creditSettings.newCancelStopServerPollFee,
 			reason: "New Cancel Stop Server Poll",
 			serverId: server.id,
 		});
@@ -90,7 +90,7 @@ export default {
 		sendApprovalPoll(interaction, {
 			content: `Cancel Server Shutdown at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
-				startPollFee: settings.newCancelStopServerPollFee,
+				startPollFee: server.creditSettings.newCancelStopServerPollFee,
 				callerId: interaction.user.id,
 				description: `Cancel Server Shutdown (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
@@ -112,7 +112,7 @@ export default {
 				},
 				approvalCount: 2,
 				disapprovalCount: 2,
-				credit: settings.cancelStopServerVoteFee,
+				credit: server.creditSettings.cancelStopServerVoteFee,
 			},
 			server,
 		});

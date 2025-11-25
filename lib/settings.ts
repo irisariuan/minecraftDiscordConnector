@@ -1,8 +1,24 @@
 import { defaultCreditSettings } from "../defaultSettings";
+import { getServerCreditSettings, upsertServerCreditSettings } from "./db";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
 
-export interface CreditSettings {
+export interface ServerCreditSettings {
+	newCancelStopServerPollFee: number;
+	newRunCommandPollFee: number;
+	newStartServerPollFee: number;
+	newStopServerPollFee: number;
+
+	runCommandVoteFee: number;
+	startServerVoteFee: number;
+	cancelStopServerVoteFee: number;
+	stopServerVoteFee: number;
+
+	uploadFileFee: number;
+	deletePluginFee: number;
+}
+
+export interface CreditSettings extends ServerCreditSettings {
 	dailyGift: number;
 	giftMax: number;
 
@@ -18,19 +34,6 @@ export interface CreditSettings {
 	checkUserCreditFee: number;
 	checkUserPermissionFee: number;
 	refreshDnsFee: number;
-
-	newCancelStopServerPollFee: number;
-	newRunCommandPollFee: number;
-	newStartServerPollFee: number;
-	newStopServerPollFee: number;
-
-	runCommandVoteFee: number;
-	startServerVoteFee: number;
-	cancelStopServerVoteFee: number;
-	stopServerVoteFee: number;
-
-	uploadFileFee: number;
-	deletePluginFee: number;
 }
 export let settings: CreditSettings = defaultCreditSettings;
 
@@ -54,4 +57,31 @@ export async function loadCreditSettings(): Promise<Partial<CreditSettings>> {
 	if (!(await settings.exists())) return {};
 	const data = await settings.json().catch(() => ({}));
 	return data;
+}
+export async function loadServerCreditSetting(
+	id: number,
+): Promise<ServerCreditSettings> {
+	const serverSettings = await getServerCreditSettings(id);
+	if (!serverSettings) {
+		return defaultCreditSettings;
+	}
+
+	// Filter out null values and only include defined server settings
+	const filteredServerSettings: Partial<ServerCreditSettings> = {};
+	for (const [key, value] of Object.entries(serverSettings)) {
+		if (value !== null && key in defaultCreditSettings) {
+			filteredServerSettings[key as keyof ServerCreditSettings] = value;
+		}
+	}
+	return { ...defaultCreditSettings, ...filteredServerSettings };
+}
+export async function editServerCreditSetting(
+	id: number,
+	changes: Partial<ServerCreditSettings>,
+) {
+	await upsertServerCreditSettings({
+		create: { serverId: id, ...changes },
+		update: { ...changes },
+		where: { serverId: id },
+	});
 }

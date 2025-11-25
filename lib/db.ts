@@ -156,6 +156,16 @@ export async function hasAnyServer() {
 	return (await prisma.server.count()) > 0;
 }
 
+export async function getServerCreditSettings(serverId: number) {
+	return await prisma.serverCreditSetting.findUnique({ where: { serverId } });
+}
+
+export async function upsertServerCreditSettings(
+	data: Prisma.ServerCreditSettingUpsertArgs,
+) {
+	return await prisma.serverCreditSetting.upsert(data);
+}
+
 export async function upsertNewPlugin(data: Prisma.PluginUpsertArgs) {
 	return await prisma.plugin.upsert(data);
 }

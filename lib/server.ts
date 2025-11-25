@@ -1,29 +1,28 @@
 import { spawn, type Subprocess } from "bun";
-import { CacheItem } from "./cache";
-import { type LogLine } from "./request";
-import { join } from "node:path";
-import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
-import { EventEmitter } from "node:events";
-import { stripVTControlCharacters } from "node:util";
-import { SuspendingEventEmitter } from "./suspend";
-import { type ServerConfig } from "./plugin";
-import { getAllServers } from "./db";
-import type { Approval } from "./approval";
-import { changeCredit, sendCreditNotification } from "./credit";
 import type { Client } from "discord.js";
+import { EventEmitter } from "node:events";
+import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
+import type { Approval } from "./approval";
+import { CacheItem } from "./cache";
+import { changeCredit, sendCreditNotification } from "./credit";
+import { getAllServers } from "./db";
+import { type ServerConfig } from "./plugin";
+import { type LogLine } from "./request";
+import {
+	loadServerCreditSetting,
+	settings,
+	type CreditSettings,
+	type ServerCreditSettings,
+} from "./settings";
+import { SuspendingEventEmitter } from "./suspend";
+import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
 
 if (
 	!process.env.SERVER_DIR ||
 	!(await Bun.file(join(process.env.SERVER_DIR, "start.sh")).exists())
 )
 	throw new Error("SERVER_DIR environment variable is not set");
-
-interface CreateServerOptions {
-	shutdownAllowedTime?: number;
-	defaultSuspending?: boolean;
-	config: ServerConfig;
-	serverId: number;
-}
 
 const serverTypeRef = {
 	INFO: "info",
@@ -46,6 +45,14 @@ class ServerMessageEmitter extends EventEmitter {
 	}
 }
 
+interface CreateServerOptions {
+	shutdownAllowedTime?: number;
+	defaultSuspending?: boolean;
+	config: ServerConfig;
+	serverId: number;
+	creditSettings: ServerCreditSettings;
+}
+
 export class Server {
 	private instance: Subprocess<"ignore", "pipe", "inherit"> | null;
 	private waitingToShutdown: boolean;
@@ -56,6 +63,7 @@ export class Server {
 	timeouts: NodeJS.Timeout[];
 	suspendingEvent: SuspendingEventEmitter;
 	approvalList: Map<string, Approval>;
+	creditSettings: ServerCreditSettings;
 	readonly config: ServerConfig;
 	readonly id: number;
 
@@ -65,6 +73,7 @@ export class Server {
 			false,
 		serverId,
 		config,
+		creditSettings,
 	}: CreateServerOptions) {
 		this.instance = null;
 		this.outputLines = [];
@@ -72,6 +81,7 @@ export class Server {
 		this.approvalList = new Map();
 		this.config = config;
 		this.id = serverId;
+		this.creditSettings = creditSettings;
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
 		this.isOnline = new CacheItem<boolean>(false, {
@@ -326,6 +336,7 @@ export class ServerManager {
 						port: server.port,
 						apiPort: server.apiPort,
 					},
+					creditSettings: await loadServerCreditSetting(server.id),
 				}),
 			);
 		}
