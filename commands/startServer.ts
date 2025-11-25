@@ -92,11 +92,11 @@ export default {
 		});
 
 		sendApprovalPoll(interaction, {
-			content: "Start Server",
+			content: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
 			options: {
 				startPollFee: settings.newStartServerPollFee,
 				callerId: interaction.user.id,
-				description: "Start Server",
+				description: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
 					const pid = await server.start();
 					if (!pid) {
