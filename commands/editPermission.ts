@@ -144,8 +144,8 @@ export default {
 	async execute({ interaction, serverManager }) {
 		const subcommand = interaction.options.getSubcommand(true);
 		const users = interaction.options.getMentionable("users", true);
-		const local = interaction.options.getBoolean("local") ?? false;
 		const force = interaction.options.getBoolean("force") ?? false;
+		const local = interaction.options.getBoolean("local") ?? false;
 		let serverId: number | undefined = undefined;
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 		if (local) {
