@@ -181,19 +181,16 @@ client.on("interactionCreate", async (interaction) => {
 					content: "An error occurred while executing the command",
 					flags: [MessageFlags.Ephemeral],
 				})
-				.catch((err) => {
-					console.error(err);
+				.catch(() => {
 					interaction
 						.editReply({
 							content:
 								"An error occurred while executing the command",
 						})
-						.catch((err) => {
-							console.error(err);
+						.catch(() => {
 							interaction.followUp({
 								content:
 									"An error occurred while executing the command",
-								flags: [MessageFlags.Ephemeral],
 							});
 						});
 				});
