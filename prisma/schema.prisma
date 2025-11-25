@@ -42,18 +42,36 @@ model Permission {
 }
 
 model Server {
-    id           Int           @id @default(autoincrement())
-    port         Int[]         @default([25565])
-    path         String        @unique
-    pluginPath   String        @unique
-    apiPort      Int?
-    loaderType   String
-    modType      String
-    version      String
-    tag          String?
-    transactions Transaction[]
-    permissions  Permission[]
-    plugins      Plugin[]
+    id                  Int                  @id @default(autoincrement())
+    port                Int[]                @default([25565])
+    path                String               @unique
+    pluginPath          String               @unique
+    apiPort             Int?
+    loaderType          String
+    modType             String
+    version             String
+    tag                 String?
+    transactions        Transaction[]
+    permissions         Permission[]
+    plugins             Plugin[]
+    serverCreditSetting ServerCreditSetting?
+}
+
+model ServerCreditSetting {
+    serverId                   Int    @id
+    server                     Server @relation(fields: [serverId], references: [id])
+    newCancelStopServerPollFee Int?
+    newRunCommandPollFee       Int?
+    newStartServerPollFee      Int?
+    newStopServerPollFee       Int?
+
+    runCommandVoteFee       Int?
+    startServerVoteFee      Int?
+    cancelStopServerVoteFee Int?
+    stopServerVoteFee       Int?
+
+    uploadFileFee   Int?
+    deletePluginFee Int?
 }
 
 model Plugin {

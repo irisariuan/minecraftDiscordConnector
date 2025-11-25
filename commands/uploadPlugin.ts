@@ -56,7 +56,7 @@ export default {
 		if (
 			!(await spendCredit({
 				userId: interaction.user.id,
-				cost: settings.uploadFileFee,
+				cost: server.creditSettings.uploadFileFee,
 				reason: "Upload Custom Mod to Server",
 				serverId: server.id,
 			}))
@@ -67,7 +67,7 @@ export default {
 		}
 		await sendCreditNotification({
 			user: interaction.user,
-			creditChanged: -settings.uploadFileFee,
+			creditChanged: -server.creditSettings.uploadFileFee,
 			reason: "Upload Custom Mod to Server",
 			serverId: server.id,
 		});
@@ -131,13 +131,13 @@ export default {
 			uploadserver.disposeToken(token);
 			changeCredit({
 				userId: interaction.user.id,
-				change: settings.uploadFileFee,
+				change: server.creditSettings.uploadFileFee,
 				reason: "Refund for cancelled Upload Custom Mod to Server",
 				serverId: server.id,
 			});
 			sendCreditNotification({
 				user: interaction.user,
-				creditChanged: settings.uploadFileFee,
+				creditChanged: server.creditSettings.uploadFileFee,
 				reason: "Refund for cancelled Upload Custom Mod to Server",
 				serverId: server.id,
 			});
@@ -162,13 +162,13 @@ export default {
 				await thread.setArchived(true);
 				changeCredit({
 					userId: interaction.user.id,
-					change: settings.uploadFileFee,
+					change: server.creditSettings.uploadFileFee,
 					serverId: server.id,
 					reason: "Refund for cancelled Upload Custom Mod to Server",
 				});
 				sendCreditNotification({
 					user: interaction.user,
-					creditChanged: settings.uploadFileFee,
+					creditChanged: server.creditSettings.uploadFileFee,
 					reason: "Refund for cancelled Upload Custom Mod to Server",
 				});
 				setTimeout(cleanUp, 1000 * 10);
@@ -208,13 +208,13 @@ export default {
 				);
 				changeCredit({
 					userId: interaction.user.id,
-					change: settings.uploadFileFee,
+					change: server.creditSettings.uploadFileFee,
 					serverId: server.id,
 					reason: "Refund for failed to add uploaded Custom Mod to Server",
 				});
 				sendCreditNotification({
 					user: interaction.user,
-					creditChanged: settings.uploadFileFee,
+					creditChanged: server.creditSettings.uploadFileFee,
 					serverId: server.id,
 					reason: "Refund for failed to add uploaded Custom Mod to Server",
 				});
@@ -289,13 +289,13 @@ export default {
 						);
 						changeCredit({
 							userId: interaction.user.id,
-							change: settings.uploadFileFee,
+							change: server.creditSettings.uploadFileFee,
 							serverId: server.id,
 							reason: "Refund for failed to add uploaded Custom Mod to Server",
 						});
 						sendCreditNotification({
 							user: interaction.user,
-							creditChanged: settings.uploadFileFee,
+							creditChanged: server.creditSettings.uploadFileFee,
 							serverId: server.id,
 							reason: "Refund for failed to add uploaded Custom Mod to Server",
 						});

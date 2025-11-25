@@ -98,7 +98,7 @@ export default {
 		if (
 			!(await spendCredit({
 				userId: interaction.user.id,
-				cost: settings.newStopServerPollFee,
+				cost: server.creditSettings.newStopServerPollFee,
 				reason: "New Stop Server Poll",
 				serverId: server.id,
 			}))
@@ -110,14 +110,14 @@ export default {
 		}
 		await sendCreditNotification({
 			user: interaction.user,
-			creditChanged: -settings.newStopServerPollFee,
+			creditChanged: -server.creditSettings.newStopServerPollFee,
 			reason: "New Stop Server Poll",
 			serverId: server.id,
 		});
 		sendApprovalPoll(interaction, {
 			content: displayString,
 			options: {
-				startPollFee: settings.newStopServerPollFee,
+				startPollFee: server.creditSettings.newStopServerPollFee,
 				callerId: interaction.user.id,
 				description: displayString,
 				async onSuccess(approval, message) {
@@ -157,7 +157,7 @@ export default {
 				},
 				approvalCount: 2,
 				disapprovalCount: 2,
-				credit: settings.stopServerVoteFee,
+				credit: server.creditSettings.stopServerVoteFee,
 			},
 			server,
 		});

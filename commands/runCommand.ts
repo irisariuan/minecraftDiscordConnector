@@ -88,7 +88,7 @@ export default {
 		if (
 			!(await spendCredit({
 				userId: interaction.user.id,
-				cost: settings.newRunCommandPollFee,
+				cost: server.creditSettings.newRunCommandPollFee,
 				reason: "New Run Command Poll",
 				serverId: server.id,
 			}))
@@ -100,14 +100,14 @@ export default {
 		}
 		await sendCreditNotification({
 			user: interaction.user,
-			creditChanged: -settings.newRunCommandPollFee,
+			creditChanged: -server.creditSettings.newRunCommandPollFee,
 			reason: "New Run Command Poll",
 			serverId: server.id,
 		});
 		return await sendApprovalPoll(interaction, {
 			content: command,
 			options: {
-				startPollFee: settings.newRunCommandPollFee,
+				startPollFee: server.creditSettings.newRunCommandPollFee,
 				callerId: interaction.user.id,
 				description: `Command: \`${command}\` (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
@@ -141,7 +141,7 @@ export default {
 						),
 					);
 				},
-				credit: settings.runCommandVoteFee,
+				credit: server.creditSettings.runCommandVoteFee,
 			},
 			duration: timeout || undefined,
 			server,
