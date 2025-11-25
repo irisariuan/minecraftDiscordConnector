@@ -7,8 +7,9 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("editfile")
 		.setDescription("Edit files on the server"),
+	requireServer: true,
 	async execute({ interaction, client, server }) {
 		
 	},
 	permissions: PermissionFlags.editFiles,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

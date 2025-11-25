@@ -21,6 +21,7 @@ export default {
 				.setDescription("The user to check the credit of")
 				.setRequired(false),
 		),
+	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({
 			flags: [MessageFlags.Ephemeral],
@@ -77,4 +78,4 @@ export default {
 			],
 		});
 	},
-} as CommandFile<false>;
+} satisfies CommandFile<false>;

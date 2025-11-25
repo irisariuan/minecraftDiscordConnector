@@ -7,6 +7,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("unsuspend")
 		.setDescription("Unsuspend the server"),
+	requireServer: true,
 	async execute({ interaction, client, server }) {
 		server.suspendingEvent.setSuspending(false);
 		setActivity(
@@ -21,4 +22,4 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.suspend,
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

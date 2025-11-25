@@ -17,6 +17,7 @@ export default {
 				.setName("user")
 				.setDescription("The user to get the permission of"),
 		),
+	requireServer: false,
 	async execute({ interaction }) {
 		const user = interaction.options.getUser("user") || interaction.user;
 		const permission = await readPermission(user);
@@ -54,4 +55,4 @@ export default {
 			});
 		}
 	},
-} as CommandFile<false>;
+} satisfies CommandFile<false>;

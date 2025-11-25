@@ -30,6 +30,7 @@ export default {
 		.addSubcommand((command) =>
 			command.setName("get").setDescription("Get settings of the bot"),
 		),
+	requireServer: false,
 	async execute({ interaction }) {
 		const subcommand = interaction.options.getSubcommand(true);
 		if (subcommand === "set") {
@@ -69,4 +70,4 @@ export default {
 			});
 		}
 	},
-} as CommandFile<false>;
+} satisfies CommandFile<false>;

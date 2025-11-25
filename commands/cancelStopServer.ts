@@ -14,6 +14,7 @@ export default {
 	command: new SlashCommandBuilder()
 		.setName("cancelstopserver")
 		.setDescription("Cancel stop the server"),
+	requireServer: true,
 	async execute({ interaction, server }) {
 		if (!interaction.guild) {
 			return await interaction.followUp({
@@ -117,4 +118,4 @@ export default {
 			server,
 		});
 	},
-} as CommandFile<true>;
+} satisfies CommandFile<true>;

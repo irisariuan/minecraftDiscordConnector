@@ -10,6 +10,7 @@ export default {
 		.setDescription(
 			"Refresh DNS record, use if you cannot connect to the server",
 		),
+	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 		if (
@@ -48,4 +49,4 @@ export default {
 			}
 		}
 	},
-} as CommandFile<false>;
+} satisfies CommandFile<false>;

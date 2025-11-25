@@ -5,6 +5,8 @@ import type {
 	PartialMessageReaction,
 	PartialUser,
 	SlashCommandBuilder,
+	SlashCommandOptionsOnlyBuilder,
+	SlashCommandSubcommandsOnlyBuilder,
 	User,
 } from "discord.js";
 import { join } from "node:path";
@@ -28,7 +30,7 @@ interface ExecuteReactionParams {
 }
 
 export interface CommandFile<RequireServer extends boolean> {
-	command: SlashCommandBuilder;
+	command: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
 	requireServer: RequireServer;
 	execute: (
 		params: RequireServer extends true

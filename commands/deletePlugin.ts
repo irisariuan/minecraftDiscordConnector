@@ -25,6 +25,7 @@ export default {
 				.setDescription("The plugin to delete")
 				.setRequired(true),
 		),
+	requireServer: true,
 	async execute({ interaction, server }) {
 		const plugin = interaction.options.getString("plugin", true);
 		const deleteFunc = async () => {
@@ -116,4 +117,4 @@ export default {
 		PermissionFlags.deletePlugin,
 		PermissionFlags.voteDeletePlugin,
 	),
-} as CommandFile<true>;
+} satisfies CommandFile<true>;
