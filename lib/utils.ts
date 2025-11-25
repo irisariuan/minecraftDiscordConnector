@@ -4,7 +4,7 @@ import {
 	type Client,
 	type MessageCreateOptions,
 } from "discord.js";
-import { join } from "path";
+import { join, resolve } from "path";
 
 export type PickAndOptional<
 	T,
@@ -134,7 +134,7 @@ export function clamp(value: number, min: number, max: number) {
 }
 
 export function safeJoin(...paths: string[]) {
-	const finalPath = join(...paths);
+	const finalPath = resolve(join(...paths));
 	if (!paths[0] || !finalPath.startsWith(paths[0])) {
 		throw new Error("Unsafe path detected");
 	}
