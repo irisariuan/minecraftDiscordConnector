@@ -8,7 +8,6 @@ import EventEmitter from "events";
 import type { Server } from "http";
 import cors from "cors";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
-import { join } from "path";
 import { copyFile } from "fs/promises";
 import { writeFile } from "fs/promises";
 import { rename } from "fs/promises";
@@ -41,7 +40,7 @@ function createUploadServer(uploadServer: UploadServer) {
 	app.use(cors({ origin: process.env.CORS_ORIGIN ?? "*" }));
 	app.use(
 		"/",
-		express.static(join(process.cwd(), "webUi", "dist", "client")),
+		express.static(safeJoin(process.cwd(), "webUi", "dist", "client")),
 	);
 	app.use(ssrHandler);
 
