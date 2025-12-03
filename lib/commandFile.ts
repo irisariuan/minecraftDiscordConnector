@@ -9,9 +9,9 @@ import type {
 	SlashCommandSubcommandsOnlyBuilder,
 	User,
 } from "discord.js";
-import { join } from "node:path";
 import type { Permission } from "./permission";
 import { Server, ServerManager } from "./server";
+import { safeJoin } from "./utils";
 
 interface ExecuteParams {
 	interaction: ChatInputCommandInteraction;
@@ -59,7 +59,7 @@ export async function loadCommands() {
 	const commands: CommandFile<boolean>[] = [];
 
 	for (const path of glob.scanSync(process.cwd())) {
-		const commandFile = (await import(join(process.cwd(), path))).default;
+		const commandFile = (await import(safeJoin(process.cwd(), path))).default;
 		if (!commandFile) continue;
 		commands.push(commandFile);
 	}

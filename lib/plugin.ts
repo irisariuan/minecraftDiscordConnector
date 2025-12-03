@@ -1,9 +1,8 @@
 import { createWriteStream, existsSync } from "node:fs";
-import { join } from "node:path";
-import { ensureSuffix, removeSuffix, safeFetch, safeJoin } from "./utils";
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { deletePluginByPath, upsertNewPlugin } from "./db";
 import type { Server } from "./server";
+import { ensureSuffix, removeSuffix, safeFetch, safeJoin } from "./utils";
 
 if (
 	!process.env.MINECRAFT_VERSION ||
@@ -15,7 +14,7 @@ if (
 	);
 if (
 	!process.env.SERVER_DIR ||
-	!existsSync(join(process.env.SERVER_DIR, "/plugins"))
+	!existsSync(safeJoin(process.env.SERVER_DIR, "/plugins"))
 )
 	throw new Error("SERVER_DIR environment variable is not set");
 
@@ -35,7 +34,7 @@ export const serverConfig: ServerConfig = {
 	serverDir: process.env.SERVER_DIR,
 	minecraftVersion: process.env.MINECRAFT_VERSION,
 	loaderType: process.env.LOADER_TYPE,
-	pluginDir: join(process.env.SERVER_DIR, "plugins"),
+	pluginDir: safeJoin(process.env.SERVER_DIR, "plugins"),
 	tag: process.env.SERVER_TAG || null,
 	port: [parseInt(process.env.SERVER_PORT || "25565")],
 	apiPort: parseInt(process.env.SERVER_API_PORT ?? "6001"),
@@ -46,18 +45,25 @@ export enum SideValue {
 	Unsupported = "unsupported",
 	Unknown = "unknown",
 }
-type ProjectType = "mod" | "modpack" | "resourcepack" | "shader";
-type ProjectStatus =
-	| "approved"
-	| "archived"
-	| "rejected"
-	| "draft"
-	| "unlisted"
-	| "processing"
-	| "withheld"
-	| "scheduled"
-	| "private"
-	| "unknown";
+export enum ProjectType {
+	Mod = "mod",
+	Modpack = "modpack",
+	Resourcepack = "resourcepack",
+	Shader = "shader",
+}
+
+export enum ProjectStatus {
+	Approved = "approved",
+	Archived = "archived",
+	Rejected = "rejected",
+	Draft = "draft",
+	Unlisted = "unlisted",
+	Processing = "processing",
+	Withheld = "withheld",
+	Scheduled = "scheduled",
+	Private = "private",
+	Unknown = "unknown",
+}
 
 export interface PluginVersionDependencyItem {
 	version_id: string;
@@ -66,7 +72,11 @@ export interface PluginVersionDependencyItem {
 	dependency_type: "required" | "optional" | "incompatible" | "embedded";
 }
 
-export type PluginVersionType = "release" | "beta" | "alpha";
+export enum PluginVersionType {
+	Release = "release",
+	Beta = "beta",
+	Alpha = "alpha",
+}
 
 export interface PluginListVersionItem<Transformed extends boolean = false> {
 	date_published: Transformed extends true ? number : string;
@@ -139,8 +149,9 @@ export interface PluginAPIResponseCommonItem {
  * @description Partial representation of a plugin query from Modrinth
  * @see https://docs.modrinth.com/api/operations/searchprojects/
  */
-export interface PluginSearchQueryItem<Transformed extends boolean = false>
-	extends PluginAPIResponseCommonItem {
+export interface PluginSearchQueryItem<
+	Transformed extends boolean = false,
+> extends PluginAPIResponseCommonItem {
 	categories: string[];
 	project_id: string;
 	// game versions
