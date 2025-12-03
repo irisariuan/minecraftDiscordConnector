@@ -8,7 +8,7 @@ import EventEmitter from "events";
 import type { Server } from "http";
 import cors from "cors";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
-import { join, resolve } from "path";
+import { join } from "path";
 import { copyFile } from "fs/promises";
 import { writeFile } from "fs/promises";
 import { rename } from "fs/promises";

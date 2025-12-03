@@ -1,5 +1,5 @@
 import type { UserCredit } from "../lib/credit";
-import { createUser, newTransaction } from "../lib/db";
+import { createUser, newBulkTransactions } from "../lib/db";
 
 export const CREDIT = `${process.cwd()}/data/credit.json`;
 
@@ -41,16 +41,16 @@ for (const [userId, details] of Object.entries(creditJson.users)) {
 		credits: details.currentCredit,
 		permission: permissionJson[userId] || 0,
 	});
-	for (const history of details.histories) {
-		await newTransaction({
-			user: { connect: { id: userId } },
+	await newBulkTransactions(
+		details.histories.map((history) => ({
+			userId,
 			afterAmount: history.creditAfter,
 			beforeAmount: history.creditBefore,
 			amount: history.changed,
 			reason: history.reason,
 			timestamp: new Date(history.timestamp),
-		});
-	}
+		})),
+	);
 	console.log(
 		`Migrated ${details.histories.length} transactions for user ${userId}`,
 	);

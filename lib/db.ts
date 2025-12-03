@@ -27,6 +27,10 @@ export async function newTransaction(data: Prisma.TransactionCreateInput) {
 	return prisma.transaction.create({ data });
 }
 
+export async function newBulkTransactions(data: Prisma.TransactionCreateManyInput[]) {
+	return prisma.transaction.createMany({ data });
+}
+
 export async function getTransactionsByUserId(
 	userId: string,
 	includeServer = true,
