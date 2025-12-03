@@ -55,7 +55,7 @@ model Server {
     permissions         Permission[]
     plugins             Plugin[]
     serverCreditSetting ServerCreditSetting?
-    approvalSettings    ApprovalSetting[]
+    approvalSetting     ApprovalSetting?
 }
 
 model ServerCreditSetting {
