@@ -9,8 +9,7 @@ import {
 	approvalSettings,
 	changeApprovalSettings,
 	changeCreditSettings,
-	editServerApprovalSetting,
-	editServerCreditSetting,
+	editSetting,
 	settings,
 } from "../lib/settings";
 import {
@@ -20,6 +19,7 @@ import {
 } from "../lib/permission";
 import { createServerSelectionMenu } from "../lib/embed/server";
 import type { Server } from "../lib/server";
+import { SettingType } from "../lib/db";
 export default {
 	command: new SlashCommandBuilder()
 		.setName("settings")
@@ -140,7 +140,7 @@ export default {
 					});
 				}
 				if (server !== undefined) {
-					await editServerApprovalSetting(server, {
+					await editSetting(server, SettingType.Approval, {
 						[setting]: value,
 					});
 					return await interaction.editReply({
@@ -161,7 +161,7 @@ export default {
 				});
 			}
 			if (server !== undefined) {
-				await editServerCreditSetting(server, {
+				await editSetting(server, SettingType.ServerCredit, {
 					[setting]: value,
 				});
 				return await interaction.editReply({

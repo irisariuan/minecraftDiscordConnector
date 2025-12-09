@@ -5,8 +5,8 @@ import {
 import {
 	getServerApprovalSettings,
 	getServerCreditSettings,
-	upsertServerApprovalSettings,
-	upsertServerCreditSettings,
+	SettingType,
+	upsertSetting,
 } from "./db";
 import type { Server } from "./server";
 
@@ -108,6 +108,7 @@ export async function loadCreditSettings(): Promise<Partial<CreditSettings>> {
 	const data = await settings.json().catch(() => ({}));
 	return data;
 }
+
 export async function loadServerCreditSetting(
 	id: number,
 ): Promise<ServerCreditSettings> {
@@ -118,24 +119,13 @@ export async function loadServerCreditSetting(
 
 	// Filter out null values and only include defined server settings
 	const filteredServerSettings: Partial<ServerCreditSettings> = {};
-	for (const [key, value] of Object.entries(serverSettings)) {
-		if (value !== null && key in defaultCreditSettings) {
-			filteredServerSettings[key as keyof ServerCreditSettings] = value;
-		}
+	for (const setting of serverSettings) {
+		filteredServerSettings[setting.name as keyof ServerCreditSettings] =
+			setting.value;
 	}
 	return { ...defaultCreditSettings, ...filteredServerSettings };
 }
-export async function editServerCreditSetting(
-	server: Server,
-	changes: Partial<ServerCreditSettings>,
-) {
-	server.creditSettings = { ...server.creditSettings, ...changes };
-	await upsertServerCreditSettings({
-		create: { serverId: server.id, ...changes },
-		update: { ...changes },
-		where: { serverId: server.id },
-	});
-}
+
 export async function loadServerApprovalSetting(
 	id: number,
 ): Promise<ApprovalSettings> {
@@ -144,22 +134,38 @@ export async function loadServerApprovalSetting(
 		return defaultApprovalSettings;
 	}
 	const filteredServerSettings: Partial<ApprovalSettings> = {};
-	for (const [key, value] of Object.entries(serverSettings)) {
-		if (value !== null && key in defaultApprovalSettings) {
-			filteredServerSettings[key as keyof ApprovalSettings] = value;
-		}
+	for (const setting of serverSettings) {
+		filteredServerSettings[setting.name as keyof ApprovalSettings] =
+			setting.value;
 	}
 	return { ...defaultApprovalSettings, ...filteredServerSettings };
 }
-export async function editServerApprovalSetting(
-	server: Server,
-	changes: Partial<ApprovalSettings>,
-) {
-	server.approvalSettings = { ...server.approvalSettings, ...changes };
 
-	await upsertServerApprovalSettings({
-		create: { serverId: server.id, ...changes },
-		update: { ...changes },
-		where: { serverId: server.id },
-	});
+export async function editSetting(
+	server: Server,
+	type: SettingType,
+	changes: Partial<
+		SettingType extends SettingType.ServerCredit
+			? ServerCreditSettings
+			: ApprovalSettings
+	>,
+) {
+	for (const [key, value] of Object.entries(changes)) {
+		await upsertSetting({
+			create: {
+				name: key,
+				value,
+				type,
+				serverId: server.id,
+			},
+			update: { value },
+			where: {
+				serverId_name_type: {
+					name: key,
+					serverId: server.id,
+					type,
+				},
+			},
+		});
+	}
 }

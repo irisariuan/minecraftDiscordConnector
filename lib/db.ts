@@ -6,6 +6,11 @@ import {
 } from "./permission";
 import type { Prisma } from "../generated/prisma/client";
 
+export enum SettingType {
+	ServerCredit = "serverCredit",
+	Approval = "approval",
+}
+
 export async function createUser(data: Prisma.UserCreateInput) {
 	return prisma.user.create({ data });
 }
@@ -27,7 +32,9 @@ export async function newTransaction(data: Prisma.TransactionCreateInput) {
 	return prisma.transaction.create({ data });
 }
 
-export async function newBulkTransactions(data: Prisma.TransactionCreateManyInput[]) {
+export async function newBulkTransactions(
+	data: Prisma.TransactionCreateManyInput[],
+) {
 	return prisma.transaction.createMany({ data });
 }
 
@@ -161,24 +168,21 @@ export async function hasAnyServer() {
 }
 
 export async function getServerCreditSettings(serverId: number) {
-	return await prisma.serverCreditSetting.findUnique({ where: { serverId } });
-}
-
-export async function upsertServerCreditSettings(
-	data: Prisma.ServerCreditSettingUpsertArgs,
-) {
-	return await prisma.serverCreditSetting.upsert(data);
+	return await prisma.setting.findMany({
+		where: { serverId, type: SettingType.ServerCredit },
+	});
 }
 
 export async function getServerApprovalSettings(serverId: number) {
-	return await prisma.approvalSetting.findUnique({ where: { serverId } });
+	return await prisma.setting.findMany({
+		where: { serverId, type: SettingType.Approval },
+	});
 }
 
-export async function upsertServerApprovalSettings(
-	data: Prisma.ApprovalSettingUpsertArgs,
-) {
-	return await prisma.approvalSetting.upsert(data);
+export async function upsertSetting(data: Prisma.SettingUpsertArgs) {
+	return await prisma.setting.upsert(data);
 }
+
 export async function upsertNewPlugin(data: Prisma.PluginUpsertArgs) {
 	return await prisma.plugin.upsert(data);
 }
