@@ -1,8 +1,6 @@
 import {
 	ButtonInteraction,
-	EmbedBuilder,
 	MessageFlags,
-	time,
 	userMention,
 	type CommandInteraction,
 	type Message,
@@ -12,16 +10,25 @@ import {
 	ApprovalMessageComponentId,
 	createApprovalMessageComponent,
 	parseApprovalComponentId,
-} from "./approval/component";
-import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
+} from "./component/approval";
+import {
+	askToPay,
+	changeCredit,
+	sendCreditNotification,
+	type Change,
+} from "./credit";
 import {
 	compareAnyPermissions,
 	comparePermission,
 	PermissionFlags,
 	readPermission,
 } from "./permission";
-import type { PickAndOptional } from "./utils";
 import type { Server, ServerManager } from "./server";
+import type { PickAndOptional } from "./utils";
+import {
+	createInternalApprovalEmbed,
+	createApprovalEmbed,
+} from "./embed/approval";
 
 /**
  * All core components needed for the approval system to work
@@ -31,6 +38,7 @@ export interface CoreApproval {
 	validTill: number;
 	duration: number;
 	approvalIds: string[];
+	changes: Omit<Change, "trackingId">[];
 	disapprovalIds: string[];
 	server: Server;
 }
@@ -189,7 +197,7 @@ export async function removeApproval(approval: Approval) {
 
 type ApprovalStatus = "approved" | "disapproved" | "pending" | "timeout";
 
-function checkApprovalStatus(approval: Approval): ApprovalStatus {
+export function checkApprovalStatus(approval: Approval): ApprovalStatus {
 	const approvalCount = approval.options.approvalCount;
 	const disapprovalCount = approval.options.disapprovalCount;
 	const requireSuperApproval = approval.options.requireSuperApproval ?? false;
@@ -233,86 +241,6 @@ export function getApproval(
 	return null;
 }
 
-function createUserMentions(ids: string[]) {
-	const counter: Record<string, number> = {};
-	for (const id of ids) {
-		if (counter[id]) {
-			counter[id]++;
-		} else {
-			counter[id] = 1;
-		}
-	}
-	const mentions = [];
-	for (const [id, val] of Object.entries(counter)) {
-		if (val > 1) {
-			mentions.push(`${userMention(id)} x${val}`);
-		} else {
-			mentions.push(userMention(id));
-		}
-	}
-	return mentions.join(", ");
-}
-
-export function createInternalApprovalEmbed(
-	approval: CoreApproval & {
-		options: Pick<
-			ApprovalOptions,
-			"description" | "approvalCount" | "disapprovalCount"
-		>;
-	},
-	color: number,
-	title: string,
-) {
-	const approvalCount = approval.options.approvalCount;
-	const disapprovalCount = approval.options.disapprovalCount;
-	return new EmbedBuilder()
-		.setColor(color)
-		.setTitle(title)
-		.setDescription(approval.options.description)
-		.addFields(
-			{
-				name: "Approval Count",
-				value: `${approval.approvalIds.length}/${approvalCount} (${createUserMentions(approval.approvalIds)})`,
-			},
-			{
-				name: "Disapproval Count",
-				value: `${approval.disapprovalIds.length}/${disapprovalCount} (${createUserMentions(approval.disapprovalIds)})`,
-			},
-			{ name: "Valid Till", value: time(new Date(approval.validTill)) },
-		)
-		.setTimestamp(Date.now())
-		.setFooter({ text: "Approval System" });
-}
-
-export function createApprovalEmbed(approval: Approval) {
-	switch (checkApprovalStatus(approval)) {
-		case "pending": {
-			return createInternalApprovalEmbed(approval, 0x0099ff, "Pending");
-		}
-		case "approved": {
-			return createInternalApprovalEmbed(
-				approval,
-				0x00ff00,
-				approval.superStatus === "approved"
-					? "Approved (Force)"
-					: "Approved",
-			);
-		}
-		case "disapproved": {
-			return createInternalApprovalEmbed(
-				approval,
-				0xff0000,
-				approval.superStatus === "disapproved"
-					? "Disapproved (Force)"
-					: "Disapproved",
-			);
-		}
-		case "timeout": {
-			return createInternalApprovalEmbed(approval, 0xff0000, "Timeout");
-		}
-	}
-}
-
 export async function sendApprovalPoll(
 	interaction: CommandInteraction,
 	approvalOptions: PickAndOptional<
@@ -334,6 +262,7 @@ export async function sendApprovalPoll(
 			validTill,
 			approvalIds: [],
 			disapprovalIds: [],
+			changes: [],
 			options,
 			server: approvalOptions.server,
 		},
@@ -353,6 +282,7 @@ export async function sendApprovalPoll(
 			duration,
 			options,
 			message,
+			changes: [],
 			originalMessageId: message.id,
 			server: approvalOptions.server,
 		},
@@ -437,6 +367,7 @@ export async function updateApprovalMessage(
 		reaction.customId as ApprovalMessageComponentId,
 	);
 	await reaction.deferReply();
+	// Ask for confirmation if super approve is possible
 	if (canSuperApprove && (approveVote || rejectVote)) {
 		const answer = await reaction.followUp({
 			content: `Do you want to super ${approveVote ? "approve" : "reject"} this poll?`,
@@ -470,11 +401,13 @@ export async function updateApprovalMessage(
 		disapproving = final.rejectVote;
 		canceling = final.revokeVote;
 	} else {
+		// Simple approve/reject/revoke flow
 		approving = approveVote;
 		disapproving = rejectVote;
 		canceling = revokeVote;
 		superApprove = false;
 	}
+	// Check for server suspension
 	if (
 		server.suspendingEvent.isSuspending() &&
 		!comparePermission(userPerm, PermissionFlags.suspend)
@@ -485,6 +418,7 @@ export async function updateApprovalMessage(
 			flags: [MessageFlags.Ephemeral],
 		});
 	}
+	// Handle cancelation
 	if (canceling) {
 		const prevCount =
 			approval.approvalIds.length + approval.disapprovalIds.length;
@@ -510,29 +444,33 @@ export async function updateApprovalMessage(
 				})
 				.catch(console.error);
 		}
+		// Refund credit if applicable
 		if (approval.options.credit) {
-			const voted =
-				prevCount -
-				approval.approvalIds.length -
-				approval.disapprovalIds.length;
+			const amount = approval.changes
+				.filter((c) => c.userId === reaction.user.id)
+				.reduce((a, b) => a + b.changed, 0);
 			await changeCredit({
 				userId: reaction.user.id,
-				change: approval.options.credit * voted,
+				change: -amount,
 				reason: "Approval Reaction Refund",
 			});
 			await sendCreditNotification({
 				user: reaction.user,
-				creditChanged: approval.options.credit * voted,
+				creditChanged: -amount,
 				reason: "Approval Reaction Refund",
 				silent: true,
 				serverId: approval.server.id,
 			});
+			approval.changes = approval.changes.filter(
+				(c) => c.userId !== reaction.user.id,
+			);
 		}
 		return await reaction.followUp({
 			content: `Cancelled by ${userMention(reaction.user.id)}`,
 			flags: [MessageFlags.Ephemeral],
 		});
 	}
+	// Check if the user has already approved/disapproved
 	if (
 		!canRepeatApprove &&
 		approving &&
@@ -577,26 +515,21 @@ export async function updateApprovalMessage(
 		);
 		// Check if need to spend credit for new reaction
 	} else if (approval.options.credit) {
-		const success = await spendCredit({
+		const transaction = await askToPay(reaction, {
 			userId: reaction.user.id,
 			cost: approval.options.credit,
-			reason: "Approval Reaction",
 			serverId: approval.server.id,
+			reason: `Approval Poll Reaction: ${approval.content}`,
 		});
-		if (!success) {
+		if (!transaction) {
 			return await reaction.followUp({
 				content: `You do not have enough credit to approve this poll`,
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({
-			user: reaction.user,
-			creditChanged: -approval.options.credit,
-			reason: "Approval Reaction",
-			serverId: approval.server.id,
-		});
+		approval.changes.push(transaction);
 	}
-
+	// Process the approval/disapproval
 	const status = approving
 		? approve(
 				server,
@@ -637,6 +570,7 @@ export async function updateApprovalMessage(
 
 	if (status === "pending") return;
 
+	// Finalization
 	await reaction.message.edit({ components: [] });
 	await removeApproval(approval);
 

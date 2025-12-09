@@ -1,10 +1,10 @@
-import { prisma } from "./prisma";
+import type { Prisma } from "../generated/prisma/client";
 import {
 	comparePermission,
 	PermissionFlags,
 	readPermission,
 } from "./permission";
-import type { Prisma } from "../generated/prisma/client";
+import { prisma } from "./prisma";
 
 export enum SettingType {
 	ServerCredit = "serverCredit",
@@ -23,7 +23,12 @@ export async function getUserById(id: string) {
 	return prisma.user.findUnique({
 		where: { id },
 		include: {
-			transactions: { include: { server: true } },
+			transactions: {
+				include: {
+					server: true,
+					ticket: { include: { ticket: true } },
+				},
+			},
 		},
 	});
 }
@@ -199,4 +204,48 @@ export async function getPluginByIds(
 }
 export async function deletePluginByPath(path: string) {
 	return await prisma.plugin.deleteMany({ where: { filePath: path } });
+}
+
+export async function getUserTickets(userId: string, ticketTypeIds?: number[]) {
+	return await prisma.userTicket.findMany({
+		where: {
+			userId,
+			...(ticketTypeIds ? { ticket: { id: { in: ticketTypeIds } } } : {}),
+		},
+		include: { ticket: true, history: true },
+	});
+}
+export async function getRawUserTicket(data: Prisma.UserTicketFindUniqueArgs) {
+	return await prisma.userTicket.findUnique(data);
+}
+
+export async function createRawUserTicket(data: Prisma.UserTicketCreateArgs) {
+	return await prisma.userTicket.create(data);
+}
+export async function updateRawUserTicket(data: Prisma.UserTicketUpdateArgs) {
+	return await prisma.userTicket.update(data);
+}
+export async function createTicketHistory(
+	data: Prisma.TicketHistoryCreateArgs,
+) {
+	return await prisma.ticketHistory.create(data);
+}
+export async function countTicketHistories(ticketId: string) {
+	return await prisma.ticketHistory.count({ where: { ticketId } });
+}
+
+export async function createRawTicketType(data: Prisma.TicketCreateArgs) {
+	return await prisma.ticket.create(data);
+}
+
+export async function getRawTicketTypeById(id: number) {
+	return await prisma.ticket.findUnique({ where: { id } });
+}
+
+export async function getAllRawTicketTypes() {
+	return await prisma.ticket.findMany();
+}
+
+export async function deleteRawTicketTypeById(id: number) {
+	return await prisma.ticket.deleteMany({ where: { id } });
 }

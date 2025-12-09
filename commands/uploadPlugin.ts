@@ -14,12 +14,8 @@ import {
 } from "discord.js";
 import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
-import { createRequestComponent } from "../lib/components";
-import {
-	changeCredit,
-	sendCreditNotification,
-	spendCredit,
-} from "../lib/credit";
+import { createRequestComponent } from "../lib/component/request";
+import { askToPay, changeCredit, sendCreditNotification } from "../lib/credit";
 import {
 	anyPerm,
 	comparePermission,
@@ -33,7 +29,6 @@ import {
 	copyLocalPluginFileToServer,
 	downloadWebPluginFileToLocal,
 } from "../lib/plugin/web";
-import { settings } from "../lib/settings";
 
 if (!process.env.UPLOAD_URL) {
 	throw new Error("UPLOAD_URL is not set in environment variables");
@@ -52,25 +47,17 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-
-		if (
-			!(await spendCredit({
-				userId: interaction.user.id,
-				cost: server.creditSettings.uploadFileFee,
-				reason: "Upload Custom Mod to Server",
-				serverId: server.id,
-			}))
-		) {
+		const payment = await askToPay(interaction, {
+			userId: interaction.user.id,
+			cost: server.creditSettings.uploadFileFee,
+			reason: "Upload Custom Mod to Server",
+			serverId: server.id,
+		});
+		if (!payment) {
 			return await interaction.editReply({
 				content: "You don't have enough credit to upload mod to server",
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -server.creditSettings.uploadFileFee,
-			reason: "Upload Custom Mod to Server",
-			serverId: server.id,
-		});
 		const thread = await interaction.channel.threads.create({
 			name: "Upload File",
 			invitable: false,
@@ -131,13 +118,13 @@ export default {
 			uploadserver.disposeToken(token);
 			changeCredit({
 				userId: interaction.user.id,
-				change: server.creditSettings.uploadFileFee,
+				change: -payment.changed,
 				reason: "Refund for cancelled Upload Custom Mod to Server",
 				serverId: server.id,
 			});
 			sendCreditNotification({
 				user: interaction.user,
-				creditChanged: server.creditSettings.uploadFileFee,
+				creditChanged: -payment.changed,
 				reason: "Refund for cancelled Upload Custom Mod to Server",
 				serverId: server.id,
 			});
@@ -162,13 +149,13 @@ export default {
 				await thread.setArchived(true);
 				changeCredit({
 					userId: interaction.user.id,
-					change: server.creditSettings.uploadFileFee,
+					change: -payment.changed,
 					serverId: server.id,
 					reason: "Refund for cancelled Upload Custom Mod to Server",
 				});
 				sendCreditNotification({
 					user: interaction.user,
-					creditChanged: server.creditSettings.uploadFileFee,
+					creditChanged: -payment.changed,
 					reason: "Refund for cancelled Upload Custom Mod to Server",
 				});
 				setTimeout(cleanUp, 1000 * 10);
@@ -208,13 +195,13 @@ export default {
 				);
 				changeCredit({
 					userId: interaction.user.id,
-					change: server.creditSettings.uploadFileFee,
+					change: -payment.changed,
 					serverId: server.id,
 					reason: "Refund for failed to add uploaded Custom Mod to Server",
 				});
 				sendCreditNotification({
 					user: interaction.user,
-					creditChanged: server.creditSettings.uploadFileFee,
+					creditChanged: -payment.changed,
 					serverId: server.id,
 					reason: "Refund for failed to add uploaded Custom Mod to Server",
 				});
@@ -289,13 +276,13 @@ export default {
 						);
 						changeCredit({
 							userId: interaction.user.id,
-							change: server.creditSettings.uploadFileFee,
+							change: -payment.changed,
 							serverId: server.id,
 							reason: "Refund for failed to add uploaded Custom Mod to Server",
 						});
 						sendCreditNotification({
 							user: interaction.user,
-							creditChanged: server.creditSettings.uploadFileFee,
+							creditChanged: -payment.changed,
 							serverId: server.id,
 							reason: "Refund for failed to add uploaded Custom Mod to Server",
 						});

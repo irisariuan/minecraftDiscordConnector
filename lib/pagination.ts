@@ -62,23 +62,23 @@ export interface PaginationOptions {
 	selectMenuPlaceholder?: string;
 }
 
-interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
+interface SendPaginationMessageProps<ResultType> extends BasePaginationProps<ResultType> {
 	getResult: (
 		pageNumber: number,
 		filter?: string,
 		force?: boolean,
-	) => Promise<T[] | undefined> | T[] | undefined;
+	) => Promise<ResultType[] | undefined> | ResultType[] | undefined;
 	/**
 	 * @returns {boolean} If we should stop to listen to the select menu
 	 */
 	onItemSelected?: (
 		interaction: StringSelectMenuInteraction,
-		currentResult: CacheItem<T[]>,
+		currentResult: CacheItem<ResultType[]>,
 	) => Promise<boolean> | boolean;
 }
 
-export async function sendPaginationMessage<T>(
-	props: SendPaginationMessageProps<T>,
+export async function sendPaginationMessage<ResultType>(
+	props: SendPaginationMessageProps<ResultType>,
 ) {
 	const {
 		getResult,
@@ -91,7 +91,7 @@ export async function sendPaginationMessage<T>(
 		interactionFilter,
 	} = props;
 	let page = 0;
-	const result = new CacheItem<T[]>(null, {
+	const result = new CacheItem<ResultType[]>(null, {
 		updateMethod: async () =>
 			(filterFunc
 				? (await getResult(page, options?.filter, true))?.filter(

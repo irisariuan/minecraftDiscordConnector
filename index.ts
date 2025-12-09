@@ -23,7 +23,7 @@ import {
 	settings,
 } from "./lib/settings";
 import { getNextTimestamp } from "./lib/time";
-import { isApprovalMessageComponentId } from "./lib/approval/component";
+import { isApprovalMessageComponentId } from "./lib/component/approval";
 import { createServerManager, Server } from "./lib/server";
 import { createServer, hasAnyServer } from "./lib/db";
 import { serverConfig } from "./lib/plugin";

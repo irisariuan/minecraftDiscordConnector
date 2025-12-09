@@ -7,13 +7,8 @@ import {
 	PermissionFlags,
 	anyPerm,
 } from "../lib/permission";
-import { createRequestComponent, RequestComponentId } from "../lib/components";
-import {
-	changeCredit,
-	sendCreditNotification,
-	spendCredit,
-} from "../lib/credit";
-import { settings } from "../lib/settings";
+import { createRequestComponent, RequestComponentId } from "../lib/component/request";
+import { askToPay, changeCredit, sendCreditNotification } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -48,25 +43,17 @@ export default {
 			)
 		)
 			return await deleteFunc();
-		if (
-			!(await spendCredit({
-				userId: interaction.user.id,
-				cost: server.creditSettings.deletePluginFee,
-				reason: "Delete Plugin Request",
-				serverId: server.id,
-			}))
-		) {
+		const payment = await askToPay(interaction, {
+			userId: interaction.user.id,
+			cost: server.creditSettings.deletePluginFee,
+			reason: `Delete Plugin ${plugin}`,
+			serverId: server.id,
+		});
+		if (!payment) {
 			return await interaction.editReply({
 				content: `You don't have enough credit to delete a plugin. Deleting a plugin costs ${server.creditSettings.deletePluginFee} credits.`,
 			});
 		}
-
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -server.creditSettings.deletePluginFee,
-			reason: "Delete Plugin Request",
-			serverId: server.id,
-		});
 
 		const message = await interaction.editReply({
 			content: `Please ask a staff to permit your request on deleting \`${plugin}\``,
@@ -92,13 +79,13 @@ export default {
 		if (reply.customId === RequestComponentId.Deny) {
 			await changeCredit({
 				userId: interaction.user.id,
-				change: server.creditSettings.deletePluginFee,
+				change: -payment.changed,
 				serverId: server.id,
 				reason: "Delete Plugin Request Denied Refund",
 			});
 			await sendCreditNotification({
 				user: interaction.user,
-				creditChanged: server.creditSettings.deletePluginFee,
+				creditChanged: -payment.changed,
 				reason: "Delete Plugin Request Denied Refund",
 				serverId: server.id,
 			});

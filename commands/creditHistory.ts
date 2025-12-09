@@ -6,7 +6,7 @@ import {
 	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { getCredit, sendCreditNotification, spendCredit } from "../lib/credit";
+import { askToPay, getCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
 
 export default {
@@ -29,10 +29,10 @@ export default {
 		const user = interaction.options.getUser("user") || interaction.user;
 		if (user.id !== interaction.user.id) {
 			if (
-				!(await spendCredit({
+				!(await askToPay(interaction, {
 					userId: interaction.user.id,
 					cost: settings.checkUserCreditFee,
-					reason: "Check Credit of Other Users",
+					reason: `Check credit of user ${user.id}`,
 				}))
 			) {
 				return await interaction.editReply({
@@ -40,11 +40,6 @@ export default {
 						"You don't have enough credit to check other users' credit",
 				});
 			}
-			await sendCreditNotification({
-				user: interaction.user,
-				creditChanged: -settings.checkUserCreditFee,
-				reason: "Check Credit of Other Users",
-			});
 		}
 
 		const creditData = await getCredit(user.id);

@@ -5,6 +5,7 @@ import {
 	time,
 	userMention,
 } from "discord.js";
+import { sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	compareAllPermissions,
@@ -12,11 +13,9 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { sendApprovalPoll } from "../lib/approval";
 import { parseCommandOutput, runCommandOnServer } from "../lib/request";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
 import { sendMessagesToUsersById } from "../lib/utils";
+import { askToPay } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -86,7 +85,7 @@ export default {
 		}
 		await interaction.deleteReply();
 		if (
-			!(await spendCredit({
+			!(await askToPay(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newRunCommandPollFee,
 				reason: "New Run Command Poll",
@@ -98,12 +97,6 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -server.creditSettings.newRunCommandPollFee,
-			reason: "New Run Command Poll",
-			serverId: server.id,
-		});
 		return await sendApprovalPoll(interaction, {
 			content: command,
 			options: {
