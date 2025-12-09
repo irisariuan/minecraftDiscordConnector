@@ -59,7 +59,8 @@ export async function loadCommands() {
 	const commands: CommandFile<boolean>[] = [];
 
 	for (const path of glob.scanSync(process.cwd())) {
-		const commandFile = (await import(safeJoin(process.cwd(), path))).default;
+		const commandFile = (await import(safeJoin(process.cwd(), path)))
+			.default;
 		if (!commandFile) continue;
 		commands.push(commandFile);
 	}

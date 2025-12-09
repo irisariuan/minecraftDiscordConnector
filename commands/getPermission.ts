@@ -10,10 +10,10 @@ import {
 	parsePermission,
 	readPermission,
 } from "../lib/permission";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
 import { createServerSelectionMenu } from "../lib/embed/server";
 import { getUserLocalPermission } from "../lib/db";
+import { askToPay } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -87,10 +87,11 @@ export default {
 
 		if (user.id !== interaction.user.id) {
 			if (
-				!(await spendCredit({
+				!(await askToPay(interaction, {
 					userId: interaction.user.id,
 					cost: settings.checkUserPermissionFee,
-					reason: "Check Permission Of Other Users",
+					reason: `Check Permission Of User ${user.displayName}`,
+					serverId: serverId,
 				}))
 			) {
 				return await interaction.editReply({
@@ -98,11 +99,6 @@ export default {
 						"You don't have enough credit to check other users' permission",
 				});
 			}
-			await sendCreditNotification({
-				user: interaction.user,
-				creditChanged: -settings.checkUserPermissionFee,
-				reason: "Check Permission Of Other Users",
-			});
 		}
 
 		if (permission) {

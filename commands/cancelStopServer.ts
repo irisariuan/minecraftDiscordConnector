@@ -1,13 +1,12 @@
-import { MessageFlags, Poll, SlashCommandBuilder } from "discord.js";
+import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	compareAnyPermissions,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { sendApprovalPoll } from "../lib/approval";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
+import { askToPay } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -67,11 +66,11 @@ export default {
 			});
 		}
 		if (
-			!(await spendCredit({
+			!(await askToPay(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newCancelStopServerPollFee,
 				serverId: server.id,
-				reason: "New Cancel Stop Server Poll",
+				reason: "Cancel Stop Server Poll",
 			}))
 		) {
 			return await interaction.followUp({
@@ -80,12 +79,6 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -server.creditSettings.newCancelStopServerPollFee,
-			reason: "New Cancel Stop Server Poll",
-			serverId: server.id,
-		});
 
 		sendApprovalPoll(interaction, {
 			content: `Cancel Server Shutdown at ${server.config.tag ?? `Server #${server.id}`}`,

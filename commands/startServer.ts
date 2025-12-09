@@ -5,16 +5,16 @@ import {
 	time,
 	userMention,
 } from "discord.js";
+import { sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
+import { askToPay, sendCreditNotification } from "../lib/credit";
 import {
 	comparePermission,
 	getUsersWithMatchedPermission,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { sendApprovalPoll } from "../lib/approval";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
+
 import { sendMessagesToUsersById } from "../lib/utils";
 
 export default {
@@ -72,7 +72,7 @@ export default {
 		await interaction.deleteReply();
 
 		if (
-			!(await spendCredit({
+			!(await askToPay(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newStartServerPollFee,
 				reason: "New Start Server Poll",
@@ -84,12 +84,6 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -server.creditSettings.newStartServerPollFee,
-			reason: "New Start Server Poll",
-			serverId: server.id,
-		});
 
 		sendApprovalPoll(interaction, {
 			content: `Start Server at ${server.config.tag ?? `Server #${server.id}`}`,

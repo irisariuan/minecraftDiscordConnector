@@ -1,8 +1,8 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { updateDnsRecord } from "../lib/dnsRecord";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
+import { askToPay } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -13,19 +13,12 @@ export default {
 	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		if (
-			await spendCredit({
-				userId: interaction.user.id,
-				cost: settings.refreshDnsFee,
-				reason: "Refresh DNS Record",
-			})
-		) {
-			await sendCreditNotification({
-				user: interaction.user,
-				creditChanged: -settings.refreshDnsFee,
-				reason: "Refresh DNS Record",
-			});
-		}
+		await askToPay(interaction, {
+			userId: interaction.user.id,
+			cost: settings.refreshDnsFee,
+			reason: "Refresh DNS Record",
+		});
+
 		const status = await updateDnsRecord().catch((err) => {
 			console.error(err);
 			return "error";

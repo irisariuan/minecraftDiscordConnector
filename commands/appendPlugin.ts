@@ -5,7 +5,7 @@ import {
 	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { createRequestComponent, RequestComponentId } from "../lib/components";
+import { createRequestComponent, RequestComponentId } from "../lib/component/request";
 import { sendPaginationMessage } from "../lib/pagination";
 import {
 	anyPerm,

@@ -13,9 +13,8 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
 import { sendMessagesToUsersById } from "../lib/utils";
+import { askToPay } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -96,7 +95,7 @@ export default {
 				: `Stop Server (${server.config.tag ?? `Server #${server.id}`})`;
 
 		if (
-			!(await spendCredit({
+			!(await askToPay(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newStopServerPollFee,
 				reason: "New Stop Server Poll",
@@ -108,12 +107,6 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -server.creditSettings.newStopServerPollFee,
-			reason: "New Stop Server Poll",
-			serverId: server.id,
-		});
 		sendApprovalPoll(interaction, {
 			content: displayString,
 			options: {
