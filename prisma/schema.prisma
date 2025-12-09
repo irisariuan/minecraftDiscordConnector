@@ -13,6 +13,7 @@ model User {
     permission   Int           @default(0)
     transactions Transaction[]
     permissions  Permission[]
+    tickets      Ticket[]
 }
 
 model Transaction {
@@ -42,55 +43,30 @@ model Permission {
 }
 
 model Server {
-    id                  Int                  @id @default(autoincrement())
-    port                Int[]                @default([25565])
-    path                String               @unique
-    pluginPath          String               @unique
-    apiPort             Int?
-    loaderType          String
-    modType             String
-    version             String
-    tag                 String?
-    transactions        Transaction[]
-    permissions         Permission[]
-    plugins             Plugin[]
-    serverCreditSetting ServerCreditSetting?
-    approvalSetting     ApprovalSetting?
+    id           Int           @id @default(autoincrement())
+    port         Int[]         @default([25565])
+    path         String        @unique
+    pluginPath   String        @unique
+    apiPort      Int?
+    loaderType   String
+    modType      String
+    version      String
+    tag          String?
+    transactions Transaction[]
+    permissions  Permission[]
+    plugins      Plugin[]
+    settings     Setting[]
 }
 
-model ServerCreditSetting {
-    serverId                   Int    @id
-    server                     Server @relation(fields: [serverId], references: [id])
-    newCancelStopServerPollFee Int?
-    newRunCommandPollFee       Int?
-    newStartServerPollFee      Int?
-    newStopServerPollFee       Int?
-
-    runCommandVoteFee       Int?
-    startServerVoteFee      Int?
-    cancelStopServerVoteFee Int?
-    stopServerVoteFee       Int?
-
-    uploadFileFee   Int?
-    deletePluginFee Int?
-}
-
-model ApprovalSetting {
-    serverId Int    @id
+model Setting {
+    serverId Int
     server   Server @relation(fields: [serverId], references: [id])
+    name     String
+    value    Int
 
-    cancelStopServerApproval    Int?
-    cancelStopServerDisapproval Int?
-
-    runCommandApproval    Int?
-    runCommandDisapproval Int?
-
-    startServerApproval    Int?
-    startServerDisapproval Int?
-
-    stopServerApproval    Int?
-    stopServerDisapproval Int?
+    @@id([serverId, name])
 }
+model 
 
 model Plugin {
     id Int @unique @default(autoincrement())
@@ -106,4 +82,29 @@ model Plugin {
     filePath  String
 
     @@id([projectId, versionId, serverId])
+}
+
+model Ticket {
+    id        String          @id @default(uuid())
+    userId    String
+    user      User            @relation(fields: [userId], references: [id])
+    available Boolean         @default(true)
+    history   TicketHistory[]
+    reason    String?
+    createdAt DateTime        @default(now())
+    updatedAt DateTime        @updatedAt
+    expiresAt DateTime?
+    
+    @@index([userId])
+}
+
+model TicketHistory {
+    id        String   @id @default(uuid())
+    ticketId  String
+    ticket    Ticket   @relation(fields: [ticketId], references: [id])
+    action    String
+    reason    String?
+    timestamp DateTime @default(now())
+
+    @@index([ticketId])
 }
