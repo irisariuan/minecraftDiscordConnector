@@ -14,6 +14,7 @@ export function createTicketSelectMenu(tickets: Ticket[], page = 0) {
 		.map((v) => ({
 			label: v.name,
 			value: v.ticketId,
+			description: v.description || undefined,
 		}))
 		.slice(page * 25, (page + 1) * 25);
 	const selectMenu = new StringSelectMenuBuilder()
