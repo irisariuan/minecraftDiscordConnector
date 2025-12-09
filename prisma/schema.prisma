@@ -61,12 +61,12 @@ model Server {
 model Setting {
     serverId Int
     server   Server @relation(fields: [serverId], references: [id])
+    type     String
     name     String
     value    Int
 
-    @@id([serverId, name])
+    @@id([serverId, name, type])
 }
-model 
 
 model Plugin {
     id Int @unique @default(autoincrement())
@@ -94,7 +94,7 @@ model Ticket {
     createdAt DateTime        @default(now())
     updatedAt DateTime        @updatedAt
     expiresAt DateTime?
-    
+
     @@index([userId])
 }
 
