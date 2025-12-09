@@ -207,6 +207,16 @@ function calculateTicketEffect(
 	}
 }
 
+export async function canSpendCredit(userId: string, cost: number) {
+	const credit = await getCredit(userId);
+	if (!credit) return false;
+	const permission = await readPermission(userId);
+	return (
+		credit.currentCredit >= cost ||
+		comparePermission(permission, PermissionFlags.creditFree)
+	);
+}
+
 export async function askToPay(
 	interaction: Interaction,
 	params: SpendCreditParams,
@@ -225,7 +235,7 @@ export async function askToPay(
 		params.acceptedTicketTypeIds?.length === 0 ||
 		!interaction.channel?.isSendable()
 	) {
-		if (credit.currentCredit < cost) {
+		if (!(await canSpendCredit(userId, cost))) {
 			return null;
 		}
 		await changeCredit({
@@ -258,7 +268,7 @@ export async function askToPay(
 	const selectedTicket = await getUsingTicketId(message, userId, tickets);
 	if (selectedTicket) {
 		const finalCost = calculateTicketEffect(selectedTicket.effect, cost);
-		if (credit.currentCredit < finalCost) {
+		if (!(await canSpendCredit(userId, finalCost))) {
 			await message.delete().catch(() => {});
 			return null;
 		}
@@ -297,7 +307,7 @@ export async function askToPay(
 		}, 1000 * 15);
 	}
 	await message.delete().catch(() => {});
-	if (!credit || credit.currentCredit < cost) {
+	if (!(await canSpendCredit(userId, cost))) {
 		return null;
 	}
 	await changeCredit({
