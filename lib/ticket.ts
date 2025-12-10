@@ -21,6 +21,7 @@ export interface Ticket {
 	effect: TicketEffect;
 	reason: string | null;
 	maxUse: number | null;
+	expiresAt?: Date | null;
 	histories?: TicketHistory[];
 }
 
@@ -52,7 +53,7 @@ export async function isTicketAvailable(
 	if (
 		ticket.maxUse !== null &&
 		ticket.maxUse > 0 &&
-		(await countTicketHistories(ticket.ticketId)) >= ticket.maxUse
+		(await countTicketHistories(ticket.id)) >= ticket.maxUse
 	) {
 		return false;
 	}
@@ -90,23 +91,28 @@ export async function getUserTicketsByUserId(
 	if (rawTickets.length <= 0) return null;
 	const tickets: Ticket[] = [];
 	for (const ticket of rawTickets) {
-		const t = {
+		const t: Ticket = {
 			ticketId: ticket.id,
 			maxUse: ticket.maxUse ?? null,
 			name: ticket.ticket.name,
 			description: ticket.ticket.description,
 			reason: ticket.reason,
 			ticketTypeId: ticket.ticket.id,
+			expiresAt: ticket.expiresAt,
 			effect: {
 				effect: ticket.ticket.effect as TicketEffectType,
 				value: ticket.ticket.value,
 			},
+			histories: ticket.history.map((h) => ({
+				action: h.action,
+				reason: h.reason,
+				ticketId: h.ticketId,
+				timestamp: h.timestamp.getTime(),
+			})),
 		};
-		if (usableOnly) {
-			if (await isTicketAvailable(ticket)) {
-				tickets.push(t);
-			}
-		} else {
+		if (usableOnly && (await isTicketAvailable(ticket))) {
+			tickets.push(t);
+		} else if (!usableOnly) {
 			tickets.push(t);
 		}
 	}
@@ -121,4 +127,5 @@ export async function useUserTicket(ticketId: string, reason?: string) {
 	await createTicketHistory({
 		data: { ticketId, action: TicketAction.Use, reason },
 	});
+	return true;
 }

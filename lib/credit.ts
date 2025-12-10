@@ -235,6 +235,7 @@ export async function spendCredit(
 	if (
 		!tickets ||
 		params.acceptedTicketTypeIds?.length === 0 ||
+		tickets.length === 0 ||
 		!interaction.channel?.isSendable()
 	) {
 		return spendCreditWithoutTicket(interaction.user, credit, params);
@@ -247,7 +248,15 @@ export async function spendCredit(
 		userId,
 		tickets,
 		cost,
-	);
+	).catch((err) => {
+		console.error("Error getting selected ticket:", err);
+		return undefined;
+	});
+	if (selectedTicket === undefined) {
+		console.error("No ticket selected, cancelling payment.");
+		await message.delete().catch(() => {});
+		return null;
+	}
 	if (selectedTicket) {
 		const finalCost = calculateTicketEffect(selectedTicket.effect, cost);
 		if (!(await canSpendCredit(userId, finalCost))) {
@@ -255,7 +264,7 @@ export async function spendCredit(
 			return null;
 		}
 		if (await useUserTicket(selectedTicket.ticketId, reason)) {
-			const reasonString = `${reason} (Using Ticket: ${selectedTicket.name}, reduced ${cost - finalCost} credits)`;
+			const reasonString = `${reason} (Using Ticket: ${selectedTicket.name}, saved ${cost - finalCost} credits)`;
 			await changeCredit({
 				userId,
 				change: -finalCost,

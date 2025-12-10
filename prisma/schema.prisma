@@ -105,7 +105,7 @@ model UserTicket {
     user   User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
     reason String?
 
-    maxUse    Int?    @default(1)
+    maxUse       Int?            @default(1)
     history      TicketHistory[]
     transactions Transaction[]
 

@@ -32,7 +32,7 @@ export default {
 			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
 				cost: settings.checkUserCreditFee,
-				reason: `Check credit of user ${user.id}`,
+				reason: `Check credit of user ${user.displayName}`,
 			}))
 		) {
 			return await interaction.editReply({

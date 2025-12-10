@@ -1,5 +1,6 @@
 import {
 	ButtonInteraction,
+	ComponentType,
 	MessageFlags,
 	userMention,
 	type CommandInteraction,
@@ -384,6 +385,7 @@ export async function updateApprovalMessage(
 			.awaitMessageComponent({
 				time: 10 * 1000,
 				filter: (i) => i.user.id === reaction.user.id,
+				componentType: ComponentType.Button,
 			})
 			.catch(() => null);
 		await answer.delete();

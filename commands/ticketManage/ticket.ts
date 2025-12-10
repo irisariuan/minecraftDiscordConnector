@@ -7,6 +7,7 @@ import {
 	userMention,
 	type ChatInputCommandInteraction,
 	type AutocompleteInteraction,
+    time,
 } from "discord.js";
 import {
 	getRawTicketTypeById,
@@ -28,6 +29,7 @@ import {
 } from "../../lib/permission";
 import { spendCredit } from "../../lib/credit";
 import { settings } from "../../lib/settings";
+import { parseTimeString, formatTimeDuration } from "../../lib/utils";
 
 export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -73,6 +75,14 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setDescription("Maximum uses for the ticket")
 						.setRequired(false)
 						.setMinValue(1),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("expire")
+						.setDescription(
+							"Expiration time (DD:HH:MM:SS, HH:MM:SS, MM:SS, or Ns)",
+						)
+						.setRequired(false),
 				),
 		)
 		.addSubcommand((subcommand) =>
@@ -178,9 +188,20 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						? ` (${useCount}/${ticket.maxUse} uses)`
 						: ` (${useCount} uses)`;
 
+					// Add expiration info if ticket has an expiration date
+					let expireText = "";
+					if (ticket.expiresAt) {
+						const expireDate = new Date(ticket.expiresAt);
+						const now = new Date();
+						const isExpired = expireDate <= now;
+						expireText = isExpired
+							? `\n⚠️ Expired at ${time(expireDate)}`
+							: `\n⏰ Expires at ${time(expireDate)}`;
+					}
+
 					return {
 						name: `${ticket.name} (${ticket.ticketTypeId})`,
-						value: `ID: \`${ticket.ticketId}\`\nEffect: ${TicketEffectTypeNames[ticket.effect.effect]} (${ticket.effect.value})\n${ticket.description || "No description"}${maxUseText}`,
+						value: `ID: \`${ticket.ticketId}\`\nEffect: ${TicketEffectTypeNames[ticket.effect.effect] ?? 'Unknown effect'} (${ticket.effect.value})\n${ticket.description || "No description"}${maxUseText}${expireText}`,
 					};
 				},
 				filterFunc: (filter?: string) => (ticket: Ticket) => {
@@ -215,6 +236,20 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 			);
 			const quantity = interaction.options.getInteger("quantity", true);
 			const maxUse = interaction.options.getInteger("maxuse");
+			const expireInput = interaction.options.getString("expire");
+
+			// Parse expire input using utility function or use default from ticket type
+			let expiresAt: Date | null = null;
+			if (expireInput) {
+				const expireMs = parseTimeString(expireInput);
+				if (expireMs === null) {
+					return await interaction.editReply({
+						content:
+							"Invalid expire format. Supported formats: DD:HH:MM:SS, HH:MM:SS, MM:SS, or Ns (e.g., 102s)",
+					});
+				}
+				expiresAt = new Date(Date.now() + expireMs);
+			}
 
 			// Check if ticket type exists
 			const ticketType = await getRawTicketTypeById(ticketTypeId);
@@ -231,6 +266,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 							userId,
 							ticketId: ticketType.id,
 							maxUse,
+							expiresAt,
 							reason: `Added by ${interaction.user.username}`,
 						},
 					});
@@ -239,8 +275,12 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 
 			if (users instanceof User || users instanceof GuildMember) {
 				await addTicketToUser(users.id);
+				let expireText = "";
+				if (expireInput) {
+					expireText = ` (expires at ${expiresAt ? time(expiresAt) : 'unknown time'})`;
+				}
 				return await interaction.editReply({
-					content: `Added ${quantity} \`${ticketType.name}\` ticket(s) to ${userMention(users.id)}.`,
+					content: `Added ${quantity} \`${ticketType.name}\` ticket(s) to ${userMention(users.id)}${expireText}.`,
 				});
 			}
 
@@ -250,8 +290,12 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					await addTicketToUser(member.user.id);
 					userCount++;
 				}
+				let expireText = "";
+				if (expireInput) {
+					expireText = ` (expires at ${expiresAt ? time(expiresAt) : 'unknown time'})`;
+				}
 				return await interaction.editReply({
-					content: `Added ${quantity} \`${ticketType.name}\` ticket(s) to ${userCount} users in role ${roleMention(users.id)}.`,
+					content: `Added ${quantity} \`${ticketType.name}\` ticket(s) to ${userCount} users in role ${roleMention(users.id)}${expireText}.`,
 				});
 			}
 
