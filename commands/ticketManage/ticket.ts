@@ -6,12 +6,14 @@ import {
 	User,
 	userMention,
 	type ChatInputCommandInteraction,
+	type AutocompleteInteraction,
 } from "discord.js";
 import {
 	getRawTicketTypeById,
 	createRawUserTicket,
 	getRawUserTicket,
 	deleteRawUserTicket,
+	getAllRawTicketTypes,
 } from "../../lib/db";
 import { sendPaginationMessage } from "../../lib/pagination";
 import {
@@ -90,6 +92,43 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setRequired(true),
 				),
 		);
+}
+
+export async function handleTicketAutocomplete(
+	interaction: AutocompleteInteraction,
+) {
+	const focusedOption = interaction.options.getFocused(true);
+
+	if (focusedOption.name === "tickettype") {
+		try {
+			const allTicketTypes = await getAllRawTicketTypes();
+			const filtered = allTicketTypes
+				.filter(
+					(type) =>
+						type.id
+							.toLowerCase()
+							.includes(focusedOption.value.toLowerCase()) ||
+						type.name
+							.toLowerCase()
+							.includes(focusedOption.value.toLowerCase()),
+				)
+				.slice(0, 25); // Discord limit
+
+			const choices = filtered.map((type) => ({
+				name: `${type.name} (${type.id})`,
+				value: type.id,
+			}));
+
+			await interaction.respond(choices);
+			return;
+		} catch (error) {
+			console.error("Error in ticket autocomplete:", error);
+			await interaction.respond([]);
+			return;
+		}
+	}
+
+	await interaction.respond([]);
 }
 
 export async function ticketHandler(interaction: ChatInputCommandInteraction) {
