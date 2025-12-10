@@ -243,7 +243,7 @@ export async function ticketTypeHandler(
 						},
 						{
 							name: "Effect",
-							value: `${TicketEffectTypeNames[effect] ?? 'Unknown effect'} (${value})`,
+							value: `${TicketEffectTypeNames[effect] ?? "Unknown effect"} (${value})`,
 							inline: true,
 						},
 					);
