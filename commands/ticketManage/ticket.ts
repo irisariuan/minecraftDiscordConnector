@@ -1,4 +1,5 @@
 import {
+	EmbedBuilder,
 	GuildMember,
 	Role,
 	roleMention,
@@ -7,13 +8,14 @@ import {
 	userMention,
 	type ChatInputCommandInteraction,
 	type AutocompleteInteraction,
-    time,
+	time,
 } from "discord.js";
 import {
 	getRawTicketTypeById,
 	createRawUserTicket,
 	getRawUserTicket,
 	deleteRawUserTicket,
+	updateRawUserTicket,
 	getAllRawTicketTypes,
 } from "../../lib/db";
 import { sendPaginationMessage } from "../../lib/pagination";
@@ -30,6 +32,7 @@ import {
 import { spendCredit } from "../../lib/credit";
 import { settings } from "../../lib/settings";
 import { parseTimeString, formatTimeDuration } from "../../lib/utils";
+import type { UserTicketUpdateInput } from "../../generated/prisma/models";
 
 export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -100,6 +103,42 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setName("ticketid")
 						.setDescription("ID of the ticket to remove")
 						.setRequired(true),
+				),
+		)
+		.addSubcommand((subcommand) =>
+			subcommand
+				.setName("update")
+				.setDescription("Update a ticket's properties")
+				.addStringOption((option) =>
+					option
+						.setName("ticketid")
+						.setDescription("ID of the ticket to update")
+						.setRequired(true),
+				)
+				.addIntegerOption((option) =>
+					option
+						.setName("maxuse")
+						.setDescription(
+							"New maximum uses for the ticket (0 for unlimited)",
+						)
+						.setRequired(false)
+						.setMinValue(0),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("expire")
+						.setDescription(
+							"New expiration time (DD:HH:MM:SS, HH:MM:SS, MM:SS, Ns, or 'remove' to clear)",
+						)
+						.setRequired(false),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("reason")
+						.setDescription(
+							"New reason for the ticket (empty to clear)",
+						)
+						.setRequired(false),
 				),
 		);
 }
@@ -201,7 +240,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 
 					return {
 						name: `${ticket.name} (${ticket.ticketTypeId})`,
-						value: `ID: \`${ticket.ticketId}\`\nEffect: ${TicketEffectTypeNames[ticket.effect.effect] ?? 'Unknown effect'} (${ticket.effect.value})\n${ticket.description || "No description"}${maxUseText}${expireText}`,
+						value: `ID: \`${ticket.ticketId}\`\nEffect: ${TicketEffectTypeNames[ticket.effect.effect] ?? "Unknown effect"} (${ticket.effect.value})\n${ticket.description || "No description"}${maxUseText}${expireText}`,
 					};
 				},
 				filterFunc: (filter?: string) => (ticket: Ticket) => {
@@ -277,7 +316,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				await addTicketToUser(users.id);
 				let expireText = "";
 				if (expireInput) {
-					expireText = ` (expires at ${expiresAt ? time(expiresAt) : 'unknown time'})`;
+					expireText = ` (expires at ${expiresAt ? time(expiresAt) : "unknown time"})`;
 				}
 				return await interaction.editReply({
 					content: `Added ${quantity} \`${ticketType.name}\` ticket(s) to ${userMention(users.id)}${expireText}.`,
@@ -292,7 +331,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				}
 				let expireText = "";
 				if (expireInput) {
-					expireText = ` (expires at ${expiresAt ? time(expiresAt) : 'unknown time'})`;
+					expireText = ` (expires at ${expiresAt ? time(expiresAt) : "unknown time"})`;
 				}
 				return await interaction.editReply({
 					content: `Added ${quantity} \`${ticketType.name}\` ticket(s) to ${userCount} users in role ${roleMention(users.id)}${expireText}.`,
@@ -353,6 +392,108 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 			return await interaction.editReply({
 				content: "Invalid user/role specified.",
 			});
+		}
+		case "update": {
+			const ticketId = interaction.options.getString("ticketid", true);
+			const newMaxUse = interaction.options.getInteger("maxuse");
+			const expireInput = interaction.options.getString("expire");
+			const newReason = interaction.options.getString("reason");
+
+			// Check if ticket exists
+			const existingTicket = await getRawUserTicket({
+				where: { id: ticketId },
+			});
+
+			if (!existingTicket) {
+				return await interaction.editReply({
+					content: `Ticket \`${ticketId}\` not found.`,
+				});
+			}
+
+			// Parse expire input
+			let newExpiresAt: Date | null = existingTicket.expiresAt;
+			if (expireInput) {
+				if (expireInput.toLowerCase() === "remove") {
+					newExpiresAt = null;
+				} else {
+					const expireMs = parseTimeString(expireInput);
+					if (expireMs === null) {
+						return await interaction.editReply({
+							content:
+								"Invalid expire format. Use DD:HH:MM:SS, HH:MM:SS, MM:SS, Ns, or 'remove' to clear expiration.",
+						});
+					}
+					newExpiresAt = new Date(Date.now() + expireMs);
+				}
+			}
+
+			// Prepare update data
+			const updateData: UserTicketUpdateInput = {};
+			if (newMaxUse !== null) {
+				updateData.maxUse = newMaxUse;
+			}
+			if (expireInput) {
+				updateData.expiresAt = newExpiresAt;
+			}
+			if (newReason !== null) {
+				updateData.reason = newReason.length > 0 ? newReason : null;
+			}
+
+			// Check if there's anything to update
+			if (Object.keys(updateData).length === 0) {
+				return await interaction.editReply({
+					content:
+						"No updates specified. Please provide at least one field to update.",
+				});
+			}
+
+			try {
+				await updateRawUserTicket({
+					where: { id: ticketId },
+					data: updateData,
+				});
+
+				// Build update summary
+				const updates: string[] = [];
+				if (newMaxUse !== null) {
+					updates.push(`Max uses: ${newMaxUse}`);
+				}
+				if (expireInput) {
+					if (newExpiresAt) {
+						updates.push(`Expires: ${time(newExpiresAt)}`);
+					} else {
+						updates.push("Expiration: removed");
+					}
+				}
+				if (newReason !== null) {
+					updates.push(`Reason: ${newReason}`);
+				}
+
+				const embed = new EmbedBuilder()
+					.setTitle("Ticket Updated")
+					.setColor("Orange")
+					.addFields(
+						{
+							name: "Ticket ID",
+							value: ticketId,
+							inline: true,
+						},
+						{
+							name: "Updates",
+							value: updates.join("\n"),
+							inline: false,
+						},
+					);
+
+				return await interaction.editReply({
+					embeds: [embed],
+				});
+			} catch (error) {
+				console.error("Error updating ticket:", error);
+				return await interaction.editReply({
+					content: `Failed to update ticket: ${error}`,
+				});
+			}
 		}
 	}
 	return await interaction.editReply({

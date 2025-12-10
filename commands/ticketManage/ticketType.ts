@@ -8,6 +8,7 @@ import {
 	getAllRawTicketTypes,
 	getRawTicketTypeById,
 	createRawTicketType,
+	updateRawTicketType,
 	deleteRawTicketTypeById,
 } from "../../lib/db";
 import { sendPaginationMessage } from "../../lib/pagination";
@@ -21,6 +22,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../../lib/permission";
+import type { TicketUpdateInput } from "../../generated/prisma/models";
 
 export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -62,6 +64,45 @@ export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 					option
 						.setName("description")
 						.setDescription("Description of the ticket type")
+						.setRequired(false),
+				),
+		)
+		.addSubcommand((subcommand) =>
+			subcommand
+				.setName("update")
+				.setDescription("Update a ticket type")
+				.addStringOption((option) =>
+					option
+						.setName("tickettypeid")
+						.setDescription("ID of the ticket type to update")
+						.setRequired(true)
+						.setAutocomplete(true),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("name")
+						.setDescription("New name for the ticket type")
+						.setRequired(false),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("description")
+						.setDescription(
+							"New description for the ticket type (empty to clear)",
+						)
+						.setRequired(false),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("effect")
+						.setDescription("New effect type for the ticket")
+						.setRequired(false)
+						.setAutocomplete(true),
+				)
+				.addNumberOption((option) =>
+					option
+						.setName("value")
+						.setDescription("New value for the ticket effect")
 						.setRequired(false),
 				),
 		)
@@ -175,7 +216,7 @@ export async function ticketTypeHandler(
 				},
 				formatter: (ticketType: DbTicketType) => ({
 					name: `${ticketType.name} (${ticketType.id})`,
-					value: `Effect: ${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? 'Unknown effect'} (${ticketType.value})\n${ticketType.description || "No description"}`,
+					value: `Effect: ${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? "Unknown effect"} (${ticketType.value})\n${ticketType.description || "No description"}`,
 				}),
 				filterFunc: (filter?: string) => (ticketType: DbTicketType) => {
 					if (!filter) return true;
@@ -261,6 +302,101 @@ export async function ticketTypeHandler(
 			} catch (error) {
 				return await interaction.editReply({
 					content: `Failed to create ticket type: ${error}`,
+				});
+			}
+		}
+		case "update": {
+			const ticketTypeId = interaction.options.getString(
+				"tickettypeid",
+				true,
+			);
+			const newName = interaction.options.getString("name");
+			const newDescription = interaction.options.getString("description");
+			const newEffect = interaction.options.getString(
+				"effect",
+			) as TicketEffectType | null;
+			const newValue = interaction.options.getNumber("value");
+
+			// Check if ticket type exists
+			const existingTicketType = await getRawTicketTypeById(ticketTypeId);
+			if (!existingTicketType) {
+				return await interaction.editReply({
+					content: `Ticket type \`${ticketTypeId}\` not found.`,
+				});
+			}
+
+			// Prepare update data
+			const updateData: TicketUpdateInput = {};
+			if (newName !== null) {
+				updateData.name = newName;
+			}
+			if (newDescription !== null) {
+				updateData.description =
+					newDescription.length > 0 ? newDescription : null;
+			}
+			if (newEffect !== null) {
+				updateData.effect = newEffect;
+			}
+			if (newValue !== null) {
+				updateData.value = newValue;
+			}
+
+			// Check if there's anything to update
+			if (Object.keys(updateData).length === 0) {
+				return await interaction.editReply({
+					content:
+						"No updates specified. Please provide at least one field to update.",
+				});
+			}
+
+			try {
+				await updateRawTicketType({
+					where: { id: ticketTypeId },
+					data: updateData,
+				});
+
+				// Build update summary
+				const updates: string[] = [];
+				if (newName !== null) {
+					updates.push(`Name: ${newName}`);
+				}
+				if (newDescription !== null) {
+					updates.push(
+						`Description: ${newDescription || "No description"}`,
+					);
+				}
+				if (newEffect !== null) {
+					updates.push(
+						`Effect: ${TicketEffectTypeNames[newEffect] ?? "Unknown effect"}`,
+					);
+				}
+				if (newValue !== null) {
+					updates.push(`Value: ${newValue}`);
+				}
+
+				const embed = new EmbedBuilder()
+					.setTitle("Ticket Type Updated")
+					.setColor("Orange")
+					.addFields(
+						{
+							name: "ID",
+							value: ticketTypeId,
+							inline: true,
+						},
+						{
+							name: "Updates",
+							value: updates.join("\n"),
+							inline: false,
+						},
+					);
+
+				return await interaction.editReply({
+					embeds: [embed],
+				});
+			} catch (error) {
+				console.error("Error updating ticket type:", error);
+				return await interaction.editReply({
+					content: `Failed to update ticket type: ${error}`,
 				});
 			}
 		}
