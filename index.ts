@@ -313,6 +313,17 @@ client.on("interactionCreate", async (interaction) => {
 		if (isApprovalMessageComponentId(interaction.customId)) {
 			return updateApprovalMessage(serverManager, interaction);
 		}
+	} else if (interaction.isAutocomplete()) {
+		const { commandName } = interaction;
+		const command = commands.find(
+			(cmd) => cmd.command.name === commandName,
+		);
+		if (!command || !command.autoComplete) return;
+		await Promise.try(() =>
+			command.autoComplete?.({ interaction, client, serverManager }),
+		).catch((err) => {
+			console.error("Error in autocomplete:", err);
+		});
 	}
 });
 

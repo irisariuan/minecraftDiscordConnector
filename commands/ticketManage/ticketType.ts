@@ -2,6 +2,7 @@ import {
 	EmbedBuilder,
 	SlashCommandSubcommandGroupBuilder,
 	type ChatInputCommandInteraction,
+	type AutocompleteInteraction,
 } from "discord.js";
 import {
 	getAllRawTicketTypes,
@@ -43,14 +44,7 @@ export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setName("effect")
 						.setDescription("Effect type of the ticket")
 						.setRequired(true)
-						.addChoices(
-							Object.entries(TicketEffectTypeNames).map(
-								([value, name]) => ({
-									name,
-									value,
-								}),
-							),
-						),
+						.setAutocomplete(true),
 				)
 				.addNumberOption((option) =>
 					option
@@ -83,6 +77,72 @@ export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setAutocomplete(true),
 				),
 		);
+}
+
+export async function handleTicketTypeAutocomplete(
+	interaction: AutocompleteInteraction,
+) {
+	const focusedOption = interaction.options.getFocused(true);
+
+	if (focusedOption.name === "tickettypeid") {
+		try {
+			const allTicketTypes = await getAllRawTicketTypes();
+			const filtered = allTicketTypes
+				.filter(
+					(type) =>
+						type.id
+							.toLowerCase()
+							.includes(focusedOption.value.toLowerCase()) ||
+						type.name
+							.toLowerCase()
+							.includes(focusedOption.value.toLowerCase()),
+				)
+				.slice(0, 25); // Discord limit
+
+			const choices = filtered.map((type) => ({
+				name: `${type.name} (${type.id})`,
+				value: type.id,
+			}));
+
+			await interaction.respond(choices);
+			return;
+		} catch (error) {
+			console.error("Error in ticket type autocomplete:", error);
+			await interaction.respond([]);
+			return;
+		}
+	}
+
+	if (focusedOption.name === "effect") {
+		try {
+			const effectTypes = Object.entries(TicketEffectTypeNames);
+			const filtered = effectTypes
+				.filter(
+					([value, name]) =>
+						name
+							.toLowerCase()
+							.includes(focusedOption.value.toLowerCase()) ||
+						value
+							.toLowerCase()
+							.includes(focusedOption.value.toLowerCase()),
+				)
+				.slice(0, 25); // Discord limit
+
+			const choices = filtered.map(([value, name]) => ({
+				name,
+				value,
+			}));
+
+			await interaction.respond(choices);
+			return;
+		} catch (error) {
+			console.error("Error in effect autocomplete:", error);
+			await interaction.respond([]);
+			return;
+		}
+	}
+
+	await interaction.respond([]);
 }
 
 export async function ticketTypeHandler(

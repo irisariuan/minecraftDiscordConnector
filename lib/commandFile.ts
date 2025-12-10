@@ -1,4 +1,5 @@
 import type {
+	AutocompleteInteraction,
 	ChatInputCommandInteraction,
 	Client,
 	MessageReaction,
@@ -13,13 +14,19 @@ import type { Permission } from "./permission";
 import { Server, ServerManager } from "./server";
 import { safeJoin } from "./utils";
 
-interface ExecuteParams {
-	interaction: ChatInputCommandInteraction;
+type AcceptedInteractions =
+	| AutocompleteInteraction
+	| ChatInputCommandInteraction;
+
+interface ExecuteParams<Interaction extends AcceptedInteractions> {
+	interaction: Interaction;
 	serverManager: ServerManager;
 	client: Client;
 }
 
-interface ExecuteParamsWithServer extends ExecuteParams {
+interface ExecuteParamsWithServer<
+	Interaction extends AcceptedInteractions,
+> extends ExecuteParams<Interaction> {
 	server: Server;
 }
 
@@ -44,12 +51,11 @@ export interface CommandFile<RequireServer extends boolean> {
 	features?: Partial<CommandFeatures>;
 	execute: (
 		params: RequireServer extends true
-			? ExecuteParamsWithServer
-			: ExecuteParams,
-	) => unknown | Promise<unknown>;
-	executeReaction?: (
-		params: ExecuteReactionParams,
-	) => unknown | Promise<unknown>;
+			? ExecuteParamsWithServer<ChatInputCommandInteraction>
+			: ExecuteParams<ChatInputCommandInteraction>,
+	) => unknown;
+	executeReaction?: (params: ExecuteReactionParams) => unknown;
+	autoComplete?: (params: ExecuteParams<AutocompleteInteraction>) => unknown;
 	permissions?: Permission;
 	ephemeral?: boolean;
 }

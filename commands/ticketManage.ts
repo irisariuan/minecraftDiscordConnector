@@ -1,8 +1,12 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { PermissionFlags } from "../lib/permission";
-import { initTicketGroup, ticketHandler } from "./ticketManage/ticket";
 import {
+	initTicketGroup,
+	ticketHandler,
+	handleTicketAutocomplete,
+} from "./ticketManage/ticket";
+import {
+	handleTicketTypeAutocomplete,
 	initTicketTypeGroup,
 	ticketTypeHandler,
 } from "./ticketManage/ticketType";
@@ -13,7 +17,20 @@ export default {
 		.setDescription("Manage tickets and ticket types")
 		.addSubcommandGroup((group) => initTicketGroup(group))
 		.addSubcommandGroup((group) => initTicketTypeGroup(group)),
+	async autoComplete({ interaction }) {
+		const group = interaction.options.getSubcommandGroup();
 
+		switch (group) {
+			case "ticket": {
+				return await handleTicketAutocomplete(interaction);
+			}
+			case "type": {
+				return await handleTicketTypeAutocomplete(interaction);
+			}
+			default:
+				return await interaction.respond([]);
+		}
+	},
 	async execute({ interaction }) {
 		const group = interaction.options.getSubcommandGroup(true);
 
@@ -36,5 +53,5 @@ export default {
 	requireServer: false,
 	features: {
 		suspendable: false,
-	}
+	},
 } satisfies CommandFile<false>;
