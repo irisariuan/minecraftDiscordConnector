@@ -181,11 +181,11 @@ export async function getUserSelectedTicket(
 					i.customId === TicketSelectMenu.TICKET_NO_USE_ID,
 				time,
 			})
-			.then(() => {
+			.then(() => null)
+			.catch(() => null)
+			.finally(() => {
 				selectCollector.stop();
 				buttonCollector.stop();
-				return null;
-			})
-			.catch(() => null),
+			}),
 	]);
 }
