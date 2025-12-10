@@ -7,8 +7,15 @@ import {
 	PermissionFlags,
 	anyPerm,
 } from "../lib/permission";
-import { createRequestComponent, RequestComponentId } from "../lib/component/request";
-import { spendCredit, changeCredit, sendCreditNotification } from "../lib/credit";
+import {
+	createRequestComponent,
+	RequestComponentId,
+} from "../lib/component/request";
+import {
+	spendCredit,
+	changeCredit,
+	sendCreditNotification,
+} from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()

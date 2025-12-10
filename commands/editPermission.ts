@@ -300,6 +300,7 @@ export default {
 				try {
 					const selection = await reply.awaitMessageComponent({
 						time: 60000,
+						componentType: ComponentType.StringSelect,
 						filter: (i) => i.user.id === interaction.user.id,
 					});
 					if (

@@ -7,6 +7,7 @@ import {
 	MessageFlags,
 } from "discord.js";
 import { createRequestComponent, RequestComponentId } from "./request";
+import { _ } from "../../webUi/dist/server/chunks/astro/server_DDVgKadx.mjs";
 
 export enum TicketSelectMenu {
 	TICKET_SELECT_ID = "ticket_select_menu",
@@ -56,7 +57,7 @@ export async function getUserSelectedTicket(
 	userId: string,
 	tickets: Ticket[],
 	originalCost: number,
-): Promise<Ticket | null> {
+): Promise<Ticket | null | undefined> {
 	const time = 1000 * 60 * 2;
 	const indexPage = 0;
 	await message.edit({
@@ -105,27 +106,30 @@ export async function getUserSelectedTicket(
 		});
 	});
 	return Promise.race([
-		new Promise<Ticket | null>((resolve) => {
-			selectCollector.on("end", () => resolve(null));
+		new Promise<Ticket | undefined>((resolve) => {
+			selectCollector.on("end", () => resolve(undefined));
 			selectCollector.on("collect", async (interaction) => {
 				const value = interaction.values[0];
-				if (!value)
+				if (!value) {
 					return await interaction.reply({
 						content: "No ticket found!",
 						flags: [MessageFlags.Ephemeral],
 					});
+				}
 				const ticketFound = tickets.find((v) => v.ticketId === value);
-				if (!ticketFound)
+				if (!ticketFound) {
 					return await interaction.reply({
 						content: "No ticket found!",
 						flags: [MessageFlags.Ephemeral],
 					});
+				}
 				const finalCost = calculateTicketEffect(
 					ticketFound.effect,
 					originalCost,
 				);
-				const reply = await interaction.reply({
+				const confirmation = await interaction.reply({
 					content: `After using this ticket, you will have to pay \`${finalCost}\` credits`,
+					withResponse: true,
 					flags: [MessageFlags.Ephemeral],
 					components: [
 						createRequestComponent({
@@ -135,21 +139,38 @@ export async function getUserSelectedTicket(
 						}),
 					],
 				});
-				const requestStatus = await reply.awaitMessageComponent({
-					componentType: ComponentType.Button,
-					time: 60000,
-					filter: (i) =>
-						i.user.id === userId &&
-						(i.customId === RequestComponentId.Allow ||
-							i.customId === RequestComponentId.Cancel),
-				});
-				if (requestStatus.customId === RequestComponentId.Allow) {
-					buttonCollector.stop();
-					selectCollector.stop();
-					resolve(ticketFound);
-				} else {
-					await reply.delete().catch(() => {});
+				if (!confirmation.resource?.message)
+					throw new Error("No message returned");
+				const finalMessage = confirmation.resource.message;
+				const requestStatus = await finalMessage
+					.awaitMessageComponent({
+						componentType: ComponentType.Button,
+						time,
+						filter: (i) => i.user.id === userId,
+					})
+					.catch(() => null);
+				if (!requestStatus) {
+					await interaction.followUp({
+						content: "Request timed out.",
+						flags: [MessageFlags.Ephemeral],
+					});
+					return resolve(undefined);
 				}
+				if (requestStatus.customId !== RequestComponentId.Allow) {
+					await requestStatus.reply({
+						content:
+							"Ticket application cancelled. You can choose another ticket or not use any.",
+						flags: [MessageFlags.Ephemeral],
+					});
+					return;
+				}
+				await requestStatus.reply({
+					content: `Ticket \`${ticketFound.name}\` applied.`,
+					flags: [MessageFlags.Ephemeral],
+				});
+				resolve(ticketFound);
+				buttonCollector.stop();
+				selectCollector.stop();
 			});
 		}),
 		message

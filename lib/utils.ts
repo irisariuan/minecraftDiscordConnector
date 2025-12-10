@@ -160,6 +160,109 @@ export function safeJoin(...paths: string[]) {
 	return finalPath;
 }
 
+/**
+ * Parse time string in various formats and return total milliseconds
+ * Supported formats:
+ * - DD:HH:MM:SS (days:hours:minutes:seconds) - first part can be longer than 2 digits
+ * - HH:MM:SS (hours:minutes:seconds)
+ * - MM:SS (minutes:seconds)
+ * - S (seconds with 's' suffix, e.g., "102s")
+ */
+export function parseTimeString(timeStr: string): number | null {
+	if (!timeStr || typeof timeStr !== "string") {
+		return null;
+	}
+
+	const trimmedStr = timeStr.trim();
+
+	// Handle seconds format like "102s"
+	const secondsMatch = trimmedStr.match(/^(\d+)s$/i);
+	if (secondsMatch) {
+		const seconds = Number(secondsMatch[1]);
+		return seconds * 1000;
+	}
+
+	// Handle colon-separated formats
+	const parts = trimmedStr.split(":");
+
+	if (parts.length < 2 || parts.length > 4) {
+		return null;
+	}
+
+	// Parse parts as numbers
+	const numParts = parts.map((part) => {
+		const num = Number(part);
+		return isNaN(num) ? null : num;
+	});
+
+	// Check if any part is invalid
+	if (numParts.some((part) => part === null)) {
+		return null;
+	}
+
+	let days = 0,
+		hours = 0,
+		minutes = 0,
+		seconds = 0;
+
+	if (parts.length === 4) {
+		// DD:HH:MM:SS format
+		days = numParts[0]!;
+		hours = numParts[1]!;
+		minutes = numParts[2]!;
+		seconds = numParts[3]!;
+	} else if (parts.length === 3) {
+		// HH:MM:SS format
+		hours = numParts[0]!;
+		minutes = numParts[1]!;
+		seconds = numParts[2]!;
+	} else if (parts.length === 2) {
+		// MM:SS format
+		minutes = numParts[0]!;
+		seconds = numParts[1]!;
+	}
+
+	// Validate ranges (except for the first part which can be unlimited)
+	if (parts.length >= 3 && hours >= 24) return null;
+	if (minutes >= 60) return null;
+	if (seconds >= 60) return null;
+
+	// All values must be non-negative
+	if (days < 0 || hours < 0 || minutes < 0 || seconds < 0) return null;
+
+	// Calculate total milliseconds
+	const totalMs =
+		days * 24 * 60 * 60 * 1000 +
+		hours * 60 * 60 * 1000 +
+		minutes * 60 * 1000 +
+		seconds * 1000;
+
+	return totalMs > 0 ? totalMs : null;
+}
+
+/**
+ * Format time duration string from the parsed format
+ * Returns a human-readable string like "7 days 12 hours" or "30 minutes"
+ */
+export function formatTimeDuration(timeStr: string): string | null {
+	const ms = parseTimeString(timeStr);
+	if (ms === null) return null;
+
+	const totalSeconds = Math.floor(ms / 1000);
+	const days = Math.floor(totalSeconds / (24 * 60 * 60));
+	const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60));
+	const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+	const seconds = totalSeconds % 60;
+
+	const parts: string[] = [];
+	if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
+	if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
+	if (minutes > 0) parts.push(`${minutes} minute${minutes !== 1 ? "s" : ""}`);
+	if (seconds > 0) parts.push(`${seconds} second${seconds !== 1 ? "s" : ""}`);
+
+	return parts.length > 0 ? parts.join(" ") : null;
+}
+
 export async function sendMessagesToUsersById(
 	client: Client,
 	users: string[],

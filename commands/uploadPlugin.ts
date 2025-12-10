@@ -15,7 +15,11 @@ import {
 import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
 import { createRequestComponent } from "../lib/component/request";
-import { spendCredit, changeCredit, sendCreditNotification } from "../lib/credit";
+import {
+	spendCredit,
+	changeCredit,
+	sendCreditNotification,
+} from "../lib/credit";
 import {
 	anyPerm,
 	comparePermission,
@@ -90,8 +94,7 @@ export default {
 			Collection<Snowflake, Message> | ButtonInteraction | FileBuffer
 		>[] = [
 			cancelMessage.awaitMessageComponent({
-				filter: (componentInteraction) =>
-					componentInteraction.user.id === interaction.user.id,
+				filter: (i) => i.user.id === interaction.user.id,
 				time: 1000 * 60 * 30, // 30 minutes
 				componentType: ComponentType.Button,
 			}),
