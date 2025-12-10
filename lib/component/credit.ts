@@ -1,6 +1,12 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from "@discordjs/builders";
-import type { Ticket } from "../credit";
-import { ButtonBuilder, ComponentType, Message } from "discord.js";
+import { calculateTicketEffect, type Ticket } from "../ticket";
+import {
+	ButtonBuilder,
+	ComponentType,
+	Message,
+	MessageFlags,
+} from "discord.js";
+import { createRequestComponent, RequestComponentId } from "./request";
 
 export enum TicketSelectMenu {
 	TICKET_SELECT_ID = "ticket_select_menu",
@@ -39,14 +45,17 @@ export function createTicketButtons(showPrev: boolean, showNext: boolean) {
 		.setCustomId(TicketSelectMenu.TICKET_NO_USE_ID)
 		.setLabel("Do Not Use a Ticket")
 		.setStyle(4);
-	row.addComponents(prevButton, noUseButton, nextButton);
+	if (showPrev) row.addComponents(prevButton);
+	if (showNext) row.addComponents(nextButton);
+	row.addComponents(noUseButton);
 	return row;
 }
 
-export async function getUsingTicketId(
+export async function getUserSelectedTicket(
 	message: Message,
 	userId: string,
 	tickets: Ticket[],
+	originalCost: number,
 ): Promise<Ticket | null> {
 	const time = 1000 * 60 * 2;
 	const indexPage = 0;
@@ -60,7 +69,7 @@ export async function getUsingTicketId(
 		],
 	});
 
-	const collector = message.createMessageComponentCollector({
+	const buttonCollector = message.createMessageComponentCollector({
 		componentType: ComponentType.Button,
 		time,
 		filter: (i) =>
@@ -68,7 +77,13 @@ export async function getUsingTicketId(
 			(i.customId === TicketSelectMenu.TICKET_SELECT_NEXT_ID ||
 				i.customId === TicketSelectMenu.TICKET_SELECT_PREV_ID),
 	});
-	collector.on("collect", async (interaction) => {
+	const selectCollector = message.createMessageComponentCollector({
+		componentType: ComponentType.StringSelect,
+		time,
+		filter: (i) => i.user.id === userId,
+	});
+
+	buttonCollector.on("collect", async (interaction) => {
 		await interaction.deferUpdate();
 		let newPage = indexPage;
 		if (interaction.customId === TicketSelectMenu.TICKET_SELECT_NEXT_ID) {
@@ -90,21 +105,53 @@ export async function getUsingTicketId(
 		});
 	});
 	return Promise.race([
-		message
-			.awaitMessageComponent({
-				componentType: ComponentType.StringSelect,
-				filter: (i) => i.user.id === userId,
-				time,
-			})
-			.then((interaction) => {
-				collector.stop();
-
-				return (
-					tickets.find((v) => v.ticketId === interaction.values[0]) ??
-					null
+		new Promise<Ticket | null>((resolve) => {
+			selectCollector.on("end", () => resolve(null));
+			selectCollector.on("collect", async (interaction) => {
+				const value = interaction.values[0];
+				if (!value)
+					return await interaction.reply({
+						content: "No ticket found!",
+						flags: [MessageFlags.Ephemeral],
+					});
+				const ticketFound = tickets.find((v) => v.ticketId === value);
+				if (!ticketFound)
+					return await interaction.reply({
+						content: "No ticket found!",
+						flags: [MessageFlags.Ephemeral],
+					});
+				const finalCost = calculateTicketEffect(
+					ticketFound.effect,
+					originalCost,
 				);
-			})
-			.catch(() => null),
+				const reply = await interaction.reply({
+					content: `After using this ticket, you will have to pay \`${finalCost}\` credits`,
+					flags: [MessageFlags.Ephemeral],
+					components: [
+						createRequestComponent({
+							showAllow: true,
+							showCancel: true,
+							showDeny: false,
+						}),
+					],
+				});
+				const requestStatus = await reply.awaitMessageComponent({
+					componentType: ComponentType.Button,
+					time: 60000,
+					filter: (i) =>
+						i.user.id === userId &&
+						(i.customId === RequestComponentId.Allow ||
+							i.customId === RequestComponentId.Cancel),
+				});
+				if (requestStatus.customId === RequestComponentId.Allow) {
+					buttonCollector.stop();
+					selectCollector.stop();
+					resolve(ticketFound);
+				} else {
+					await reply.delete().catch(() => {});
+				}
+			});
+		}),
 		message
 			.awaitMessageComponent({
 				componentType: ComponentType.Button,
@@ -114,7 +161,8 @@ export async function getUsingTicketId(
 				time,
 			})
 			.then(() => {
-				collector.stop();
+				selectCollector.stop();
+				buttonCollector.stop();
 				return null;
 			})
 			.catch(() => null),

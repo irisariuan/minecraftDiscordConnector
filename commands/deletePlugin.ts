@@ -8,7 +8,7 @@ import {
 	anyPerm,
 } from "../lib/permission";
 import { createRequestComponent, RequestComponentId } from "../lib/component/request";
-import { askToPay, changeCredit, sendCreditNotification } from "../lib/credit";
+import { spendCredit, changeCredit, sendCreditNotification } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -43,7 +43,7 @@ export default {
 			)
 		)
 			return await deleteFunc();
-		const payment = await askToPay(interaction, {
+		const payment = await spendCredit(interaction, {
 			userId: interaction.user.id,
 			cost: server.creditSettings.deletePluginFee,
 			reason: `Delete Plugin ${plugin}`,

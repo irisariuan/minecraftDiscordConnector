@@ -206,7 +206,7 @@ export async function deletePluginByPath(path: string) {
 	return await prisma.plugin.deleteMany({ where: { filePath: path } });
 }
 
-export async function getUserTickets(userId: string, ticketTypeIds?: number[]) {
+export async function getUserTickets(userId: string, ticketTypeIds?: string[]) {
 	return await prisma.userTicket.findMany({
 		where: {
 			userId,
@@ -238,7 +238,7 @@ export async function createRawTicketType(data: Prisma.TicketCreateArgs) {
 	return await prisma.ticket.create(data);
 }
 
-export async function getRawTicketTypeById(id: number) {
+export async function getRawTicketTypeById(id: string) {
 	return await prisma.ticket.findUnique({ where: { id } });
 }
 
@@ -246,6 +246,10 @@ export async function getAllRawTicketTypes() {
 	return await prisma.ticket.findMany();
 }
 
-export async function deleteRawTicketTypeById(id: number) {
+export async function deleteRawTicketTypeById(id: string) {
 	return await prisma.ticket.deleteMany({ where: { id } });
+}
+
+export async function deleteRawUserTicket(data: Prisma.UserTicketDeleteArgs) {
+	return await prisma.userTicket.delete(data);
 }

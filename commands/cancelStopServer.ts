@@ -6,7 +6,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { askToPay } from "../lib/credit";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -66,7 +66,7 @@ export default {
 			});
 		}
 		if (
-			!(await askToPay(interaction, {
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newCancelStopServerPollFee,
 				serverId: server.id,

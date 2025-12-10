@@ -12,7 +12,7 @@ import {
 	parseApprovalComponentId,
 } from "./component/approval";
 import {
-	askToPay,
+	spendCredit,
 	changeCredit,
 	sendCreditNotification,
 	type Change,
@@ -515,7 +515,7 @@ export async function updateApprovalMessage(
 		);
 		// Check if need to spend credit for new reaction
 	} else if (approval.options.credit) {
-		const transaction = await askToPay(reaction, {
+		const transaction = await spendCredit(reaction, {
 			userId: reaction.user.id,
 			cost: approval.options.credit,
 			serverId: approval.server.id,

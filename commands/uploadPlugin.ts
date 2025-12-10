@@ -15,7 +15,7 @@ import {
 import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
 import { createRequestComponent } from "../lib/component/request";
-import { askToPay, changeCredit, sendCreditNotification } from "../lib/credit";
+import { spendCredit, changeCredit, sendCreditNotification } from "../lib/credit";
 import {
 	anyPerm,
 	comparePermission,
@@ -47,7 +47,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		const payment = await askToPay(interaction, {
+		const payment = await spendCredit(interaction, {
 			userId: interaction.user.id,
 			cost: server.creditSettings.uploadFileFee,
 			reason: "Upload Custom Mod to Server",

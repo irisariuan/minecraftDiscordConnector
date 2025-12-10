@@ -2,7 +2,7 @@ import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { updateDnsRecord } from "../lib/dnsRecord";
 import { settings } from "../lib/settings";
-import { askToPay } from "../lib/credit";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -13,7 +13,7 @@ export default {
 	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		await askToPay(interaction, {
+		await spendCredit(interaction, {
 			userId: interaction.user.id,
 			cost: settings.refreshDnsFee,
 			reason: "Refresh DNS Record",

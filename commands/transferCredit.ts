@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
-	askToPay,
+	spendCredit,
 	changeCredit,
 	createApproveButton,
 	createCancelButton,
@@ -116,7 +116,7 @@ export default {
 			});
 		}
 
-		const payment = await askToPay(interaction, {
+		const payment = await spendCredit(interaction, {
 			userId: interaction.user.id,
 			cost: amount + totalTransferringFee,
 			reason: `Transfer Credit (${amount} credits with ${totalTransferringFee} fee to ${userMention(user.id)})`,

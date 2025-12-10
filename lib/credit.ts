@@ -17,12 +17,14 @@ import {
 	readPermission,
 } from "./permission";
 import { getUserById, newTransaction, setUserCredits } from "./db";
-import { getUserTicketsByUserId, useUserTicket } from "./ticket";
 import {
-	createTicketButtons,
-	createTicketSelectMenu,
-	getUsingTicketId,
-} from "./component/credit";
+	calculateTicketEffect,
+	getUserTicketsByUserId,
+	TicketEffectType,
+	useUserTicket,
+	type Ticket,
+} from "./ticket";
+import { getUserSelectedTicket } from "./component/credit";
 
 export interface UserCredit {
 	userId: string;
@@ -41,32 +43,6 @@ export interface Change {
 	reason?: string;
 	trackingId: string;
 	serverTag: string | null;
-}
-
-export interface Ticket {
-	ticketId: string;
-	ticketTypeId: number;
-	name: string;
-	description: string | null;
-	effect: TicketEffect;
-	reason: string | null;
-	maxUse: number | null;
-	histories?: TicketHistory[];
-}
-
-export interface TicketEffect {
-	effect: TicketEffectType;
-	value: number;
-}
-export enum TicketEffectType {
-	Multiplier = "multiplier",
-	FixedCredit = "fixed_credit",
-}
-export interface TicketHistory {
-	ticketId: string;
-	action: string;
-	reason: string | null;
-	timestamp: number;
 }
 
 export async function setCredit({
@@ -191,22 +167,6 @@ export async function getCredit(userId: string): Promise<UserCredit | null> {
 	};
 }
 
-function calculateTicketEffect(
-	ticket: TicketEffect,
-	originalCost: number,
-): number {
-	switch (ticket.effect) {
-		case TicketEffectType.FixedCredit:
-			return Math.max(0, originalCost - ticket.value);
-		case TicketEffectType.Multiplier:
-			return Math.max(0, Math.floor(originalCost * ticket.value));
-		default: {
-			console.error("Unknown ticket effect type:", ticket.effect);
-			return originalCost;
-		}
-	}
-}
-
 export async function canSpendCredit(userId: string, cost: number) {
 	const credit = await getCredit(userId);
 	if (!credit) return false;
@@ -217,7 +177,51 @@ export async function canSpendCredit(userId: string, cost: number) {
 	);
 }
 
-export async function askToPay(
+export async function spendCreditWithoutTicket(
+	user: User | PartialUser | GuildMember,
+	userCredit: UserCredit,
+	{ userId, cost, reason, serverId }: SpendCreditParams,
+): Promise<Omit<Change, "trackingId"> | null> {
+	if (!(await canSpendCredit(userId, cost))) {
+		return null;
+	}
+	await changeCredit({
+		userId,
+		change: -cost,
+		reason,
+		serverId,
+	});
+	await sendCreditNotification({
+		user,
+		creditChanged: -cost,
+		reason,
+		serverId,
+	});
+	return {
+		userId,
+		changed: -cost,
+		originalAmount: -cost,
+		creditBefore: userCredit.currentCredit,
+		creditAfter: userCredit.currentCredit - cost,
+		timestamp: Date.now(),
+		reason,
+		serverTag: null,
+		ticketUsed: null,
+	};
+}
+export interface SpendCreditParams {
+	userId: string;
+	cost: number;
+	serverId?: number;
+	reason: string;
+	/**
+	 * Empty array represent not allowing tickets
+	 * Undefined represent allowing all tickets
+	 */
+	acceptedTicketTypeIds?: string[];
+}
+
+export async function spendCredit(
 	interaction: Interaction,
 	params: SpendCreditParams,
 ): Promise<Omit<Change, "trackingId"> | null> {
@@ -227,45 +231,23 @@ export async function askToPay(
 		params.acceptedTicketTypeIds,
 	);
 	const credit = await getCredit(userId);
-	if (!credit) {
-		return null;
-	}
+	if (!credit) return null;
 	if (
 		!tickets ||
 		params.acceptedTicketTypeIds?.length === 0 ||
 		!interaction.channel?.isSendable()
 	) {
-		if (!(await canSpendCredit(userId, cost))) {
-			return null;
-		}
-		await changeCredit({
-			userId,
-			change: -cost,
-			reason,
-			serverId,
-		});
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -cost,
-			reason,
-			serverId,
-		});
-		return {
-			userId,
-			changed: -cost,
-			originalAmount: -cost,
-			creditBefore: credit.currentCredit,
-			creditAfter: credit.currentCredit - cost,
-			timestamp: Date.now(),
-			reason,
-			serverTag: null,
-			ticketUsed: null,
-		};
+		return spendCreditWithoutTicket(interaction.user, credit, params);
 	}
 	const message = await interaction.channel.send({
 		content: `You need to pay \`${cost}\` credits for this action. You have \`${credit.currentCredit}\` credits.\nYou can also use a ticket to reduce the cost.`,
 	});
-	const selectedTicket = await getUsingTicketId(message, userId, tickets);
+	const selectedTicket = await getUserSelectedTicket(
+		message,
+		userId,
+		tickets,
+		cost,
+	);
 	if (selectedTicket) {
 		const finalCost = calculateTicketEffect(selectedTicket.effect, cost);
 		if (!(await canSpendCredit(userId, finalCost))) {
@@ -305,8 +287,9 @@ export async function askToPay(
 		setTimeout(() => {
 			message.delete().catch(() => {});
 		}, 1000 * 15);
+	} else {
+		await message.delete().catch(() => {});
 	}
-	await message.delete().catch(() => {});
 	if (!(await canSpendCredit(userId, cost))) {
 		return null;
 	}
@@ -333,18 +316,6 @@ export async function askToPay(
 		serverTag: null,
 		ticketUsed: null,
 	};
-}
-
-export interface SpendCreditParams {
-	userId: string;
-	cost: number;
-	serverId?: number;
-	reason: string;
-	/**
-	 * Empty array represent not allowing tickets
-	 * Undefined represent allowing all tickets
-	 */
-	acceptedTicketTypeIds?: number[];
 }
 
 interface SendCreditNotificationParams {

@@ -15,7 +15,7 @@ import {
 } from "../lib/permission";
 import { parseCommandOutput, runCommandOnServer } from "../lib/request";
 import { sendMessagesToUsersById } from "../lib/utils";
-import { askToPay } from "../lib/credit";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -85,7 +85,7 @@ export default {
 		}
 		await interaction.deleteReply();
 		if (
-			!(await askToPay(interaction, {
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newRunCommandPollFee,
 				reason: "New Run Command Poll",
