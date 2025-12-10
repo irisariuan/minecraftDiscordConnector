@@ -246,6 +246,10 @@ export async function getAllRawTicketTypes() {
 	return await prisma.ticket.findMany();
 }
 
+export async function updateRawTicketType(data: Prisma.TicketUpdateArgs) {
+	return await prisma.ticket.update(data);
+}
+
 export async function deleteRawTicketTypeById(id: string) {
 	return await prisma.ticket.deleteMany({ where: { id } });
 }
