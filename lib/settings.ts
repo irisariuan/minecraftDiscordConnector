@@ -43,6 +43,7 @@ export interface CreditSettings extends ServerCreditSettings {
 
 	checkUserCreditFee: number;
 	checkUserPermissionFee: number;
+	checkUserTicketFee: number;
 	refreshDnsFee: number;
 }
 export interface ApprovalSettings {

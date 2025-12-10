@@ -1,18 +1,18 @@
 import {
-	channelMention,
-	MessageFlags,
-	SlashCommandBuilder,
-	time,
-	userMention,
+    channelMention,
+    MessageFlags,
+    SlashCommandBuilder,
+    time,
+    userMention,
 } from "discord.js";
 import { sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
-import { spendCredit, sendCreditNotification } from "../lib/credit";
+import { spendCredit } from "../lib/credit";
 import {
-	comparePermission,
-	getUsersWithMatchedPermission,
-	PermissionFlags,
-	readPermission,
+    comparePermission,
+    getUsersWithMatchedPermission,
+    PermissionFlags,
+    readPermission,
 } from "../lib/permission";
 
 import { sendMessagesToUsersById } from "../lib/utils";

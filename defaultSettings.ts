@@ -12,6 +12,7 @@ export const defaultCreditSettings: CreditSettings = {
 
 	checkUserCreditFee: 3,
 	checkUserPermissionFee: 3,
+	checkUserTicketFee: 3,
 	refreshDnsFee: 3,
 
 	newRunCommandPollFee: 20,

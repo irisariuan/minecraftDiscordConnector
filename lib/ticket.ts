@@ -4,8 +4,11 @@ import {
 	createTicketHistory,
 	countTicketHistories,
 } from "./db";
-import type { UserTicket as DbUserTicket } from "../generated/prisma/client";
-
+import type {
+	UserTicket as DbUserTicket,
+	Ticket as DbTicketType,
+} from "../generated/prisma/client";
+export { type DbUserTicket, type DbTicketType };
 export enum TicketAction {
 	Use = "use",
 }
