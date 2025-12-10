@@ -85,20 +85,19 @@ export default {
 				? await getUserLocalPermission(user.id, serverId)
 				: await readPermission(user);
 
-		if (user.id !== interaction.user.id) {
-			if (
-				!(await spendCredit(interaction, {
-					userId: interaction.user.id,
-					cost: settings.checkUserPermissionFee,
-					reason: `Check Permission Of User ${user.displayName}`,
-					serverId: serverId,
-				}))
-			) {
-				return await interaction.editReply({
-					content:
-						"You don't have enough credit to check other users' permission",
-				});
-			}
+		if (
+			user.id !== interaction.user.id &&
+			!(await spendCredit(interaction, {
+				userId: interaction.user.id,
+				cost: settings.checkUserPermissionFee,
+				reason: `Check Permission Of User ${user.displayName}`,
+				serverId: serverId,
+			}))
+		) {
+			return await interaction.editReply({
+				content:
+					"You don't have enough credit to check other users' permission",
+			});
 		}
 
 		if (permission) {

@@ -27,19 +27,18 @@ export default {
 			flags: [MessageFlags.Ephemeral],
 		});
 		const user = interaction.options.getUser("user") || interaction.user;
-		if (user.id !== interaction.user.id) {
-			if (
-				!(await spendCredit(interaction, {
-					userId: interaction.user.id,
-					cost: settings.checkUserCreditFee,
-					reason: `Check credit of user ${user.id}`,
-				}))
-			) {
-				return await interaction.editReply({
-					content:
-						"You don't have enough credit to check other users' credit",
-				});
-			}
+		if (
+			user.id !== interaction.user.id &&
+			!(await spendCredit(interaction, {
+				userId: interaction.user.id,
+				cost: settings.checkUserCreditFee,
+				reason: `Check credit of user ${user.id}`,
+			}))
+		) {
+			return await interaction.editReply({
+				content:
+					"You don't have enough credit to check other users' credit",
+			});
 		}
 
 		const creditData = await getCredit(user.id);
