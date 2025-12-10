@@ -6,7 +6,7 @@ import {
 	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { askToPay, getCredit } from "../lib/credit";
+import { spendCredit, getCredit } from "../lib/credit";
 import { settings } from "../lib/settings";
 
 export default {
@@ -29,7 +29,7 @@ export default {
 		const user = interaction.options.getUser("user") || interaction.user;
 		if (user.id !== interaction.user.id) {
 			if (
-				!(await askToPay(interaction, {
+				!(await spendCredit(interaction, {
 					userId: interaction.user.id,
 					cost: settings.checkUserCreditFee,
 					reason: `Check credit of user ${user.id}`,

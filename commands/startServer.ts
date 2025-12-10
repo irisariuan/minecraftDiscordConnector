@@ -7,7 +7,7 @@ import {
 } from "discord.js";
 import { sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
-import { askToPay, sendCreditNotification } from "../lib/credit";
+import { spendCredit, sendCreditNotification } from "../lib/credit";
 import {
 	comparePermission,
 	getUsersWithMatchedPermission,
@@ -72,7 +72,7 @@ export default {
 		await interaction.deleteReply();
 
 		if (
-			!(await askToPay(interaction, {
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newStartServerPollFee,
 				reason: "New Start Server Poll",

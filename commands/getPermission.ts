@@ -13,7 +13,7 @@ import {
 import { settings } from "../lib/settings";
 import { createServerSelectionMenu } from "../lib/embed/server";
 import { getUserLocalPermission } from "../lib/db";
-import { askToPay } from "../lib/credit";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -87,7 +87,7 @@ export default {
 
 		if (user.id !== interaction.user.id) {
 			if (
-				!(await askToPay(interaction, {
+				!(await spendCredit(interaction, {
 					userId: interaction.user.id,
 					cost: settings.checkUserPermissionFee,
 					reason: `Check Permission Of User ${user.displayName}`,

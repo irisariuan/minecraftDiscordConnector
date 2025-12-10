@@ -55,7 +55,7 @@ export interface CommandFile<RequireServer extends boolean> {
 }
 
 export async function loadCommands() {
-	const glob = new Bun.Glob("commands/**/*.ts");
+	const glob = new Bun.Glob("commands/*.ts");
 	const commands: CommandFile<boolean>[] = [];
 
 	for (const path of glob.scanSync(process.cwd())) {

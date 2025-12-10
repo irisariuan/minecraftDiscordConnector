@@ -14,7 +14,7 @@ import {
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
 import { sendMessagesToUsersById } from "../lib/utils";
-import { askToPay } from "../lib/credit";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -95,7 +95,7 @@ export default {
 				: `Stop Server (${server.config.tag ?? `Server #${server.id}`})`;
 
 		if (
-			!(await askToPay(interaction, {
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
 				cost: server.creditSettings.newStopServerPollFee,
 				reason: "New Stop Server Poll",

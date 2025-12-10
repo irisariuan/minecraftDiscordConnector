@@ -1,9 +1,13 @@
-import { TicketEffectType } from "../lib/credit";
+import { TicketEffectType } from "../lib/ticket";
 import { createRawTicketType } from "../lib/db";
 import { input, select } from "@inquirer/prompts";
 
 const name = await input({
 	message: "Please enter ticket type name",
+	required: true,
+});
+const id = await input({
+	message: "Please enter ticket type ID name",
 	required: true,
 });
 
@@ -56,6 +60,7 @@ const value = parseFloat(rawValue);
 try {
 	const ticketType = await createRawTicketType({
 		data: {
+			id,
 			name,
 			description: description || null,
 			effect,
