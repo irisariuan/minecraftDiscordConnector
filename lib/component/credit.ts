@@ -107,7 +107,6 @@ export async function getUserSelectedTicket(
 	});
 	return Promise.race([
 		new Promise<Ticket | undefined>((resolve) => {
-			selectCollector.on("end", () => resolve(undefined));
 			selectCollector.on("collect", async (interaction) => {
 				const value = interaction.values[0];
 				if (!value) {
