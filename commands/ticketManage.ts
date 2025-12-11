@@ -13,7 +13,7 @@ import {
 
 export default {
 	command: new SlashCommandBuilder()
-		.setName("ticket")
+		.setName("managetickets")
 		.setDescription("Manage tickets and ticket types")
 		.addSubcommandGroup((group) => initTicketGroup(group))
 		.addSubcommandGroup((group) => initTicketTypeGroup(group)),
