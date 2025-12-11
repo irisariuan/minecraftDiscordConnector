@@ -20,7 +20,7 @@ import {
 	downloadPluginFile,
 	listPluginVersions,
 	type PluginListVersionItem,
-} from "../lib/plugin";
+} from "../lib/server/plugin";
 
 export default {
 	command: new SlashCommandBuilder()

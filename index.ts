@@ -8,8 +8,11 @@ import {
 import "dotenv/config";
 import { updateApprovalMessage } from "./lib/approval";
 import { doNotRequireServer, loadCommands } from "./lib/commandFile";
+import { isApprovalMessageComponentId } from "./lib/component/approval";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
+import { createServer, hasAnyServer } from "./lib/db";
 import { updateDnsRecord } from "./lib/dnsRecord";
+import { createServerSelectionMenu } from "./lib/component/server";
 import {
 	compareAllPermissions,
 	comparePermission,
@@ -17,17 +20,14 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "./lib/permission";
+import { createServerManager, Server } from "./lib/server";
+import { serverConfig } from "./lib/server/plugin";
 import {
 	changeCreditSettings,
 	loadCreditSettings,
 	settings,
 } from "./lib/settings";
-import { getNextTimestamp } from "./lib/time";
-import { isApprovalMessageComponentId } from "./lib/component/approval";
-import { createServerManager, Server } from "./lib/server";
-import { createServer, hasAnyServer } from "./lib/db";
-import { serverConfig } from "./lib/plugin";
-import { createServerSelectionMenu } from "./lib/embed/server";
+import { getNextTimestamp } from "./lib/utils";
 
 const commands = await loadCommands();
 if (!(await hasAnyServer())) {

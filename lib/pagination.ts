@@ -1,22 +1,21 @@
 import {
-	ButtonInteraction,
-	ComponentType,
-	MessageComponentInteraction,
-	StringSelectMenuInteraction,
-	type ChatInputCommandInteraction,
-	type ColorResolvable,
+    ComponentType,
+    MessageComponentInteraction,
+    StringSelectMenuInteraction,
+    type ChatInputCommandInteraction,
+    type ColorResolvable
 } from "discord.js";
 import { CacheItem } from "./cache";
 import {
-	createButtons,
-	createEmbed,
-	createFilterModal,
-	createPageModal,
-	createSelectMenu,
-	ModalAction,
-	PageAction,
-	type SelectMenuOption,
-} from "./embed";
+    createButtons,
+    createEmbed,
+    createFilterModal,
+    createPageModal,
+    createSelectMenu,
+    ModalAction,
+    PageAction,
+    type SelectMenuOption,
+} from "./component/pagination";
 import { clamp } from "./utils";
 
 interface GetPageProps {

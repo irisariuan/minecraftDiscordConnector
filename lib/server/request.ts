@@ -1,4 +1,4 @@
-import { newTimeoutSignal, safeFetch } from "./utils";
+import { newTimeoutSignal, safeFetch } from "../utils";
 
 export type LogType = "info" | "warn" | "error" | "unknown";
 export interface LogLine {

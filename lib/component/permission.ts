@@ -4,6 +4,7 @@ import {
 	StringSelectMenuBuilder,
 } from "discord.js";
 import { PermissionFlags } from "../permission";
+import { trimTextWithSuffix } from "../utils";
 
 export enum PermissionSelectionMenu {
 	PERMISSION_SELECT_ID = "permission_select",
@@ -19,7 +20,7 @@ export function createPermissionSelectionMenu(page = 0) {
 		.setPlaceholder("Select a Permission")
 		.addOptions(
 			options.map(([name, value]) => ({
-				label: name.toUpperCase(),
+				label: trimTextWithSuffix(name.toUpperCase(), 25),
 				value: value.toString(),
 			})),
 		)

@@ -1,6 +1,6 @@
 import { ComponentType, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { removePluginByFileName } from "../lib/plugin";
+import { removePluginByFileName } from "../lib/server/plugin";
 import {
 	comparePermission,
 	readPermission,
