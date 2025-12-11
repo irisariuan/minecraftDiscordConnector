@@ -87,6 +87,22 @@ interface SendPaginationMessageProps<
 	) => Promise<boolean> | boolean;
 }
 
+interface BasePaginationProps<T> {
+	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
+	filterFunc?: (filter?: string) => (v: T) => boolean;
+	selectMenuTransform?: (v: T) => SelectMenuOption;
+	customComponentRows?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
+	formatter: (v: T, i: number) => { name: string; value: string };
+	options?: PaginationOptions;
+}
+
+interface EditInteractionProps<T> extends BasePaginationProps<T> {
+	result: CacheItem<T[]>;
+	page: number;
+	showSelectMenu: boolean;
+}
+
 export async function sendPaginationMessage<ResultType>(
 	props: SendPaginationMessageProps<ResultType>,
 ) {
@@ -256,33 +272,18 @@ export async function sendPaginationMessage<ResultType>(
 	return paginationCollector;
 }
 
-interface BasePaginationProps<T> {
-	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
-	filterFunc?: (filter?: string) => (v: T) => boolean;
-	selectMenuTransform?: (v: T) => SelectMenuOption;
-	customComponentRows?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
-	formatter: (v: T, i: number) => { name: string; value: string };
-	options?: PaginationOptions;
-}
-
-interface EditInteractionProps<T> extends BasePaginationProps<T> {
-	result: CacheItem<T[]>;
-	page: number;
-	showSelectMenu: boolean;
-}
-
-async function editInteraction<T>({
-	result,
-	interaction,
-	page,
-	options,
-	filterFunc,
-	formatter,
-	selectMenuTransform,
-	showSelectMenu,
-	customComponentRows,
-}: EditInteractionProps<T>) {
+async function editInteraction<T>(props: EditInteractionProps<T>) {
+	const {
+		result,
+		interaction,
+		page,
+		options,
+		filterFunc,
+		formatter,
+		selectMenuTransform,
+		showSelectMenu,
+		customComponentRows,
+	} = props;
 	const data = await result.getData();
 	if (!data || data.length <= 0) {
 		return await interaction.editReply({
