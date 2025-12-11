@@ -9,6 +9,7 @@ import {
 	type ChatInputCommandInteraction,
 	type AutocompleteInteraction,
 	time,
+	MessageFlags,
 } from "discord.js";
 import {
 	getRawTicketTypeById,
@@ -31,8 +32,16 @@ import {
 } from "../../lib/permission";
 import { spendCredit } from "../../lib/credit";
 import { settings } from "../../lib/settings";
-import { parseTimeString, formatTimeDuration } from "../../lib/utils";
+import {
+	parseTimeString,
+	formatTimeDuration,
+	trimTextWithSuffix,
+} from "../../lib/utils";
 import type { UserTicketUpdateInput } from "../../generated/prisma/models";
+import {
+	createTicketEmbed,
+	createTicketUpdateEmbed,
+} from "../../lib/embed/ticket";
 
 export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -279,6 +288,32 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					notFoundMessage: `${user.id === interaction.user.id ? "You have" : `${userMention(user.id)} has`} no tickets.`,
 				},
 				interactionFilter: (i) => i.user.id === interaction.user.id,
+				selectMenuTransform: (ticket: Ticket) => ({
+					label: trimTextWithSuffix(ticket.name, 100),
+					value: ticket.ticketId,
+					description: ticket.description
+						? `${trimTextWithSuffix(ticket.description, 50)}, ID: ${ticket.ticketId}`
+						: `No description, ID: ${ticket.ticketId}`,
+				}),
+				onItemSelected: async (menuInteraction, result) => {
+					await menuInteraction.deferUpdate();
+					const tickets = await result.getData();
+					const ticket = tickets?.find(
+						(t) => t.ticketId === menuInteraction.values[0],
+					);
+					if (!ticket) return true;
+					await menuInteraction.reply({
+						embeds: [
+							createTicketEmbed(
+								ticket,
+								user.username,
+								interaction.user.username,
+							),
+						],
+						flags: [MessageFlags.Ephemeral],
+					});
+					return true;
+				},
 			});
 			return;
 		}
@@ -484,24 +519,14 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					updates.push(`Reason: ${newReason}`);
 				}
 
-				const embed = new EmbedBuilder()
-					.setTitle("Ticket Updated")
-					.setColor("Orange")
-					.addFields(
-						{
-							name: "Ticket ID",
-							value: ticketId,
-							inline: true,
-						},
-						{
-							name: "Updates",
-							value: updates.join("\n"),
-							inline: false,
-						},
-					);
-
 				return await interaction.editReply({
-					embeds: [embed],
+					embeds: [
+						createTicketUpdateEmbed(
+							"Ticket Updated",
+							ticketId,
+							updates,
+						),
+					],
 				});
 			} catch (error) {
 				console.error("Error updating ticket:", error);
