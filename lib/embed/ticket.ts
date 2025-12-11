@@ -11,6 +11,25 @@ export function createTicketEmbed(
 	requestedUsername: string,
 	username: string,
 ) {
+	const useCount = ticket.histories?.length ?? 0;
+	const exceedMaxUseCount =
+		ticket.maxUse !== null && ticket.maxUse > 0
+			? useCount >= ticket.maxUse
+			: false;
+	const maxUseText =
+		ticket.maxUse !== null && ticket.maxUse > 0
+			? ` (${useCount}/${ticket.maxUse} uses)`
+			: ` (Used ${useCount} times)`;
+	let isExpired = false;
+	let expireText = "No expiration date";
+	if (ticket.expiresAt) {
+		const expireDate = new Date(ticket.expiresAt);
+		const now = new Date();
+		isExpired = expireDate <= now;
+		expireText = isExpired
+			? `**Expired** at ${time(expireDate)}`
+			: `Expires at ${time(expireDate)}`;
+	}
 	return new EmbedBuilder()
 		.setTitle(`${ticket.name} (${ticket.ticketTypeId})`)
 		.setColor("Blue")
@@ -31,22 +50,46 @@ export function createTicketEmbed(
 				inline: false,
 			},
 			{
+				name: "Reason",
+				value: ticket.reason || "No reason provided",
+				inline: false,
+			},
+			{
 				name: "Expiration",
-				value: ticket.expiresAt
-					? `Expires at ${time(new Date(ticket.expiresAt))}`
-					: "No expiration date",
+				value: expireText,
 				inline: true,
 			},
 			{
 				name: "Usage",
-				value: (() => {
-					const useCount = ticket.histories?.length ?? 0;
-					const maxUseText =
-						ticket.maxUse !== null && ticket.maxUse > 0
-							? ` (${useCount}/${ticket.maxUse} uses)`
-							: ` (Used ${useCount} times)`;
-					return `${maxUseText}`;
-				})(),
+				value: maxUseText,
+				inline: true,
+			},
+			{
+				name: "Histories",
+				value:
+					ticket.histories && ticket.histories.length > 0
+						? ticket.histories
+								.map(
+									(h, i) =>
+										`${i + 1}. ${time(
+											new Date(h.timestamp),
+										)} Action: \`${h.action}\`${
+											h.reason
+												? `, Reason: ${h.reason}`
+												: ""
+										}`,
+								)
+								.join("\n")
+						: "No history available",
+				inline: false,
+			},
+			{
+				name: "Availability",
+				value: exceedMaxUseCount
+					? "*Unavailable* (Exceeded max use)"
+					: isExpired
+						? "*Unavailable* (Expired)"
+						: "**Available**",
 				inline: true,
 			},
 		)

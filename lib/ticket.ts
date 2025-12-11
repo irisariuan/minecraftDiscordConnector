@@ -154,15 +154,17 @@ export async function getUserSelectedTicket(
 ): Promise<GetUserSelectedTicketReturn<boolean>> {
 	const time = 1000 * 60 * 2;
 	const indexPage = 0;
-	await message.edit({
-		components: [
-			createTicketSelectMenu(tickets, indexPage),
-			createTicketButtons(
-				indexPage > 0,
-				tickets.length > (indexPage + 1) * 25,
-			),
-		],
-	});
+	const updateMessage = async () =>
+		await message.edit({
+			components: [
+				createTicketSelectMenu(tickets, indexPage),
+				createTicketButtons(
+					indexPage > 0,
+					tickets.length > (indexPage + 1) * 25,
+				),
+			],
+		});
+	await updateMessage();
 
 	const buttonCollector = message.createMessageComponentCollector({
 		componentType: ComponentType.Button,
@@ -204,6 +206,7 @@ export async function getUserSelectedTicket(
 			selectCollector.on("collect", async (interaction) => {
 				const value = interaction.values[0];
 				if (!value) {
+					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
 						flags: [MessageFlags.Ephemeral],
@@ -211,6 +214,7 @@ export async function getUserSelectedTicket(
 				}
 				const ticketFound = tickets.find((v) => v.ticketId === value);
 				if (!ticketFound) {
+					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
 						flags: [MessageFlags.Ephemeral],
@@ -223,7 +227,6 @@ export async function getUserSelectedTicket(
 				const confirmation = await interaction.reply({
 					content: `After using this ticket, you will have to pay \`${finalCost}\` credits`,
 					withResponse: true,
-					flags: [MessageFlags.Ephemeral],
 					components: [
 						createRequestComponent({
 							showAllow: true,
@@ -242,6 +245,7 @@ export async function getUserSelectedTicket(
 						filter: (i) => i.user.id === userId,
 					})
 					.catch(() => null);
+				if (finalMessage.deletable) await finalMessage.delete().catch(() => {});
 				if (!requestStatus) {
 					await interaction.followUp({
 						content: "Request timed out.",
@@ -254,6 +258,7 @@ export async function getUserSelectedTicket(
 					});
 				}
 				if (requestStatus.customId !== RequestComponentId.Allow) {
+					await updateMessage();
 					await requestStatus.reply({
 						content:
 							"Ticket application cancelled. You can choose another ticket or not use any.",
