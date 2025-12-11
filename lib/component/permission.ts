@@ -20,7 +20,7 @@ export function createPermissionSelectionMenu(page = 0) {
 		.setPlaceholder("Select a Permission")
 		.addOptions(
 			options.map(([name, value]) => ({
-				label: trimTextWithSuffix(name.toUpperCase(), 25),
+				label: trimTextWithSuffix(name.toUpperCase(), 100),
 				value: value.toString(),
 			})),
 		)
