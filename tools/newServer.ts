@@ -84,7 +84,7 @@ try {
 		loaderType,
 		modType,
 		version,
-		tag: tag || null,
+		tag: tag ?? null,
 	});
 
 	console.log(`Server created successfully with ID: ${server.id}`);

@@ -80,7 +80,7 @@ export default {
 				command,
 			);
 			await interaction.editReply(
-				parseCommandOutput((await output)?.join("\n") || null, success),
+				parseCommandOutput((await output)?.join("\n") ?? null, success),
 			);
 		}
 		await interaction.deleteReply();
@@ -131,14 +131,14 @@ export default {
 					}
 					await message.reply(
 						parseCommandOutput(
-							(await output)?.join("\n") || null,
+							(await output)?.join("\n") ?? null,
 							success,
 						),
 					);
 				},
 				credit: server.creditSettings.runCommandVoteFee,
 			},
-			duration: timeout || undefined,
+			duration: timeout ?? undefined,
 			server,
 		});
 	},

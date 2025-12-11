@@ -39,7 +39,7 @@ for (const [userId, details] of Object.entries(creditJson.users)) {
 	await createUser({
 		id: userId,
 		credits: details.currentCredit,
-		permission: permissionJson[userId] || 0,
+		permission: permissionJson[userId] ?? 0,
 	});
 	await newBulkTransactions(
 		details.histories.map((history) => ({

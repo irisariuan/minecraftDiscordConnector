@@ -24,6 +24,7 @@ import {
 	createPermissionSelectionMenu,
 	PermissionSelectionMenu,
 } from "../lib/embed/permission";
+import { clamp } from "../lib/utils";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -289,7 +290,11 @@ export default {
 				return;
 			}
 			case "select": {
-				const page = (interaction.options.getInteger("page") ?? 1) - 1;
+				const page = clamp(
+					(interaction.options.getInteger("page") ?? 1) - 1,
+					0,
+					Math.floor(Object.keys(PermissionFlags).length / 25),
+				);
 				const reply = await interaction.editReply({
 					content: "Please select permissions:",
 					components: [

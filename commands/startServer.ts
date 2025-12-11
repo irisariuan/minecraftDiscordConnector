@@ -36,7 +36,7 @@ export default {
 			});
 		}
 
-		const force = interaction.options.getBoolean("force") || false;
+		const force = interaction.options.getBoolean("force") ?? false;
 		if (await server.isOnline.getData(true))
 			return await interaction.followUp({
 				content: "Server is already online",

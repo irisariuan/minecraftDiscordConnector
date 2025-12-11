@@ -73,7 +73,7 @@ export class Server {
 
 	constructor({
 		shutdownAllowedTime,
-		defaultSuspending = isTrueValue(process.env.DEFAULT_SUSPENDING || "") ||
+		defaultSuspending = isTrueValue(process.env.DEFAULT_SUSPENDING || "") ??
 			false,
 		serverId,
 		config,
@@ -164,7 +164,7 @@ export class Server {
 					unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ??
 					unformattedChunk;
 				this.outputLines.push({
-					timestamp: timestamp || null,
+					timestamp: timestamp ?? null,
 					type:
 						serverTypeRef[level as keyof typeof serverTypeRef] ??
 						"unknown",

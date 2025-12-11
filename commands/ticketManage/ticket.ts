@@ -219,7 +219,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						undefined,
 						false,
 					);
-					return tickets || [];
+					return tickets ?? [];
 				},
 				formatter: (ticket: Ticket) => {
 					const useCount = ticket.histories?.length ?? 0;

@@ -12,7 +12,7 @@ export default {
 		server.suspendingEvent.setSuspending(false);
 		setActivity(
 			client,
-			(await server.isOnline.getData()) || false,
+			(await server.isOnline.getData()) ?? false,
 			server.suspendingEvent.isSuspending(),
 			server.config.minecraftVersion,
 		);
