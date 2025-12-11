@@ -1,29 +1,29 @@
 import {
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ComponentType,
-    italic,
-    MessageFlags,
-    time,
-    type GuildMember,
-    type Interaction,
-    type PartialUser,
-    type User,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ComponentType,
+	italic,
+	MessageFlags,
+	time,
+	type GuildMember,
+	type Interaction,
+	type PartialUser,
+	type User,
 } from "discord.js";
 import { getUserById, newTransaction, setUserCredits } from "./db";
 import {
-    comparePermission,
-    PermissionFlags,
-    readPermission,
+	comparePermission,
+	PermissionFlags,
+	readPermission,
 } from "./permission";
 import {
-    calculateTicketEffect,
-    getUserSelectedTicket,
-    getUserTicketsByUserId,
-    TicketEffectType,
-    useUserTicket,
-    type Ticket,
+	calculateTicketEffect,
+	getUserSelectedTicket,
+	getUserTicketsByUserId,
+	TicketEffectType,
+	useUserTicket,
+	type Ticket,
 } from "./ticket";
 
 export interface UserCredit {
@@ -84,11 +84,13 @@ export async function changeCredit({
 	change,
 	serverId,
 	reason,
+	ticketId,
 }: {
 	userId: string;
 	change: number;
 	serverId?: number;
 	reason: string;
+	ticketId?: string;
 }) {
 	const userCreditFetched = await getCredit(userId);
 	if (!userCreditFetched) return null;
@@ -107,6 +109,13 @@ export async function changeCredit({
 		afterAmount: userCreditFetched.currentCredit + change,
 		beforeAmount: userCreditFetched.currentCredit,
 		amount: change,
+		ticket: {
+			connect: ticketId
+				? {
+						id: ticketId,
+					}
+				: undefined,
+		},
 		reason,
 		timestamp: new Date(),
 	});
@@ -267,6 +276,7 @@ export async function spendCredit(
 				change: -finalCost,
 				reason: reasonString,
 				serverId,
+				ticketId: selectedTicket.ticketId,
 			});
 			await message.delete().catch(() => {});
 			await sendCreditNotification({

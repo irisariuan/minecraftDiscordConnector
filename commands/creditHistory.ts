@@ -84,9 +84,9 @@ export default {
 					history.creditBefore
 				}\`➡️\`${history.creditAfter}\`\nDate: ${time(
 					new Date(history.timestamp),
-				)}${history.reason ? `\nReason: \`${history.reason}\`` : ""}\n${
+				)}${history.reason ? `\nReason: \`${history.reason}\`` : ""}${
 					history.ticketUsed !== null
-						? `Ticket Used: \`${history.ticketUsed.name}\` (\`${history.ticketUsed.ticketId}\`)\n`
+						? `\nTicket Used: \`${history.ticketUsed.name}\` (\`${history.ticketUsed.ticketId}\`)`
 						: ""
 				}\nID: \`${history.trackingId}\`\n${
 					history.serverTag !== null
