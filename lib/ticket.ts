@@ -279,13 +279,16 @@ export async function getUserSelectedTicket(
 				componentType: ComponentType.Button,
 				filter: (i) =>
 					i.user.id === userId &&
-					i.customId === TicketSelectMenu.TICKET_NO_USE_ID,
+					(i.customId === TicketSelectMenu.TICKET_NO_USE_ID ||
+						i.customId === TicketSelectMenu.TICKET_CANCEL_ID),
 				time,
 			})
 			.then(
-				() =>
+				(interaction) =>
 					({
-						cancelled: false,
+						cancelled:
+							interaction.customId ===
+							TicketSelectMenu.TICKET_CANCEL_ID,
 						useTicket: false,
 						ticket: null,
 					}) satisfies GetUserSelectedTicketReturn<false>,

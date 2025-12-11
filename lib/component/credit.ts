@@ -8,15 +8,16 @@ export enum TicketSelectMenu {
 	TICKET_SELECT_NEXT_ID = "ticket_select_next",
 	TICKET_SELECT_PREV_ID = "ticket_select_prev",
 	TICKET_NO_USE_ID = "ticket_no_use",
+	TICKET_CANCEL_ID = "ticket_cancel",
 }
 
 export function createTicketSelectMenu(tickets: Ticket[], page = 0) {
 	const options = tickets
 		.map((v) => ({
-			label: trimTextWithSuffix(v.name, 25),
+			label: trimTextWithSuffix(v.name, 100),
 			value: v.ticketId,
 			description: v.description
-				? `${trimTextWithSuffix(v.description, 12)}, ID: ${v.ticketId}`
+				? `${trimTextWithSuffix(v.description, 60)}, ID: ${v.ticketId}`
 				: `No description, ID: ${v.ticketId}`,
 		}))
 		.slice(page * 25, (page + 1) * 25);
@@ -42,8 +43,12 @@ export function createTicketButtons(showPrev: boolean, showNext: boolean) {
 		.setCustomId(TicketSelectMenu.TICKET_NO_USE_ID)
 		.setLabel("Do Not Use a Ticket")
 		.setStyle(4);
+	const cancelButton = new ButtonBuilder()
+		.setCustomId(TicketSelectMenu.TICKET_CANCEL_ID)
+		.setLabel("Cancel")
+		.setStyle(4);
 	if (showPrev) row.addComponents(prevButton);
 	if (showNext) row.addComponents(nextButton);
-	row.addComponents(noUseButton);
+	row.addComponents(noUseButton, cancelButton);
 	return row;
 }

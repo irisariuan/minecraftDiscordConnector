@@ -76,7 +76,7 @@ export default {
 				unfixablePageNumber: true,
 			},
 			selectMenuTransform: (plugin) => ({
-				label: plugin.title,
+				label: trimTextWithSuffix(plugin.title, 100),
 				description: trimTextWithSuffix(plugin.description, 100),
 				value: plugin.slug,
 			}),

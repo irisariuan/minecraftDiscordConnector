@@ -13,7 +13,7 @@ export function createServerSelectionMenu(options: TagPair[]) {
 		.addOptions(
 			options.map((option) => ({
 				label: trimTextWithSuffix(
-					option.tag ?? option.id.toString(),
+					trimTextWithSuffix(option.tag ?? option.id.toString(), 100),
 					25,
 				),
 				value: option.id.toString(),
