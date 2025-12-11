@@ -1,47 +1,45 @@
 import {
-	EmbedBuilder,
+	type AutocompleteInteraction,
+	type ChatInputCommandInteraction,
 	GuildMember,
+	MessageFlags,
 	Role,
 	roleMention,
 	SlashCommandSubcommandGroupBuilder,
-	User,
-	userMention,
-	type ChatInputCommandInteraction,
-	type AutocompleteInteraction,
 	time,
-	MessageFlags,
+	User,
+	userMention
 } from "discord.js";
+import type { UserTicketUpdateInput } from "../../generated/prisma/models";
+import { spendCredit } from "../../lib/credit";
 import {
-	getRawTicketTypeById,
 	createRawUserTicket,
-	getRawUserTicket,
 	deleteRawUserTicket,
-	updateRawUserTicket,
 	getAllRawTicketTypes,
+	getRawTicketTypeById,
+	getRawUserTicket,
+	updateRawUserTicket,
 } from "../../lib/db";
+import {
+	createTicketEmbed,
+	createTicketUpdateEmbed,
+} from "../../lib/embed/ticket";
 import { sendPaginationMessage } from "../../lib/pagination";
+import {
+	comparePermission,
+	PermissionFlags,
+	readPermission,
+} from "../../lib/permission";
+import { settings } from "../../lib/settings";
 import {
 	getUserTicketsByUserId,
 	type Ticket,
 	TicketEffectTypeNames,
 } from "../../lib/ticket";
 import {
-	comparePermission,
-	readPermission,
-	PermissionFlags,
-} from "../../lib/permission";
-import { spendCredit } from "../../lib/credit";
-import { settings } from "../../lib/settings";
-import {
 	parseTimeString,
-	formatTimeDuration,
-	trimTextWithSuffix,
+	trimTextWithSuffix
 } from "../../lib/utils";
-import type { UserTicketUpdateInput } from "../../generated/prisma/models";
-import {
-	createTicketEmbed,
-	createTicketUpdateEmbed,
-} from "../../lib/embed/ticket";
 
 export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -296,13 +294,15 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						: `No description, ID: ${ticket.ticketId}`,
 				}),
 				onItemSelected: async (menuInteraction, result) => {
-					await menuInteraction.deferUpdate();
+					await menuInteraction.deferReply({
+						flags: [MessageFlags.Ephemeral],
+					});
 					const tickets = await result.getData();
 					const ticket = tickets?.find(
 						(t) => t.ticketId === menuInteraction.values[0],
 					);
-					if (!ticket) return true;
-					await menuInteraction.reply({
+					if (!ticket) return false;
+					await menuInteraction.editReply({
 						embeds: [
 							createTicketEmbed(
 								ticket,
@@ -310,9 +310,8 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 								interaction.user.username,
 							),
 						],
-						flags: [MessageFlags.Ephemeral],
 					});
-					return true;
+					return false;
 				},
 			});
 			return;
