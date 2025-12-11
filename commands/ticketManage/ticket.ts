@@ -226,21 +226,35 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					const maxUseText = ticket.maxUse
 						? ` (${useCount}/${ticket.maxUse} uses)`
 						: ` (${useCount} uses)`;
+					const exceedMaxUseCount =
+						ticket.maxUse && ticket.maxUse > 0
+							? useCount < ticket.maxUse
+							: true;
 
 					// Add expiration info if ticket has an expiration date
 					let expireText = "";
+					let isExpired = false;
 					if (ticket.expiresAt) {
 						const expireDate = new Date(ticket.expiresAt);
 						const now = new Date();
-						const isExpired = expireDate <= now;
+						isExpired = expireDate <= now;
 						expireText = isExpired
-							? `\n⚠️ Expired at ${time(expireDate)}`
-							: `\n⏰ Expires at ${time(expireDate)}`;
+							? `\nExpired at ${time(expireDate)}`
+							: `\nExpires at ${time(expireDate)}`;
 					}
 
 					return {
 						name: `${ticket.name} (${ticket.ticketTypeId})`,
-						value: `ID: \`${ticket.ticketId}\`\nEffect: ${TicketEffectTypeNames[ticket.effect.effect] ?? "Unknown effect"} (${ticket.effect.value})\n${ticket.description || "No description"}${maxUseText}${expireText}`,
+						value: `ID: \`${ticket.ticketId}\`\nEffect: ${
+							TicketEffectTypeNames[ticket.effect.effect] ??
+							"Unknown effect"
+						} (${ticket.effect.value})\n${
+							ticket.description || "No description"
+						}\nAvailability: ${
+							isExpired || !exceedMaxUseCount
+								? "❌ Not usable"
+								: "✅ Usable"
+						}${maxUseText}${expireText}`,
 					};
 				},
 				filterFunc: (filter?: string) => (ticket: Ticket) => {
