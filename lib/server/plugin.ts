@@ -1,8 +1,8 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
-import { deletePluginByPath, upsertNewPlugin } from "./db";
-import type { Server } from "./server";
-import { ensureSuffix, removeSuffix, safeFetch, safeJoin } from "./utils";
+import { deletePluginByPath, upsertNewPlugin } from "../db";
+import type { Server } from "../server";
+import { ensureSuffix, removeSuffix, safeFetch, safeJoin } from "../utils";
 
 if (
 	!process.env.MINECRAFT_VERSION ||

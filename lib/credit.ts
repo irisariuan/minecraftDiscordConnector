@@ -1,30 +1,30 @@
 import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	ComponentType,
-	italic,
-	MessageFlags,
-	time,
-	type GuildMember,
-	type Interaction,
-	type PartialUser,
-	type User,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ComponentType,
+    italic,
+    MessageFlags,
+    time,
+    type GuildMember,
+    type Interaction,
+    type PartialUser,
+    type User,
 } from "discord.js";
-import {
-	comparePermission,
-	PermissionFlags,
-	readPermission,
-} from "./permission";
 import { getUserById, newTransaction, setUserCredits } from "./db";
 import {
-	calculateTicketEffect,
-	getUserTicketsByUserId,
-	TicketEffectType,
-	useUserTicket,
-	type Ticket,
+    comparePermission,
+    PermissionFlags,
+    readPermission,
+} from "./permission";
+import {
+    calculateTicketEffect,
+    getUserSelectedTicket,
+    getUserTicketsByUserId,
+    TicketEffectType,
+    useUserTicket,
+    type Ticket,
 } from "./ticket";
-import { getUserSelectedTicket } from "./component/credit";
 
 export interface UserCredit {
 	userId: string;
@@ -243,21 +243,18 @@ export async function spendCredit(
 	const message = await interaction.channel.send({
 		content: `You need to pay \`${cost}\` credits for this action. You have \`${credit.currentCredit}\` credits.\nYou can also use a ticket to reduce the cost.`,
 	});
-	const selectedTicket = await getUserSelectedTicket(
-		message,
-		userId,
-		tickets,
-		cost,
-	).catch((err) => {
-		console.error("Error getting selected ticket:", err);
-		return undefined;
-	});
-	if (selectedTicket === undefined) {
+	const {
+		cancelled,
+		ticket: selectedTicket,
+		useTicket,
+	} = await getUserSelectedTicket(message, userId, tickets, cost);
+
+	if (cancelled) {
 		console.error("No ticket selected, cancelling payment.");
 		await message.delete().catch(() => {});
 		return null;
 	}
-	if (selectedTicket) {
+	if (selectedTicket && useTicket) {
 		const finalCost = calculateTicketEffect(selectedTicket.effect, cost);
 		if (!(await canSpendCredit(userId, finalCost))) {
 			await message.delete().catch(() => {});

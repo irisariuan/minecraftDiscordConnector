@@ -7,8 +7,8 @@ import type { Approval } from "./approval";
 import { CacheItem } from "./cache";
 import { changeCredit, sendCreditNotification } from "./credit";
 import { getAllServers } from "./db";
-import { type ServerConfig } from "./plugin";
-import { type LogLine } from "./request";
+import { type ServerConfig } from "./server/plugin";
+import { type LogLine } from "./server/request";
 import {
 	loadServerApprovalSetting,
 	loadServerCreditSetting,

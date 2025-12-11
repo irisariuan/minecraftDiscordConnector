@@ -17,7 +17,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { createServerSelectionMenu } from "../lib/embed/server";
+import { createServerSelectionMenu } from "../lib/component/server";
 import type { Server } from "../lib/server";
 import { SettingType } from "../lib/db";
 export default {

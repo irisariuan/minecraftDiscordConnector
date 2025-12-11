@@ -18,12 +18,12 @@ import {
 	removePermission,
 } from "../lib/permission";
 import { updateUserPermission } from "../lib/db";
-import { createServerSelectionMenu } from "../lib/embed/server";
+import { createServerSelectionMenu } from "../lib/component/server";
 import {
 	createPermissionResetButton,
 	createPermissionSelectionMenu,
 	PermissionSelectionMenu,
-} from "../lib/embed/permission";
+} from "../lib/component/permission";
 import { clamp } from "../lib/utils";
 
 export default {

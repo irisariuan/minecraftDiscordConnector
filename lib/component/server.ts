@@ -1,5 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from "discord.js";
 import type { TagPair } from "../server";
+import { trimTextWithSuffix } from "../utils";
 
 export enum ServerSelectionMenuAction {
 	SERVER_SELECT_ID = "server_select",
@@ -11,7 +12,10 @@ export function createServerSelectionMenu(options: TagPair[]) {
 		.setPlaceholder("Select a server")
 		.addOptions(
 			options.map((option) => ({
-				label: option.tag ?? option.id.toString(),
+				label: trimTextWithSuffix(
+					option.tag ?? option.id.toString(),
+					25,
+				),
 				value: option.id.toString(),
 			})),
 		);

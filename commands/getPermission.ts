@@ -11,7 +11,7 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { settings } from "../lib/settings";
-import { createServerSelectionMenu } from "../lib/embed/server";
+import { createServerSelectionMenu } from "../lib/component/server";
 import { getUserLocalPermission } from "../lib/db";
 import { spendCredit } from "../lib/credit";
 

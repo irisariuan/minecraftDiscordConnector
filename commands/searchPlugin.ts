@@ -4,7 +4,7 @@ import {
 	searchPlugins,
 	type PluginListVersionItem,
 	type PluginSearchQueryItem,
-} from "../lib/plugin";
+} from "../lib/server/plugin";
 import type { CommandFile } from "../lib/commandFile";
 import { sendPaginationMessage } from "../lib/pagination";
 import { trimTextWithSuffix } from "../lib/utils";
@@ -28,9 +28,9 @@ export default {
 
 		sendPaginationMessage<PluginSearchQueryItem<false>>({
 			interaction,
-			async getResult(page, filter) {
+			async getResult({ pageNumber, filter }) {
 				const results = [];
-				for (let i = 0; i < Math.ceil((page + 1) / 5); i++) {
+				for (let i = 0; i < Math.ceil((pageNumber + 1) / 5); i++) {
 					const plugins = await searchPlugins({
 						offset: i * 20,
 						query: filter,
