@@ -223,13 +223,13 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				},
 				formatter: (ticket: Ticket) => {
 					const useCount = ticket.histories?.length ?? 0;
-					const maxUseText = ticket.maxUse
-						? ` (${useCount}/${ticket.maxUse} uses)`
-						: ` (${useCount} uses)`;
 					const exceedMaxUseCount =
-						ticket.maxUse && ticket.maxUse > 0
+						ticket.maxUse !== null && ticket.maxUse > 0
 							? useCount < ticket.maxUse
 							: true;
+					const maxUseText = ticket.maxUse !== null && ticket.maxUse > 0
+						? ` (${useCount}/${ticket.maxUse} uses)`
+						: ` (Used ${useCount} times)`;
 
 					// Add expiration info if ticket has an expiration date
 					let expireText = "No expiration date";
@@ -251,7 +251,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						} (${ticket.effect.value})\n${
 							ticket.description || "No description"
 						}\nAvailability: ${
-							isExpired || !exceedMaxUseCount
+							isExpired || exceedMaxUseCount
 								? "❌ Not usable"
 								: "✅ Usable"
 						}${maxUseText}\n${expireText}`,
