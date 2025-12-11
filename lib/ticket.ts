@@ -151,6 +151,10 @@ export async function useUserTicket(ticketId: string, reason?: string) {
 	return true;
 }
 
+interface GetUserSelectedTicketMessageSetting {
+	confirmationMessage: (ticket: Ticket) => Promise<string> | string;
+}
+
 interface GetUserSelectedTicketReturn<UseTicket extends boolean> {
 	useTicket: UseTicket;
 	ticket: UseTicket extends true ? Ticket : null;
@@ -161,7 +165,7 @@ export async function getUserSelectedTicket(
 	message: Message,
 	userId: string,
 	tickets: Ticket[],
-	originalCost: number,
+	setting?: Partial<GetUserSelectedTicketMessageSetting>,
 ): Promise<GetUserSelectedTicketReturn<boolean>> {
 	const time = 1000 * 60 * 2;
 	const indexPage = 0;
@@ -231,12 +235,10 @@ export async function getUserSelectedTicket(
 						flags: [MessageFlags.Ephemeral],
 					});
 				}
-				const finalCost = calculateTicketEffect(
-					ticketFound.effect,
-					originalCost,
-				);
 				const confirmation = await interaction.reply({
-					content: `After using this ticket, you will have to pay \`${finalCost}\` credits`,
+					content:
+						(await setting?.confirmationMessage?.(ticketFound)) ??
+						`You have selected the ticket \`${ticketFound.name}\`. Do you want to apply this ticket?`,
 					withResponse: true,
 					components: [
 						createRequestComponent({

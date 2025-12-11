@@ -256,7 +256,12 @@ export async function spendCredit(
 		cancelled,
 		ticket: selectedTicket,
 		useTicket,
-	} = await getUserSelectedTicket(message, userId, tickets, cost);
+	} = await getUserSelectedTicket(message, userId, tickets, {
+		confirmationMessage: (ticket) => {
+			const finalCost = calculateTicketEffect(ticket.effect, cost);
+			return `After using this ticket, you will have to pay \`${finalCost}\` credits`;
+		},
+	});
 
 	if (cancelled) {
 		console.error("No ticket selected, cancelling payment.");
