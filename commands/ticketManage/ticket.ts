@@ -239,8 +239,8 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						const now = new Date();
 						isExpired = expireDate <= now;
 						expireText = isExpired
-							? `\nExpired at ${time(expireDate)}`
-							: `\nExpires at ${time(expireDate)}`;
+							? `Expired at ${time(expireDate)}`
+							: `Expires at ${time(expireDate)}`;
 					}
 
 					return {
@@ -254,7 +254,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 							isExpired || !exceedMaxUseCount
 								? "❌ Not usable"
 								: "✅ Usable"
-						}${maxUseText}${expireText}`,
+						}${maxUseText}\n${expireText}`,
 					};
 				},
 				filterFunc: (filter?: string) => (ticket: Ticket) => {
