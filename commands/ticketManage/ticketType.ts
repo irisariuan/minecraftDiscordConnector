@@ -23,6 +23,10 @@ import {
 	readPermission,
 } from "../../lib/permission";
 import type { TicketUpdateInput } from "../../generated/prisma/models";
+import {
+	createTicketTypeUpdateEmbed,
+	createTicketUpdateEmbed,
+} from "../../lib/embed/ticket";
 
 export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -268,36 +272,8 @@ export async function ticketTypeHandler(
 					},
 				});
 
-				const embed = new EmbedBuilder()
-					.setTitle("Ticket Type Created")
-					.setColor("Green")
-					.addFields(
-						{
-							name: "ID",
-							value: newTicketType.id,
-							inline: true,
-						},
-						{
-							name: "Name",
-							value: newTicketType.name,
-							inline: true,
-						},
-						{
-							name: "Effect",
-							value: `${TicketEffectTypeNames[effect] ?? "Unknown effect"} (${value})`,
-							inline: true,
-						},
-					);
-
-				if (description) {
-					embed.addFields({
-						name: "Description",
-						value: description,
-					});
-				}
-
 				return await interaction.editReply({
-					embeds: [embed],
+					embeds: [createTicketTypeUpdateEmbed(newTicketType)],
 				});
 			} catch (error) {
 				return await interaction.editReply({
@@ -374,24 +350,14 @@ export async function ticketTypeHandler(
 					updates.push(`Value: ${newValue}`);
 				}
 
-				const embed = new EmbedBuilder()
-					.setTitle("Ticket Type Updated")
-					.setColor("Orange")
-					.addFields(
-						{
-							name: "ID",
-							value: ticketTypeId,
-							inline: true,
-						},
-						{
-							name: "Updates",
-							value: updates.join("\n"),
-							inline: false,
-						},
-					);
-
 				return await interaction.editReply({
-					embeds: [embed],
+					embeds: [
+						createTicketUpdateEmbed(
+							"Ticket Type Updated",
+							ticketTypeId,
+							updates,
+						),
+					],
 				});
 			} catch (error) {
 				console.error("Error updating ticket type:", error);
