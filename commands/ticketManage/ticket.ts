@@ -8,7 +8,7 @@ import {
 	SlashCommandSubcommandGroupBuilder,
 	time,
 	User,
-	userMention
+	userMention,
 } from "discord.js";
 import type { UserTicketUpdateInput } from "../../generated/prisma/models";
 import { spendCredit } from "../../lib/credit";
@@ -36,10 +36,7 @@ import {
 	type Ticket,
 	TicketEffectTypeNames,
 } from "../../lib/ticket";
-import {
-	parseTimeString,
-	trimTextWithSuffix
-} from "../../lib/utils";
+import { parseTimeString, trimTextWithSuffix } from "../../lib/utils";
 
 export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -226,7 +223,21 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						undefined,
 						false,
 					);
-					return tickets ?? [];
+					return (
+						tickets?.toSorted((a, b) => {
+							// sort by used times first (least used first), then by expiration date (soonest first)
+							return (
+								(a.histories?.length ?? 0) -
+									(b.histories?.length ?? 0) ||
+								(a.expiresAt
+									? a.expiresAt.getTime()
+									: Infinity) -
+									(b.expiresAt
+										? b.expiresAt.getTime()
+										: Infinity)
+							);
+						}) ?? []
+					);
 				},
 				formatter: (ticket: Ticket) => {
 					const useCount = ticket.histories?.length ?? 0;
