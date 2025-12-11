@@ -240,7 +240,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						const now = new Date();
 						isExpired = expireDate <= now;
 						expireText = isExpired
-							? `Expired at ${time(expireDate)}`
+							? `**Expired** at ${time(expireDate)}`
 							: `Expires at ${time(expireDate)}`;
 					}
 
