@@ -33,6 +33,7 @@ import {
 import { settings } from "../../lib/settings";
 import {
 	getUserTicketsByUserId,
+	isTicketAvailable,
 	type Ticket,
 	TicketEffectTypeNames,
 } from "../../lib/ticket";
@@ -225,26 +226,20 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					);
 					return (
 						tickets?.toSorted((a, b) => {
-							// sort by used times first (least used first), then by expiration date (soonest first)
+							// sort by availability, then by expiration date (soonest first), then by use count
 							return (
+								Number(isTicketAvailable(b)) -
+									Number(isTicketAvailable(a)) ||
+								(a.expiresAt?.getTime() ?? Infinity) -
+									(b.expiresAt?.getTime() ?? Infinity) ||
 								(a.histories?.length ?? 0) -
-									(b.histories?.length ?? 0) ||
-								(a.expiresAt
-									? a.expiresAt.getTime()
-									: Infinity) -
-									(b.expiresAt
-										? b.expiresAt.getTime()
-										: Infinity)
+									(b.histories?.length ?? 0)
 							);
 						}) ?? []
 					);
 				},
 				formatter: (ticket: Ticket) => {
 					const useCount = ticket.histories?.length ?? 0;
-					const exceedMaxUseCount =
-						ticket.maxUse !== null && ticket.maxUse > 0
-							? useCount >= ticket.maxUse
-							: false;
 					const maxUseText =
 						ticket.maxUse !== null && ticket.maxUse > 0
 							? ` (${useCount}/${ticket.maxUse} uses)`
@@ -270,9 +265,9 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						} (${ticket.effect.value})\n${
 							ticket.description || "No description"
 						}\n${expireText}\nAvailability: ${
-							isExpired || exceedMaxUseCount
-								? "❌ Not usable"
-								: "✅ Usable"
+							isTicketAvailable(ticket)
+								? "✅ Usable"
+								: "❌ Not usable"
 						}${maxUseText}`,
 					};
 				},
