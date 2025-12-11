@@ -226,7 +226,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					const exceedMaxUseCount =
 						ticket.maxUse !== null && ticket.maxUse > 0
 							? useCount < ticket.maxUse
-							: true;
+							: false;
 					const maxUseText = ticket.maxUse !== null && ticket.maxUse > 0
 						? ` (${useCount}/${ticket.maxUse} uses)`
 						: ` (Used ${useCount} times)`;
