@@ -1,20 +1,22 @@
 import {
-    ComponentType,
-    MessageComponentInteraction,
-    StringSelectMenuInteraction,
-    type ChatInputCommandInteraction,
-    type ColorResolvable
+	ActionRowBuilder,
+	ComponentType,
+	MessageComponentInteraction,
+	StringSelectMenuInteraction,
+	type ChatInputCommandInteraction,
+	type ColorResolvable,
+	type MessageActionRowComponentBuilder,
 } from "discord.js";
 import { CacheItem } from "./cache";
 import {
-    createButtons,
-    createEmbed,
-    createFilterModal,
-    createPageModal,
-    createSelectMenu,
-    ModalAction,
-    PageAction,
-    type SelectMenuOption,
+	createButtons,
+	createEmbed,
+	createFilterModal,
+	createPageModal,
+	createSelectMenu,
+	ModalAction,
+	PageAction,
+	type SelectMenuOption,
 } from "./component/pagination";
 import { clamp } from "./utils";
 
@@ -76,6 +78,13 @@ interface SendPaginationMessageProps<
 		interaction: StringSelectMenuInteraction,
 		currentResult: CacheItem<ResultType[]>,
 	) => Promise<boolean> | boolean;
+	/**
+	 * @returns {boolean} If we should stop to listen to the component rows
+	 */
+	onComponentRowsReacted?: (
+		interaction: MessageComponentInteraction,
+		currentResult: CacheItem<ResultType[]>,
+	) => Promise<boolean> | boolean;
 }
 
 export async function sendPaginationMessage<ResultType>(
@@ -86,10 +95,10 @@ export async function sendPaginationMessage<ResultType>(
 		interaction,
 		options,
 		filterFunc,
-		formatter,
 		onItemSelected,
 		selectMenuTransform,
 		interactionFilter,
+		onComponentRowsReacted,
 	} = props;
 	let page = 0;
 	const result = new CacheItem<ResultType[]>(null, {
@@ -236,6 +245,14 @@ export async function sendPaginationMessage<ResultType>(
 			showSelectMenu = false;
 		}
 	});
+
+	const customCollector =
+		interactionResponse.createMessageComponentCollector();
+	customCollector.on("collect", async (reaction) => {
+		if (await onComponentRowsReacted?.(reaction, result)) {
+			customCollector.stop();
+		}
+	});
 	return paginationCollector;
 }
 
@@ -243,6 +260,7 @@ interface BasePaginationProps<T> {
 	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
 	filterFunc?: (filter?: string) => (v: T) => boolean;
 	selectMenuTransform?: (v: T) => SelectMenuOption;
+	customComponentRows?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
 	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
 	formatter: (v: T, i: number) => { name: string; value: string };
 	options?: PaginationOptions;
@@ -263,18 +281,22 @@ async function editInteraction<T>({
 	formatter,
 	selectMenuTransform,
 	showSelectMenu,
+	customComponentRows,
 }: EditInteractionProps<T>) {
 	const data = await result.getData();
 	if (!data || data.length <= 0) {
 		return await interaction.editReply({
 			content: options?.notFoundMessage ?? "No results",
 			embeds: [],
-			components: createButtons({
-				page: 0,
-				contentLength: 0,
-				unfixablePageNumber: options?.unfixablePageNumber,
-				haveFilter: !!filterFunc,
-			}),
+			components: [
+				...createButtons({
+					page: 0,
+					contentLength: 0,
+					unfixablePageNumber: options?.unfixablePageNumber,
+					haveFilter: !!filterFunc,
+				}),
+				...(customComponentRows ?? []),
+			],
 		});
 	}
 	const filteredResult = filterFunc
