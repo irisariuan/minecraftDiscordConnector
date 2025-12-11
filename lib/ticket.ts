@@ -57,7 +57,7 @@ export interface TicketHistory {
 	timestamp: number;
 }
 
-export async function isTicketAvailable(
+export async function isDbUserTicketAvailable(
 	ticket: DbUserTicket,
 ): Promise<boolean> {
 	if (
@@ -69,6 +69,17 @@ export async function isTicketAvailable(
 	}
 	if (ticket.expiresAt !== null && ticket.expiresAt <= new Date()) {
 		return false;
+	}
+	return true;
+}
+export function isTicketAvailable(ticket: Ticket) {
+	if (ticket.expiresAt) {
+		const expireDate = new Date(ticket.expiresAt);
+		const now = new Date();
+		if (expireDate <= now) return false;
+	}
+	if (ticket.maxUse !== null && ticket.maxUse > 0) {
+		return (ticket.histories?.length ?? 0) < ticket.maxUse;
 	}
 	return true;
 }
@@ -120,7 +131,7 @@ export async function getUserTicketsByUserId(
 				timestamp: h.timestamp.getTime(),
 			})),
 		};
-		if (usableOnly && (await isTicketAvailable(ticket))) {
+		if (usableOnly && (await isDbUserTicketAvailable(ticket))) {
 			tickets.push(t);
 		} else if (!usableOnly) {
 			tickets.push(t);
@@ -133,7 +144,7 @@ export async function useUserTicket(ticketId: string, reason?: string) {
 	const ticket = await getRawUserTicket({
 		where: { id: ticketId },
 	});
-	if (!ticket || !(await isTicketAvailable(ticket))) return false;
+	if (!ticket || !(await isDbUserTicketAvailable(ticket))) return false;
 	await createTicketHistory({
 		data: { ticketId, action: TicketAction.Use, reason },
 	});
@@ -245,7 +256,8 @@ export async function getUserSelectedTicket(
 						filter: (i) => i.user.id === userId,
 					})
 					.catch(() => null);
-				if (finalMessage.deletable) await finalMessage.delete().catch(() => {});
+				if (finalMessage.deletable)
+					await finalMessage.delete().catch(() => {});
 				if (!requestStatus) {
 					await interaction.followUp({
 						content: "Request timed out.",
