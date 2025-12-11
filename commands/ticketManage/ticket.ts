@@ -232,7 +232,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 							: true;
 
 					// Add expiration info if ticket has an expiration date
-					let expireText = "";
+					let expireText = "No expiration date";
 					let isExpired = false;
 					if (ticket.expiresAt) {
 						const expireDate = new Date(ticket.expiresAt);
