@@ -21,14 +21,14 @@ model Transaction {
     amount       Int
     finalAmount  Int?
     ticketId     String?
-    ticket       UserTicket? @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    ticket       UserTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull, onUpdate: SetNull)
     beforeAmount Int
     afterAmount  Int
     reason       String?
     timestamp    DateTime    @default(now())
     userId       String
     serverId     Int?
-    server       Server?     @relation(fields: [serverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    server       Server?     @relation(fields: [serverId], references: [id], onDelete: SetNull, onUpdate: SetNull)
     user         User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
     @@index([userId])
