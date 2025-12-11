@@ -251,11 +251,11 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 							"Unknown effect"
 						} (${ticket.effect.value})\n${
 							ticket.description || "No description"
-						}\nAvailability: ${
+						}\n${expireText}\nAvailability: ${
 							isExpired || exceedMaxUseCount
 								? "❌ Not usable"
 								: "✅ Usable"
-						}${maxUseText}\n${expireText}`,
+						}${maxUseText}`,
 					};
 				},
 				filterFunc: (filter?: string) => (ticket: Ticket) => {
