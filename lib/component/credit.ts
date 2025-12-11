@@ -17,7 +17,7 @@ export function createTicketSelectMenu(tickets: Ticket[], page = 0) {
 			label: trimTextWithSuffix(v.name, 100),
 			value: v.ticketId,
 			description: v.description
-				? `${trimTextWithSuffix(v.description, 60)}, ID: ${v.ticketId}`
+				? `${trimTextWithSuffix(v.description, 50)}, ID: ${v.ticketId}`
 				: `No description, ID: ${v.ticketId}`,
 		}))
 		.slice(page * 25, (page + 1) * 25);
