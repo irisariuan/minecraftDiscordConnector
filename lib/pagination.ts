@@ -62,12 +62,14 @@ export interface PaginationOptions {
 	selectMenuPlaceholder?: string;
 }
 
-interface SendPaginationMessageProps<ResultType> extends BasePaginationProps<ResultType> {
-	getResult: (
-		pageNumber: number,
-		filter?: string,
-		force?: boolean,
-	) => Promise<ResultType[] | undefined> | ResultType[] | undefined;
+interface SendPaginationMessageProps<
+	ResultType,
+> extends BasePaginationProps<ResultType> {
+	getResult: (props: {
+		pageNumber: number;
+		filter?: string;
+		force?: boolean;
+	}) => Promise<ResultType[] | undefined> | ResultType[] | undefined;
 	/**
 	 * @returns {boolean} If we should stop to listen to the select menu
 	 */
@@ -94,10 +96,18 @@ export async function sendPaginationMessage<ResultType>(
 	const result = new CacheItem<ResultType[]>(null, {
 		updateMethod: async () =>
 			(filterFunc
-				? (await getResult(page, options?.filter, true))?.filter(
-						filterFunc(options?.filter),
-					)
-				: await getResult(page, options?.filter, true)) || [],
+				? (
+						await getResult({
+							pageNumber: page,
+							filter: options?.filter,
+							force: true,
+						})
+					)?.filter(filterFunc(options?.filter))
+				: await getResult({
+						pageNumber: page,
+						filter: options?.filter,
+						force: true,
+					})) ?? [],
 		interval: 1000 * 60 * 5,
 		ttl: 1000 * 60 * 3,
 	});
@@ -128,10 +138,10 @@ export async function sendPaginationMessage<ResultType>(
 				page =
 					(Number(
 						reply.fields.getTextInputValue(ModalAction.PAGE_INPUT),
-					) || page + 1) - 1;
+					) ?? page + 1) - 1;
 				if (oldPage === page) return;
 				const maxPage = calculateMaxPage(
-					(await result.getData())?.length || 0,
+					(await result.getData())?.length ?? 0,
 				);
 				return editInteraction({
 					result,
@@ -156,14 +166,21 @@ export async function sendPaginationMessage<ResultType>(
 					async () =>
 						(filterFunc
 							? (
-									await getResult(page, options?.filter, true)
+									await getResult({
+										pageNumber: page,
+										filter: options?.filter,
+										force: true,
+									})
 								)?.filter(filterFunc(filter))
-							: await getResult(page, options?.filter, true)) ||
-						[],
+							: await getResult({
+									pageNumber: page,
+									filter: options?.filter,
+									force: true,
+								})) ?? [],
 				);
 				await result.update();
 				const maxPage = calculateMaxPage(
-					(await result.getData())?.length || 0,
+					(await result.getData())?.length ?? 0,
 				);
 				page = getPage({
 					page,
@@ -185,7 +202,7 @@ export async function sendPaginationMessage<ResultType>(
 			const data = await result.getData();
 			if (!data || data.length <= 0)
 				return interaction.editReply({
-					content: options?.notFoundMessage || "No results",
+					content: options?.notFoundMessage ?? "No results",
 					embeds: [],
 					components: createButtons({
 						page: 0,
@@ -251,7 +268,7 @@ async function editInteraction<T>({
 	const data = await result.getData();
 	if (!data || data.length <= 0) {
 		return await interaction.editReply({
-			content: options?.notFoundMessage || "No results",
+			content: options?.notFoundMessage ?? "No results",
 			embeds: [],
 			components: createButtons({
 				page: 0,

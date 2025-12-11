@@ -70,7 +70,7 @@ export default {
 				};
 			},
 			options: {
-				filter: pluginOption || undefined,
+				filter: pluginOption ?? undefined,
 				title: "Search Plugin",
 				notFoundMessage: "No plugin found",
 				unfixablePageNumber: true,
@@ -88,7 +88,7 @@ export default {
 				await sendPaginationMessage<PluginListVersionItem<true>>({
 					interaction: menuInteraction,
 					getResult: async () =>
-						(await listPluginVersions(value)) || [],
+						(await listPluginVersions(value)) ?? [],
 					formatter: (version) => ({
 						name: version.version_number,
 						value: `ID: \`${version.id}\`, Published on ${time(

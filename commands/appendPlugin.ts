@@ -58,7 +58,7 @@ export default {
 					(await listPluginVersions(pluginOption, {
 						loaders: [server.config.loaderType],
 						game_versions: [server.config.minecraftVersion],
-					})) || []
+					})) ?? []
 				).filter((v) => !onlyRelease || v.version_type === "release"),
 			options: {
 				title: "Select a plugin version to download",

@@ -8,6 +8,7 @@ import {
 } from "discord.js";
 import { createRequestComponent, RequestComponentId } from "./request";
 import { _ } from "../../webUi/dist/server/chunks/astro/server_DDVgKadx.mjs";
+import { trimTextWithSuffix } from "../utils";
 
 export enum TicketSelectMenu {
 	TICKET_SELECT_ID = "ticket_select_menu",
@@ -21,7 +22,9 @@ export function createTicketSelectMenu(tickets: Ticket[], page = 0) {
 		.map((v) => ({
 			label: v.name,
 			value: v.ticketId,
-			description: v.description || undefined,
+			description: v.description
+				? trimTextWithSuffix(v.description, 25)
+				: undefined,
 		}))
 		.slice(page * 25, (page + 1) * 25);
 	const selectMenu = new StringSelectMenuBuilder()

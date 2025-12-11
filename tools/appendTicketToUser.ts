@@ -38,7 +38,7 @@ const selectedTicketType = await select({
 	choices: ticketTypes.map((ticket) => ({
 		name: `${ticket.name} (${ticket.effect}: ${ticket.value})${ticket.description ? ` - ${ticket.description}` : ""}`,
 		value: ticket.id,
-		description: ticket.description || undefined,
+		description: ticket.description ?? undefined,
 	})),
 });
 
@@ -119,7 +119,7 @@ try {
 			ticket: {
 				connect: { id: selectedTicketType },
 			},
-			reason: reason || null,
+			reason: reason ?? null,
 			maxUse: maxUseValue,
 			expiresAt,
 		},

@@ -33,7 +33,7 @@ export default {
 		),
 	requireServer: false,
 	async execute({ interaction, serverManager }) {
-		const user = interaction.options.getUser("user") || interaction.user;
+		const user = interaction.options.getUser("user") ?? interaction.user;
 		const local = interaction.options.getBoolean("local") ?? false;
 		let serverId: number | undefined = undefined;
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });

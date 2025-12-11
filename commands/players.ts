@@ -29,9 +29,8 @@ export default {
 				notFoundMessage: "No players found",
 				title: "Online Players",
 			},
-			getResult: async (page, filter, force) => {
-				return (await onlinePlayers.getData(force)) || undefined;
-			},
+			getResult: async ({ force }) =>
+				(await onlinePlayers.getData(force)) ?? undefined,
 			filterFunc: (filter) => (player) => {
 				if (!filter) return true;
 				return player.name.toLowerCase().includes(filter.toLowerCase());

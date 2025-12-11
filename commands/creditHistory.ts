@@ -26,7 +26,7 @@ export default {
 		await interaction.deferReply({
 			flags: [MessageFlags.Ephemeral],
 		});
-		const user = interaction.options.getUser("user") || interaction.user;
+		const user = interaction.options.getUser("user") ?? interaction.user;
 		if (
 			user.id !== interaction.user.id &&
 			!(await spendCredit(interaction, {

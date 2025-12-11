@@ -43,7 +43,7 @@ export default {
 		}
 
 		const seconds = interaction.options.getInteger("seconds") ?? 0;
-		const force = interaction.options.getBoolean("force") || false;
+		const force = interaction.options.getBoolean("force") ?? false;
 		if (!(await server.isOnline.getData(true)))
 			return await interaction.followUp({
 				content: "Server is already offline",
