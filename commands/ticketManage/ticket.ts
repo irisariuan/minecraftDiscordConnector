@@ -259,7 +259,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 
 					return {
 						name: `${ticket.name}`,
-						value: `ID and Type ID: \`${ticket.ticketId}\` (*${ticket.ticketTypeId}*) \nEffect: ${
+						value: `Ticket ID: \`${ticket.ticketId}\`\nTicket Type ID: \`${ticket.ticketTypeId}\`\nEffect: ${
 							TicketEffectTypeNames[ticket.effect.effect] ??
 							"Unknown effect"
 						} (${ticket.effect.value})\n${
