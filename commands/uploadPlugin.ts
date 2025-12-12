@@ -107,18 +107,20 @@ export default {
 				errors: ["time"],
 			}),
 		];
-
-		const token = uploadserver.createFileToken();
-		await thread.send(
-			`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
-		);
-		promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
+		let token: string | null = null;
+		if (process.env.UPLOAD_URL) {
+			token = uploadserver.createFileToken();
+			await thread.send(
+				`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
+			);
+			promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
+		}
 		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction) {
 			await messages.reply("Upload cancelled.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
-			uploadserver.disposeToken(token);
+			if (token) uploadserver.disposeToken(token);
 			changeCredit({
 				userId: interaction.user.id,
 				change: -payment.changed,
@@ -136,8 +138,8 @@ export default {
 		}
 		let downloadingUrl: string;
 		let filename: string;
-		const isFile = "filename" in messages;
-		if (isFile) {
+		const isFileBuffer = "filename" in messages;
+		if (isFileBuffer) {
 			downloadingUrl = `${process.env.UPLOAD_URL}/file/${token}`;
 			filename = messages.filename;
 		} else {
@@ -179,7 +181,7 @@ export default {
 			)
 		) {
 			await thread.send(`The file will be added to the server shortly.`);
-			const finalFilename = isFile
+			const finalFilename = isFileBuffer
 				? await copyLocalPluginFileToServer(
 						server.config.pluginDir,
 						messages,
@@ -254,7 +256,7 @@ export default {
 					await thread.send(
 						`The file will be added to the server shortly.`,
 					);
-					const finalFilename = isFile
+					const finalFilename = isFileBuffer
 						? await copyLocalPluginFileToServer(
 								server.config.pluginDir,
 								messages,
