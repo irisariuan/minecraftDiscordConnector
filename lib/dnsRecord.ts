@@ -2,7 +2,7 @@ export const apiHeader = {
 	Authorization: `Bearer ${process.env.CF_KEY}`,
 };
 
-type UpdateResult = "ok" | "noChange" | "error";
+export type UpdateResult = "ok" | "noChange" | "error";
 
 export async function updateDnsRecord(): Promise<UpdateResult> {
 	if (!process.env.UPDATE_URL || !process.env.CF_KEY) {

@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { updateDnsRecord } from "../lib/dnsRecord";
+import { updateDnsRecord, type UpdateResult } from "../lib/dnsRecord";
 import { settings } from "../lib/settings";
 import { spendCredit } from "../lib/credit";
 
@@ -19,7 +19,7 @@ export default {
 			reason: "Refresh DNS Record",
 		});
 
-		const status = await updateDnsRecord().catch((err) => {
+		const status: UpdateResult = await updateDnsRecord().catch((err) => {
 			console.error(err);
 			return "error";
 		});

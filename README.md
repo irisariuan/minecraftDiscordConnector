@@ -45,13 +45,8 @@ A Discord bot for managing a Minecraft server, including plugin management, serv
     - Run Prisma migrations:
 
         ```sh
-        npx prisma migrate dev
-        ```
-
-        or
-
-        ```sh
-        npx prisma db push
+        npx prisma migrate deploy
+        npx prisma generate
         ```
 
 4. **Build the web UI:**
@@ -65,17 +60,19 @@ A Discord bot for managing a Minecraft server, including plugin management, serv
    Create a `.env` file with the following (see `.gitignore` for sensitive files):
 
     ```env
+    # Discord bot configuration
     TOKEN=your_discord_bot_token
     CLIENT_ID=your_discord_client_id
-    # this is fallback server if none is created
+    
+    # Fallback server configuration
     SERVER_DIR=/path/to/minecraft/server
     MINECRAFT_VERSION=1.21.4 # or your server version
     LOADER_TYPE=paper        # or your server type
     MOD_TYPE=plugin          # or your mod type
     CF_KEY=your_cloudflare_api_key # Cloudflare API key, you may need to edit the code to fit your needs
     UPDATE_URL=https://api.cloudflare.com/client/v4/zones/ZONE_ID/dns_records/RECORD_ID # Cloudflare DNS record update URL
-    DATABASE_URL=postgresql://username:password@localhost:5432/database_name
     UPLOAD_URL=https://your-domain.com # URL for the web UI upload server
+    DATABASE_URL=postgresql://username:password@localhost:5432/database_name
     ```
 
 6. **Register Discord commands:**
