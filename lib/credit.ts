@@ -29,10 +29,10 @@ import {
 export interface UserCredit {
 	userId: string;
 	currentCredit: number;
-	histories: Change[];
+	histories: Transaction[];
 }
 
-export interface Change {
+export interface Transaction {
 	userId: string;
 	creditAfter: number;
 	creditBefore: number;
@@ -43,7 +43,9 @@ export interface Change {
 	reason?: string;
 	trackingId: string;
 	serverTag: string | null;
+	historyId: string | null;
 }
+export type PartialTransaction = Omit<Transaction, "trackingId" | "historyId">;
 
 export async function setCredit({
 	userId,
@@ -145,7 +147,7 @@ export async function getCredit(userId: string): Promise<UserCredit | null> {
 		currentCredit: user.credits,
 		histories: user.transactions
 			.map(
-				(v): Change => ({
+				(v): Transaction => ({
 					userId: userId,
 					changed: v.finalAmount ?? v.amount,
 					originalAmount: v.amount,
@@ -170,6 +172,7 @@ export async function getCredit(userId: string): Promise<UserCredit | null> {
 								},
 							}
 						: null,
+					historyId: v.relatedTicketHistoryId,
 				}),
 			)
 			.toSorted((a, b) => b.timestamp - a.timestamp),
@@ -190,7 +193,7 @@ export async function spendCreditWithoutTicket(
 	user: User | PartialUser | GuildMember,
 	userCredit: UserCredit,
 	{ userId, cost, reason, serverId }: SpendCreditParams,
-): Promise<Omit<Change, "trackingId"> | null> {
+): Promise<PartialTransaction | null> {
 	if (!(await canSpendCredit(userId, cost))) {
 		return null;
 	}
@@ -233,7 +236,7 @@ export interface SpendCreditParams {
 export async function spendCredit(
 	interaction: Interaction,
 	params: SpendCreditParams,
-): Promise<Omit<Change, "trackingId"> | null> {
+): Promise<PartialTransaction | null> {
 	const { cost, reason, userId, serverId } = params;
 	const tickets = await getUserTicketsByUserId(
 		userId,

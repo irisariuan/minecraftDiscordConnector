@@ -16,7 +16,7 @@ import {
 	spendCredit,
 	changeCredit,
 	sendCreditNotification,
-	type Change,
+	type Transaction,
 } from "./credit";
 import {
 	compareAnyPermissions,
@@ -39,7 +39,7 @@ export interface CoreApproval {
 	validTill: number;
 	duration: number;
 	approvalIds: string[];
-	changes: Omit<Change, "trackingId">[];
+	changes: Omit<Transaction, "trackingId">[];
 	disapprovalIds: string[];
 	server: Server;
 }

@@ -17,19 +17,21 @@ model User {
 }
 
 model Transaction {
-    id           String      @id @default(uuid())
-    amount       Int
-    finalAmount  Int?
-    ticketId     String?
-    ticket       UserTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull, onUpdate: SetNull)
-    beforeAmount Int
-    afterAmount  Int
-    reason       String?
-    timestamp    DateTime    @default(now())
-    userId       String
-    serverId     Int?
-    server       Server?     @relation(fields: [serverId], references: [id], onDelete: SetNull, onUpdate: SetNull)
-    user         User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    id                     String         @id @default(uuid())
+    amount                 Int
+    finalAmount            Int?
+    ticketId               String?
+    ticket                 UserTicket?    @relation(fields: [ticketId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+    beforeAmount           Int
+    afterAmount            Int
+    reason                 String?
+    timestamp              DateTime       @default(now())
+    userId                 String
+    serverId               Int?
+    server                 Server?        @relation(fields: [serverId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+    user                   User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    relatedTicketHistoryId String?
+    relatedTicketHistory   TicketHistory? @relation(fields: [relatedTicketHistoryId], references: [id], onDelete: SetNull, onUpdate: SetNull)
 
     @@index([userId])
 }
@@ -50,6 +52,7 @@ model Server {
     port         Int[]         @default([25565])
     path         String        @unique
     pluginPath   String        @unique
+    gameType     String        @default("minecraft")
     apiPort      Int?
     loaderType   String
     modType      String
@@ -117,12 +120,13 @@ model UserTicket {
 }
 
 model TicketHistory {
-    id        String     @id @default(uuid())
-    ticketId  String
-    ticket    UserTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-    action    String
-    reason    String?
-    timestamp DateTime   @default(now())
+    id           String        @id @default(uuid())
+    ticketId     String
+    ticket       UserTicket    @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    action       String
+    reason       String?
+    timestamp    DateTime      @default(now())
+    transactions Transaction[]
 
     @@index([ticketId])
 }
