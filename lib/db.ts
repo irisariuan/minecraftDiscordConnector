@@ -26,6 +26,7 @@ export async function getUserById(id: string) {
 			transactions: {
 				include: {
 					server: true,
+					relatedTicketHistory: true,
 					ticket: { include: { ticket: true } },
 				},
 			},

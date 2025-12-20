@@ -54,7 +54,8 @@ export interface TicketHistory {
 	ticketId: string;
 	action: string;
 	reason: string | null;
-	timestamp: number;
+	timestamp: Date;
+	ticketHistoryId: string;
 }
 
 export async function isDbUserTicketAvailable(
@@ -129,6 +130,7 @@ export async function getUserTicketsByUserId(
 				reason: h.reason,
 				ticketId: h.ticketId,
 				timestamp: h.timestamp.getTime(),
+				ticketHistoryId: h.id,
 			})),
 		};
 		if (usableOnly && (await isDbUserTicketAvailable(ticket))) {

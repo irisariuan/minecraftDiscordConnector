@@ -6,7 +6,7 @@ import {
 	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { spendCredit, getCredit, type Change } from "../lib/credit";
+import { spendCredit, getCredit, type Transaction } from "../lib/credit";
 import { settings } from "../lib/settings";
 import { sendPaginationMessage } from "../lib/pagination";
 
@@ -72,7 +72,7 @@ export default {
 			});
 		}
 
-		await sendPaginationMessage<Change>({
+		await sendPaginationMessage<Transaction>({
 			interaction,
 			getResult: async () => {
 				const newData = await getCredit(user.id);
