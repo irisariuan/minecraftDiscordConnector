@@ -12,6 +12,7 @@ import { copyFile } from "fs/promises";
 import { writeFile } from "fs/promises";
 import { rename } from "fs/promises";
 import { safeJoin } from "../utils";
+import { CORS_ORIGIN } from "../env";
 
 const UploadRequestSchema = z.discriminatedUnion("action", [
 	z.object({
@@ -37,7 +38,7 @@ function createUploadServer(uploadServer: UploadServer) {
 	});
 	const jsonParser = bodyParser.json();
 
-	app.use(cors({ origin: process.env.CORS_ORIGIN ?? "*" }));
+	app.use(cors({ origin: CORS_ORIGIN ?? "*" }));
 	app.use(
 		"/",
 		express.static(safeJoin(process.cwd(), "webUi", "dist", "client")),

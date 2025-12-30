@@ -298,3 +298,39 @@ export function getNextTimestamp(time: Time) {
 	}
 	return next;
 }
+
+export function compareArrays(
+	arr1: any[],
+	arr2: any[],
+	force = false,
+): boolean {
+	const sortedArr1 = force ? arr1.toSorted() : arr1;
+	const sortedArr2 = force ? arr2.toSorted() : arr2;
+	if (sortedArr1.length !== sortedArr2.length) return false;
+	for (let i = 0; i < sortedArr1.length; i++) {
+		if (sortedArr1[i] !== sortedArr2[i]) return false;
+	}
+	return true;
+}
+
+export function compareObjectDeep(obj1: Object, obj2: Object): boolean {
+	const keys1 = Object.keys(obj1);
+	const keys2 = Object.keys(obj2);
+	if (!compareArrays(keys1, keys2)) return false;
+	for (const key of keys1) {
+		const val1 = (obj1 as any)[key];
+		const val2 = (obj2 as any)[key];
+		const areObjects =
+			val1 !== null &&
+			val2 !== null &&
+			typeof val1 === "object" &&
+			typeof val2 === "object";
+		if (
+			(areObjects && !compareObjectDeep(val1, val2)) ||
+			(!areObjects && val1 !== val2)
+		) {
+			return false;
+		}
+	}
+	return true;
+}

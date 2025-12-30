@@ -7,7 +7,12 @@ import {
 } from "discord.js";
 import "dotenv/config";
 import { updateApprovalMessage } from "./lib/approval";
-import { doNotRequireServer, loadCommands } from "./lib/commandFile";
+import {
+	doNotRequireServer,
+	getAllRegisteredCommandNames,
+	loadCommands,
+	registerCommands,
+} from "./lib/commandFile";
 import { isApprovalMessageComponentId } from "./lib/component/approval";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { createServer, hasAnyServer } from "./lib/db";
@@ -27,7 +32,8 @@ import {
 	loadCreditSettings,
 	settings,
 } from "./lib/settings";
-import { getNextTimestamp } from "./lib/utils";
+import { compareArrays, getNextTimestamp } from "./lib/utils";
+import { TOKEN } from "./lib/env";
 
 const commands = await loadCommands();
 if (!(await hasAnyServer())) {
@@ -108,6 +114,16 @@ if (process.argv.includes("-C")) {
 			}),
 		),
 	});
+}
+if (
+	!compareArrays(
+		(await getAllRegisteredCommandNames()) ?? [],
+		commands.map((v) => v.command.name),
+	)
+) {
+	console.log("Updating registered commands...");
+	await registerCommands(commands);
+	console.log("Registered commands");
 }
 
 client.once("ready", async () => {
@@ -410,4 +426,4 @@ process.on("exit", async (code) => {
 	process.exit(code);
 });
 
-client.login(process.env.TOKEN);
+client.login(TOKEN);

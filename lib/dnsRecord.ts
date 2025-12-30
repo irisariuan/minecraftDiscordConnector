@@ -1,11 +1,13 @@
+import { CF_KEY, UPDATE_URL } from "./env";
+
 export const apiHeader = {
-	Authorization: `Bearer ${process.env.CF_KEY}`,
+	Authorization: `Bearer ${CF_KEY}`,
 };
 
 export type UpdateResult = "ok" | "noChange" | "error";
 
 export async function updateDnsRecord(): Promise<UpdateResult> {
-	if (!process.env.UPDATE_URL || !process.env.CF_KEY) {
+	if (!UPDATE_URL || !CF_KEY) {
 		console.log("No update URL or authentication details provided");
 		return "error";
 	}
@@ -13,7 +15,7 @@ export async function updateDnsRecord(): Promise<UpdateResult> {
 	const ipData = (await ipReq.json()) as { ip: string };
 	const ip = ipData.ip;
 
-	const currentReq = await fetch(process.env.UPDATE_URL, {
+	const currentReq = await fetch(UPDATE_URL, {
 		headers: apiHeader,
 	});
 	if (!currentReq.ok) {
@@ -34,7 +36,7 @@ export async function updateDnsRecord(): Promise<UpdateResult> {
 		return "noChange";
 	}
 	console.log("IP address has changed, updating...");
-	const updateRes = await fetch(process.env.UPDATE_URL, {
+	const updateRes = await fetch(UPDATE_URL, {
 		method: "PATCH",
 		headers: {
 			...apiHeader,

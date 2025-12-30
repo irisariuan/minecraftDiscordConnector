@@ -33,10 +33,7 @@ import {
 	copyLocalPluginFileToServer,
 	downloadWebPluginFileToLocal,
 } from "../lib/plugin/web";
-
-if (!process.env.UPLOAD_URL) {
-	throw new Error("UPLOAD_URL is not set in environment variables");
-}
+import { UPLOAD_URL } from "../lib/env";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -108,10 +105,10 @@ export default {
 			}),
 		];
 		let token: string | null = null;
-		if (process.env.UPLOAD_URL) {
+		if (UPLOAD_URL) {
 			token = uploadserver.createFileToken();
 			await thread.send(
-				`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
+				`You may also upload the file to [our website](${UPLOAD_URL}/?id=${token})`,
 			);
 			promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
 		}
@@ -140,7 +137,7 @@ export default {
 		let filename: string;
 		const isFileBuffer = "filename" in messages;
 		if (isFileBuffer) {
-			downloadingUrl = `${process.env.UPLOAD_URL}/file/${token}`;
+			downloadingUrl = `${UPLOAD_URL}/file/${token}`;
 			filename = messages.filename;
 		} else {
 			const firstMessage = messages.at(0);

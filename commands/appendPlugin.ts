@@ -168,4 +168,7 @@ export default {
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),
+	features: {
+		supportedPlatforms: ["minecraft"],
+	},
 } satisfies CommandFile<true>;
