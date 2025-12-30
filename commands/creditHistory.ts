@@ -101,4 +101,7 @@ export default {
 			},
 		});
 	},
+	features: {
+		unsuspendable: true,
+	},
 } satisfies CommandFile<false>;

@@ -12,9 +12,7 @@ import { type LogLine } from "./server/request";
 import {
 	loadServerApprovalSetting,
 	loadServerCreditSetting,
-	settings,
 	type ApprovalSettings,
-	type CreditSettings,
 	type ServerCreditSettings,
 } from "./settings";
 import { SuspendingEventEmitter } from "./suspend";
@@ -54,7 +52,11 @@ interface CreateServerOptions {
 	serverId: number;
 	creditSettings: ServerCreditSettings;
 	approvalSettings: ApprovalSettings;
+	gameType: ServerGameType;
+	startupScript?: string;
 }
+const serverGameTypes = ["minecraft"] as const;
+export type ServerGameType = (typeof serverGameTypes)[number];
 
 export class Server {
 	private instance: Subprocess<"ignore", "pipe", "inherit"> | null;
@@ -68,6 +70,8 @@ export class Server {
 	approvalList: Map<string, Approval>;
 	creditSettings: ServerCreditSettings;
 	approvalSettings: ApprovalSettings;
+	gameType: ServerGameType;
+	startupScript?: string;
 	readonly config: ServerConfig;
 	readonly id: number;
 
@@ -79,8 +83,12 @@ export class Server {
 		config,
 		creditSettings,
 		approvalSettings,
+		gameType,
+		startupScript,
 	}: CreateServerOptions) {
 		this.instance = null;
+		this.gameType = gameType;
+		this.startupScript = startupScript;
 		this.outputLines = [];
 		this.timeouts = [];
 		this.approvalList = new Map();
@@ -135,7 +143,7 @@ export class Server {
 
 	async start() {
 		if (this.instance || (await this.isOnline.getData(true))) return null;
-		this.instance = spawn(["sh", "./start.sh"], {
+		this.instance = spawn(["sh", this.startupScript ?? "./start.sh"], {
 			cwd: this.config.serverDir,
 			stdin: "ignore",
 			stdout: "pipe",
@@ -177,7 +185,7 @@ export class Server {
 
 	async forceStop(exitCode: number | NodeJS.Signals = "SIGKILL") {
 		if (this.instance?.exitCode === null) {
-			this.instance?.kill("SIGKILL");
+			this.instance?.kill(exitCode);
 			await this.instance?.exited;
 			this.waitingToShutdown = false;
 			return true;
@@ -328,6 +336,8 @@ export class ServerManager {
 	async loadServers() {
 		this.servers.clear();
 		for (const server of await getAllServers()) {
+			if (!serverGameTypes.includes(server.gameType as ServerGameType))
+				throw new Error(`Unknown server game type: ${server.gameType}`);
 			this.servers.set(
 				server.id,
 				new Server({
@@ -346,6 +356,8 @@ export class ServerManager {
 					approvalSettings: await loadServerApprovalSetting(
 						server.id,
 					),
+					gameType: server.gameType as ServerGameType,
+					startupScript: server.startupScript ?? undefined,
 				}),
 			);
 		}

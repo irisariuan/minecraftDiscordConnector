@@ -63,7 +63,7 @@ export default {
 					option
 						.setName("local")
 						.setDescription(
-							"Whether to edit local permission (default: false)",
+							"Whether to edit local (per-server) permission (default: false)",
 						),
 				),
 		),
