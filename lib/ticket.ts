@@ -129,7 +129,7 @@ export async function getUserTicketsByUserId(
 				action: h.action,
 				reason: h.reason,
 				ticketId: h.ticketId,
-				timestamp: h.timestamp.getTime(),
+				timestamp: h.timestamp,
 				ticketHistoryId: h.id,
 			})),
 		};

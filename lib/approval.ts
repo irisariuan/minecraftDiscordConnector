@@ -17,6 +17,7 @@ import {
 	changeCredit,
 	sendCreditNotification,
 	type Transaction,
+    type PartialTransaction,
 } from "./credit";
 import {
 	compareAnyPermissions,
@@ -39,7 +40,7 @@ export interface CoreApproval {
 	validTill: number;
 	duration: number;
 	approvalIds: string[];
-	changes: Omit<Transaction, "trackingId">[];
+	transactions: PartialTransaction[];
 	disapprovalIds: string[];
 	server: Server;
 }
@@ -263,7 +264,7 @@ export async function sendApprovalPoll(
 			validTill,
 			approvalIds: [],
 			disapprovalIds: [],
-			changes: [],
+			transactions: [],
 			options,
 			server: approvalOptions.server,
 		},
@@ -283,7 +284,7 @@ export async function sendApprovalPoll(
 			duration,
 			options,
 			message,
-			changes: [],
+			transactions: [],
 			originalMessageId: message.id,
 			server: approvalOptions.server,
 		},
@@ -448,7 +449,7 @@ export async function updateApprovalMessage(
 		}
 		// Refund credit if applicable
 		if (approval.options.credit) {
-			const amount = approval.changes
+			const amount = approval.transactions
 				.filter((c) => c.userId === reaction.user.id)
 				.reduce((a, b) => a + b.changed, 0);
 			await changeCredit({
@@ -463,7 +464,7 @@ export async function updateApprovalMessage(
 				silent: true,
 				serverId: approval.server.id,
 			});
-			approval.changes = approval.changes.filter(
+			approval.transactions = approval.transactions.filter(
 				(c) => c.userId !== reaction.user.id,
 			);
 		}
@@ -529,7 +530,7 @@ export async function updateApprovalMessage(
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		approval.changes.push(transaction);
+		approval.transactions.push(transaction);
 	}
 	// Process the approval/disapproval
 	const status = approving
