@@ -275,9 +275,19 @@ client.on("interactionCreate", async (interaction) => {
 				PermissionFlags.suspend,
 			)
 		) {
-			return interaction.reply({
+			return await interaction.reply({
 				content:
 					"Server is suspending, you do not have permission to use this command",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		if (
+			command.features?.supportedPlatforms &&
+			command.features.supportedPlatforms.length > 0 &&
+			!command.features.supportedPlatforms.includes(server.gameType)
+		) {
+			return await interaction.reply({
+				content: `This command is not supported on \`${server.gameType}\` servers`,
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
@@ -285,7 +295,7 @@ client.on("interactionCreate", async (interaction) => {
 			command.features?.requireStartedServer &&
 			!(await server.isOnline.getData(true))
 		) {
-			return interaction.reply({
+			return await interaction.reply({
 				content: "Server is not online",
 				flags: [MessageFlags.Ephemeral],
 			});
@@ -293,7 +303,7 @@ client.on("interactionCreate", async (interaction) => {
 			command.features?.requireStoppedServer &&
 			(await server.isOnline.getData(true))
 		) {
-			return interaction.reply({
+			return await interaction.reply({
 				content: "Server is not stopped",
 				flags: [MessageFlags.Ephemeral],
 			});
@@ -318,11 +328,16 @@ client.on("interactionCreate", async (interaction) => {
 		const command = commands.find(
 			(cmd) => cmd.command.name === commandName,
 		);
-		if (!command || !command.autoComplete) return;
+		if (!command || !command.autoComplete) {
+			console.error(
+				"Autocomplete requested but command not found or does not support autocomplete",
+			);
+			return await interaction.respond([]);
+		}
 		await Promise.try(() =>
 			command.autoComplete?.({ interaction, client, serverManager }),
 		).catch((err) => {
-			console.error("Error in autocomplete:", err);
+			console.error("Error running autocomplete:", err);
 		});
 	}
 });

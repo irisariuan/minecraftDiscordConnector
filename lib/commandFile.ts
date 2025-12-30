@@ -11,7 +11,7 @@ import type {
 	User,
 } from "discord.js";
 import type { Permission } from "./permission";
-import { Server, ServerManager } from "./server";
+import { Server, ServerManager, type ServerGameType } from "./server";
 import { safeJoin } from "./utils";
 
 type AcceptedInteractions =
@@ -40,6 +40,7 @@ export interface CommandFeatures {
 	requireStartedServer: boolean;
 	requireStoppedServer: boolean;
 	unsuspendable: boolean;
+	supportedPlatforms: ServerGameType[];
 }
 
 export interface CommandFile<RequireServer extends boolean> {
