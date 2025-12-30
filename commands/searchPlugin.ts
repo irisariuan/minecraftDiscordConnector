@@ -126,4 +126,7 @@ export default {
 		});
 	},
 	ephemeral: true,
+	features: {
+		supportedPlatforms: ["minecraft"],
+	},
 } satisfies CommandFile<true>;

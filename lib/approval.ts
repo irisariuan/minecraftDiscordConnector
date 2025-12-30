@@ -17,7 +17,7 @@ import {
 	changeCredit,
 	sendCreditNotification,
 	type Transaction,
-    type PartialTransaction,
+	type PartialTransaction,
 } from "./credit";
 import {
 	compareAnyPermissions,
@@ -31,6 +31,7 @@ import {
 	createInternalApprovalEmbed,
 	createApprovalEmbed,
 } from "./embed/approval";
+import { APPROVAL_TIMEOUT } from "./env";
 
 /**
  * All core components needed for the approval system to work
@@ -254,7 +255,7 @@ export async function sendApprovalPoll(
 	const { content, options } = approvalOptions;
 	const duration =
 		approvalOptions.duration ||
-		Number(process.env.APPROVAL_TIMEOUT) ||
+		Number(APPROVAL_TIMEOUT) ||
 		1000 * 60 * 60 * 2;
 	const validTill = Date.now() + duration; // 2 hours
 	const embed = createInternalApprovalEmbed(
