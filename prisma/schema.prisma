@@ -48,20 +48,21 @@ model Permission {
 }
 
 model Server {
-    id           Int           @id @default(autoincrement())
-    port         Int[]         @default([25565])
-    path         String        @unique
-    pluginPath   String        @unique
-    gameType     String        @default("minecraft")
-    apiPort      Int?
-    loaderType   String
-    modType      String
-    version      String
-    tag          String?
-    transactions Transaction[]
-    permissions  Permission[]
-    plugins      Plugin[]
-    settings     Setting[]
+    id            Int           @id @default(autoincrement())
+    port          Int[]         @default([25565])
+    path          String        @unique
+    pluginPath    String        @unique
+    gameType      String        @default("minecraft")
+    startupScript String?
+    apiPort       Int?
+    loaderType    String
+    modType       String
+    version       String
+    tag           String?
+    transactions  Transaction[]
+    permissions   Permission[]
+    plugins       Plugin[]
+    settings      Setting[]
 }
 
 model Setting {

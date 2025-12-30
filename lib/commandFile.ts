@@ -39,7 +39,7 @@ interface ExecuteReactionParams {
 export interface CommandFeatures {
 	requireStartedServer: boolean;
 	requireStoppedServer: boolean;
-	suspendable: boolean;
+	unsuspendable: boolean;
 }
 
 export interface CommandFile<RequireServer extends boolean> {

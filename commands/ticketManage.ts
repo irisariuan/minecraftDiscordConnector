@@ -52,6 +52,6 @@ export default {
 	},
 	requireServer: false,
 	features: {
-		suspendable: false,
+		unsuspendable: true,
 	},
 } satisfies CommandFile<false>;

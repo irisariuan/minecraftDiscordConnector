@@ -22,4 +22,7 @@ export default {
 		});
 	},
 	permissions: PermissionFlags.suspend,
+	features: {
+		unsuspendable: true,
+	},
 } satisfies CommandFile<true>;
