@@ -4,7 +4,7 @@ import {
 	searchPlugins,
 	type PluginListVersionItem,
 	type PluginSearchQueryItem,
-} from "../lib/plugin";
+} from "../lib/server/plugin";
 import type { CommandFile } from "../lib/commandFile";
 import { sendPaginationMessage } from "../lib/pagination";
 import { trimTextWithSuffix } from "../lib/utils";
@@ -28,14 +28,15 @@ export default {
 
 		sendPaginationMessage<PluginSearchQueryItem<false>>({
 			interaction,
-			async getResult(page, filter) {
+			async getResult({ pageNumber, filter }) {
 				const results = [];
-				for (let i = 0; i < Math.ceil((page + 1) / 5); i++) {
+				for (let i = 0; i < Math.ceil((pageNumber + 1) / 5); i++) {
 					const plugins = await searchPlugins({
 						offset: i * 20,
 						query: filter,
 						facets: {
 							categories: [server.config.loaderType],
+							versions: [server.config.minecraftVersion],
 						},
 					});
 					if ("error" in plugins) {
@@ -69,13 +70,13 @@ export default {
 				};
 			},
 			options: {
-				filter: pluginOption || undefined,
+				filter: pluginOption ?? undefined,
 				title: "Search Plugin",
 				notFoundMessage: "No plugin found",
 				unfixablePageNumber: true,
 			},
 			selectMenuTransform: (plugin) => ({
-				label: plugin.title,
+				label: trimTextWithSuffix(plugin.title, 100),
 				description: trimTextWithSuffix(plugin.description, 100),
 				value: plugin.slug,
 			}),
@@ -87,7 +88,7 @@ export default {
 				await sendPaginationMessage<PluginListVersionItem<true>>({
 					interaction: menuInteraction,
 					getResult: async () =>
-						(await listPluginVersions(value)) || [],
+						(await listPluginVersions(value)) ?? [],
 					formatter: (version) => ({
 						name: version.version_number,
 						value: `ID: \`${version.id}\`, Published on ${time(
@@ -125,4 +126,7 @@ export default {
 		});
 	},
 	ephemeral: true,
+	features: {
+		supportedPlatforms: ["minecraft"],
+	},
 } satisfies CommandFile<true>;

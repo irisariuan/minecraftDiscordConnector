@@ -9,13 +9,13 @@ import {
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
+	spendCredit,
 	changeCredit,
 	createApproveButton,
 	createCancelButton,
 	CreditNotificationButtonId,
 	getCredit,
 	sendCreditNotification,
-	spendCredit,
 } from "../lib/credit";
 import { settings } from "../lib/settings";
 
@@ -116,12 +116,12 @@ export default {
 			});
 		}
 
-		const success = await spendCredit({
+		const payment = await spendCredit(interaction, {
 			userId: interaction.user.id,
 			cost: amount + totalTransferringFee,
-			reason: "Transfer Credit",
+			reason: `Transfer Credit (${amount} credits with ${totalTransferringFee} fee to ${userMention(user.id)})`,
 		});
-		if (!success) {
+		if (!payment) {
 			return await interaction.editReply({
 				content: `You do not have enough credit (Requires ${totalTransferringFee}, current: ${fromUserCredit.currentCredit}) to transfer ${amount} credit to ${userMention(user.id)}`,
 				components: [],
@@ -133,16 +133,6 @@ export default {
 			reason: "Received Transfer Credit",
 		});
 		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -amount,
-			reason: "Transfer Credit",
-		});
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -totalTransferringFee,
-			reason: "Transfer Credit Fee",
-		});
-		await sendCreditNotification({
 			user,
 			creditChanged: amount,
 			reason: "Received Transfer Credit",
@@ -152,12 +142,12 @@ export default {
 			onRefund: async (refundAmount) => {
 				await changeCredit({
 					userId: interaction.user.id,
-					change: -refundAmount,
+					change: -Math.min(refundAmount, payment.changed),
 					reason: "Transfer Credit Refund",
 				});
 				await sendCreditNotification({
 					user: interaction.user,
-					creditChanged: refundAmount,
+					creditChanged: Math.min(refundAmount, payment.changed),
 					reason: "Transfer Credit Refund",
 				});
 			},

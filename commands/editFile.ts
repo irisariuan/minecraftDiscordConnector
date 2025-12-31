@@ -8,8 +8,10 @@ export default {
 		.setName("editfile")
 		.setDescription("Edit files on the server"),
 	requireServer: true,
-	async execute({ interaction, client, server }) {
-		
-	},
+	async execute({ interaction, client, server }) {},
 	permissions: PermissionFlags.editFiles,
+	ephemeral: true,
+	features: {
+		requireStartedServer: true,
+	},
 } satisfies CommandFile<true>;

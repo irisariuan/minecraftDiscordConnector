@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { fetchOnlinePlayers, type Player } from "../lib/request";
+import { fetchOnlinePlayers, type Player } from "../lib/server/request";
 import { sendPaginationMessage } from "../lib/pagination";
 import { CacheItem } from "../lib/cache";
 
@@ -29,9 +29,8 @@ export default {
 				notFoundMessage: "No players found",
 				title: "Online Players",
 			},
-			getResult: async (page, filter, force) => {
-				return (await onlinePlayers.getData(force)) || undefined;
-			},
+			getResult: async ({ force }) =>
+				(await onlinePlayers.getData(force)) ?? undefined,
 			filterFunc: (filter) => (player) => {
 				if (!filter) return true;
 				return player.name.toLowerCase().includes(filter.toLowerCase());
@@ -41,5 +40,8 @@ export default {
 				value: `ID: \`${player.uuid}\``,
 			}),
 		});
+	},
+	features: {
+		requireStartedServer: true,
 	},
 } satisfies CommandFile<true>;

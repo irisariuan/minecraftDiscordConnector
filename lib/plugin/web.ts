@@ -5,7 +5,7 @@ import { safeJoin } from "../utils";
 import type { FileBuffer } from "./uploadServer";
 
 export async function copyLocalPluginFileToServer(
-	serverDir: string,
+	pluginDir: string,
 	file: FileBuffer,
 ) {
 	console.log(
@@ -14,7 +14,7 @@ export async function copyLocalPluginFileToServer(
 	if (file.filename.endsWith(".zip")) {
 		let buffer = file.buffer;
 		try {
-			await unzipTempPluginFile(serverDir, buffer, {
+			await unzipTempPluginFile(pluginDir, buffer, {
 				acceptedExtensions: [".jar", ".yaml", ".yml", ".conf"],
 			});
 			return file.filename;
@@ -22,14 +22,14 @@ export async function copyLocalPluginFileToServer(
 			return null;
 		}
 	}
-	const path = safeJoin(serverDir, "plugins", file.filename);
+	const path = safeJoin(pluginDir, file.filename);
 	await writeFile(path, file.buffer);
 	return file.filename;
 }
 
 export async function downloadWebPluginFileToLocal(
 	url: string,
-	serverDir: string,
+	pluginDir: string,
 	filename?: string,
 ) {
 	const res = await fetch(url);
@@ -58,7 +58,7 @@ export async function downloadWebPluginFileToLocal(
 			for await (const chunk of res.body) {
 				buffer = Buffer.concat([buffer, chunk]);
 			}
-			await unzipTempPluginFile(serverDir, buffer, {
+			await unzipTempPluginFile(pluginDir, buffer, {
 				acceptedExtensions: [".jar", ".yaml", ".yml", ".conf"],
 			});
 			return finalFilename;
@@ -67,9 +67,7 @@ export async function downloadWebPluginFileToLocal(
 		}
 	}
 
-	const stream = createWriteStream(
-		safeJoin(serverDir, "plugins", finalFilename),
-	);
+	const stream = createWriteStream(safeJoin(pluginDir, finalFilename));
 	try {
 		for await (const chunk of res.body) {
 			stream.write(chunk);
@@ -117,7 +115,7 @@ export function peekZipEntries(buffer: Buffer) {
 }
 
 export async function unzipTempPluginFile(
-	serverDir: string,
+	finalDir: string,
 	buffer: Buffer,
 	options?: UnzipOptions,
 ) {
@@ -152,28 +150,19 @@ export async function unzipTempPluginFile(
 					.slice(0, -1)
 					.join("/");
 
-				if (
-					!(await exists(
-						safeJoin(serverDir, "plugins", parentEntryFolder),
-					))
-				) {
+				if (!(await exists(safeJoin(finalDir, parentEntryFolder)))) {
 					console.log(
 						`Creating parent folder ${parentEntryFolder} for entry ${entry.fileName}`,
 					);
-					await mkdir(
-						safeJoin(serverDir, "plugins", parentEntryFolder),
-						{
-							recursive: true,
-						},
-					);
+					await mkdir(safeJoin(finalDir, parentEntryFolder), {
+						recursive: true,
+					});
 				}
 
 				zipFile.openReadStream(entry, async (err, readStream) => {
 					if (err) throw err;
 					if (
-						!(await exists(
-							safeJoin(serverDir, "plugins", parentEntryFolder),
-						))
+						!(await exists(safeJoin(finalDir, parentEntryFolder)))
 					) {
 						console.warn(
 							`Parent folder ${parentEntryFolder} does not exist, skipping entry ${entry.fileName}`,
@@ -184,9 +173,7 @@ export async function unzipTempPluginFile(
 						zipFile.readEntry();
 					});
 					readStream.pipe(
-						createWriteStream(
-							safeJoin(serverDir, "plugins", entry.fileName),
-						),
+						createWriteStream(safeJoin(finalDir, entry.fileName)),
 					);
 				});
 			}

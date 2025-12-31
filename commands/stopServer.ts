@@ -13,10 +13,8 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
-import { isServerAlive } from "../lib/request";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
 import { sendMessagesToUsersById } from "../lib/utils";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -45,7 +43,7 @@ export default {
 		}
 
 		const seconds = interaction.options.getInteger("seconds") ?? 0;
-		const force = interaction.options.getBoolean("force") || false;
+		const force = interaction.options.getBoolean("force") ?? false;
 		if (!(await server.isOnline.getData(true)))
 			return await interaction.followUp({
 				content: "Server is already offline",
@@ -67,7 +65,7 @@ export default {
 		if (
 			force &&
 			comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.stopServer,
 			)
 		) {
@@ -92,12 +90,14 @@ export default {
 		}
 		await interaction.deleteReply();
 		const displayString =
-			seconds > 0 ? `Stop Server in ${seconds} seconds` : "Stop Server";
+			seconds > 0
+				? `Stop Server in ${seconds} seconds (${server.config.tag ?? `Server #${server.id}`})`
+				: `Stop Server (${server.config.tag ?? `Server #${server.id}`})`;
 
 		if (
-			!(await spendCredit({
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
-				cost: settings.newStopServerPollFee,
+				cost: server.creditSettings.newStopServerPollFee,
 				reason: "New Stop Server Poll",
 				serverId: server.id,
 			}))
@@ -107,16 +107,10 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -settings.newStopServerPollFee,
-			reason: "New Stop Server Poll",
-			serverId: server.id,
-		});
 		sendApprovalPoll(interaction, {
 			content: displayString,
 			options: {
-				startPollFee: settings.newStopServerPollFee,
+				startPollFee: server.creditSettings.newStopServerPollFee,
 				callerId: interaction.user.id,
 				description: displayString,
 				async onSuccess(approval, message) {
@@ -154,12 +148,15 @@ export default {
 						content: "Server stopped successfully",
 					});
 				},
-				approvalCount: 2,
-				disapprovalCount: 2,
-				credit: settings.stopServerVoteFee,
+				approvalCount: server.approvalSettings.stopServerApproval,
+				disapprovalCount: server.approvalSettings.stopServerDisapproval,
+				credit: server.creditSettings.stopServerVoteFee,
 			},
 			server,
 		});
 	},
 	ephemeral: true,
+	features: {
+		requireStartedServer: true,
+	},
 } satisfies CommandFile<true>;

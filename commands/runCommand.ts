@@ -5,6 +5,7 @@ import {
 	time,
 	userMention,
 } from "discord.js";
+import { sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	compareAllPermissions,
@@ -12,11 +13,9 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { sendApprovalPoll } from "../lib/approval";
-import { parseCommandOutput, runCommandOnServer } from "../lib/request";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
+import { parseCommandOutput, runCommandOnServer } from "../lib/server/request";
 import { sendMessagesToUsersById } from "../lib/utils";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -70,7 +69,7 @@ export default {
 		const capture = interaction.options.getInteger("capture") ?? 1000;
 		const timeout = interaction.options.getInteger("timeout");
 		const canRunCommand = compareAllPermissions(
-			await readPermission(interaction.user),
+			await readPermission(interaction.user, server.id),
 			[PermissionFlags.runCommand],
 		);
 
@@ -81,14 +80,14 @@ export default {
 				command,
 			);
 			await interaction.editReply(
-				parseCommandOutput((await output)?.join("\n") || null, success),
+				parseCommandOutput((await output)?.join("\n") ?? null, success),
 			);
 		}
 		await interaction.deleteReply();
 		if (
-			!(await spendCredit({
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
-				cost: settings.newRunCommandPollFee,
+				cost: server.creditSettings.newRunCommandPollFee,
 				reason: "New Run Command Poll",
 				serverId: server.id,
 			}))
@@ -98,18 +97,14 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -settings.newRunCommandPollFee,
-			reason: "New Run Command Poll",
-			serverId: server.id,
-		});
 		return await sendApprovalPoll(interaction, {
 			content: command,
 			options: {
-				startPollFee: settings.newRunCommandPollFee,
+				approvalCount: server.approvalSettings.runCommandApproval,
+				disapprovalCount: server.approvalSettings.runCommandDisapproval,
+				startPollFee: server.creditSettings.newRunCommandPollFee,
 				callerId: interaction.user.id,
-				description: `Command: \`${command}\``,
+				description: `Command: \`${command}\` (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
 					if (!server.config.apiPort)
 						return await message.reply(
@@ -136,16 +131,19 @@ export default {
 					}
 					await message.reply(
 						parseCommandOutput(
-							(await output)?.join("\n") || null,
+							(await output)?.join("\n") ?? null,
 							success,
 						),
 					);
 				},
-				credit: settings.runCommandVoteFee,
+				credit: server.creditSettings.runCommandVoteFee,
 			},
-			duration: timeout || undefined,
+			duration: timeout ?? undefined,
 			server,
 		});
 	},
 	ephemeral: true,
+	features: {
+		requireStartedServer: true,
+	},
 } satisfies CommandFile<true>;

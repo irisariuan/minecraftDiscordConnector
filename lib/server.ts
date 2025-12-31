@@ -1,29 +1,28 @@
 import { spawn, type Subprocess } from "bun";
-import { CacheItem } from "./cache";
-import { type LogLine } from "./request";
-import { join } from "node:path";
-import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
-import { EventEmitter } from "node:events";
-import { stripVTControlCharacters } from "node:util";
-import { SuspendingEventEmitter } from "./suspend";
-import { type ServerConfig } from "./plugin";
-import { getAllServers } from "./db";
-import type { Approval } from "./approval";
-import { changeCredit, sendCreditNotification } from "./credit";
 import type { Client } from "discord.js";
+import { EventEmitter } from "node:events";
+import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
+import type { Approval } from "./approval";
+import { CacheItem } from "./cache";
+import { changeCredit, sendCreditNotification } from "./credit";
+import { getAllServers } from "./db";
+import { type ServerConfig } from "./server/plugin";
+import { type LogLine } from "./server/request";
+import {
+	loadServerApprovalSetting,
+	loadServerCreditSetting,
+	type ApprovalSettings,
+	type ServerCreditSettings,
+} from "./settings";
+import { SuspendingEventEmitter } from "./suspend";
+import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
 
 if (
 	!process.env.SERVER_DIR ||
 	!(await Bun.file(join(process.env.SERVER_DIR, "start.sh")).exists())
 )
 	throw new Error("SERVER_DIR environment variable is not set");
-
-interface CreateServerOptions {
-	shutdownAllowedTime?: number;
-	defaultSuspending?: boolean;
-	config: ServerConfig;
-	serverId: number;
-}
 
 const serverTypeRef = {
 	INFO: "info",
@@ -46,6 +45,19 @@ class ServerMessageEmitter extends EventEmitter {
 	}
 }
 
+interface CreateServerOptions {
+	shutdownAllowedTime?: number;
+	defaultSuspending?: boolean;
+	config: ServerConfig;
+	serverId: number;
+	creditSettings: ServerCreditSettings;
+	approvalSettings: ApprovalSettings;
+	gameType: ServerGameType;
+	startupScript?: string;
+}
+const serverGameTypes = ["minecraft"] as const;
+export type ServerGameType = (typeof serverGameTypes)[number];
+
 export class Server {
 	private instance: Subprocess<"ignore", "pipe", "inherit"> | null;
 	private waitingToShutdown: boolean;
@@ -56,22 +68,34 @@ export class Server {
 	timeouts: NodeJS.Timeout[];
 	suspendingEvent: SuspendingEventEmitter;
 	approvalList: Map<string, Approval>;
+	creditSettings: ServerCreditSettings;
+	approvalSettings: ApprovalSettings;
+	gameType: ServerGameType;
+	startupScript?: string;
 	readonly config: ServerConfig;
 	readonly id: number;
 
 	constructor({
 		shutdownAllowedTime,
-		defaultSuspending = isTrueValue(process.env.DEFAULT_SUSPENDING || "") ||
+		defaultSuspending = isTrueValue(process.env.DEFAULT_SUSPENDING || "") ??
 			false,
 		serverId,
 		config,
+		creditSettings,
+		approvalSettings,
+		gameType,
+		startupScript,
 	}: CreateServerOptions) {
 		this.instance = null;
+		this.gameType = gameType;
+		this.startupScript = startupScript;
 		this.outputLines = [];
 		this.timeouts = [];
 		this.approvalList = new Map();
 		this.config = config;
 		this.id = serverId;
+		this.creditSettings = creditSettings;
+		this.approvalSettings = approvalSettings;
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
 		this.isOnline = new CacheItem<boolean>(false, {
@@ -119,7 +143,7 @@ export class Server {
 
 	async start() {
 		if (this.instance || (await this.isOnline.getData(true))) return null;
-		this.instance = spawn(["sh", "./start.sh"], {
+		this.instance = spawn(["sh", this.startupScript ?? "./start.sh"], {
 			cwd: this.config.serverDir,
 			stdin: "ignore",
 			stdout: "pipe",
@@ -148,7 +172,7 @@ export class Server {
 					unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ??
 					unformattedChunk;
 				this.outputLines.push({
-					timestamp: timestamp || null,
+					timestamp: timestamp ?? null,
 					type:
 						serverTypeRef[level as keyof typeof serverTypeRef] ??
 						"unknown",
@@ -161,7 +185,7 @@ export class Server {
 
 	async forceStop(exitCode: number | NodeJS.Signals = "SIGKILL") {
 		if (this.instance?.exitCode === null) {
-			this.instance?.kill("SIGKILL");
+			this.instance?.kill(exitCode);
 			await this.instance?.exited;
 			this.waitingToShutdown = false;
 			return true;
@@ -312,6 +336,8 @@ export class ServerManager {
 	async loadServers() {
 		this.servers.clear();
 		for (const server of await getAllServers()) {
+			if (!serverGameTypes.includes(server.gameType as ServerGameType))
+				throw new Error(`Unknown server game type: ${server.gameType}`);
 			this.servers.set(
 				server.id,
 				new Server({
@@ -326,6 +352,12 @@ export class ServerManager {
 						port: server.port,
 						apiPort: server.apiPort,
 					},
+					creditSettings: await loadServerCreditSetting(server.id),
+					approvalSettings: await loadServerApprovalSetting(
+						server.id,
+					),
+					gameType: server.gameType as ServerGameType,
+					startupScript: server.startupScript ?? undefined,
 				}),
 			);
 		}
@@ -431,6 +463,7 @@ async function exitServer(client: Client, server: Server) {
 			await approval.message.edit({
 				content: "Approval Canceled",
 				embeds: [],
+				components: [],
 			});
 			continue;
 		}
