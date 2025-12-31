@@ -26,6 +26,8 @@ RUN bun run build
 # Stage 4: Generate Prisma client
 FROM deps AS prisma-builder
 WORKDIR /app
+# Set a placeholder DATABASE_URL for build time
+ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
 COPY prisma/ ./prisma/
 COPY prisma.config.ts ./
 RUN bunx prisma generate
@@ -38,8 +40,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup --system --gid 1001 botgroup
-RUN adduser --system --uid 1001 botuser --ingroup botgroup
+RUN groupadd --system --gid 1001 botgroup
+RUN useradd --system --uid 1001 --gid botgroup --home /app botuser
 
 # Copy node_modules from deps stage
 COPY --from=deps --chown=botuser:botgroup /app/node_modules ./node_modules
