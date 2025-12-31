@@ -1,0 +1,124 @@
+# Development override for docker-compose.yml
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: "3.8"
+
+services:
+    # Development overrides for the main bot service
+    ipbot:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: runner
+        environment:
+            # Development settings
+            NODE_ENV: development
+            LOG_LEVEL: debug
+            DEBUG: "true"
+
+            # Force command registration on every startup in dev
+            REGISTER_COMMANDS: "true"
+
+            # Shorter timeouts for faster development cycles
+            APPROVAL_TIMEOUT: 60000
+        volumes:
+            # Mount source code for live editing (if using nodemon or similar)
+            - ./lib:/app/lib:ro
+            - ./commands:/app/commands:ro
+            - ./webUi/src:/app/webUi/src:ro
+            - ./index.ts:/app/index.ts:ro
+            - ./defaultSettings.ts:/app/defaultSettings.ts:ro
+            - ./prisma.config.ts:/app/prisma.config.ts:ro
+
+            # Mount tools for development utilities
+            - ./tools:/app/tools:ro
+
+            # Development data directories
+            - ./dev-data:/app/data
+            - ./dev-servers:/app/servers
+
+            # Development logs
+            - ./dev-logs:/app/logs
+        ports:
+            # Expose additional ports for debugging
+            - "3000:3000" # Main API
+            - "6001:6001" # Minecraft API
+            - "9229:9229" # Node.js debug port (if needed)
+        command: ["bun", "--hot", "index.ts"]
+        restart: "no" # Don't auto-restart in development
+
+    # Development database with exposed port for direct access
+    postgres:
+        environment:
+            # More verbose logging in development
+            POSTGRES_LOG_STATEMENT: all
+            POSTGRES_LOG_MIN_DURATION_STATEMENT: 0
+        ports:
+            - "5432:5432" # Expose for direct database access
+        volumes:
+            # Use named volume for development to persist between rebuilds
+            - postgres_dev_data:/var/lib/postgresql/data
+            - ./dev-db-init:/docker-entrypoint-initdb.d
+        command:
+            - postgres
+            - -c
+            - log_statement=all
+            - -c
+            - log_destination=stderr
+            - -c
+            - log_min_messages=info
+            - -c
+            - log_min_duration_statement=0
+            - -c
+            - log_line_prefix='%t [%p]:\ [%l-1] user=%u,db=%d,app=%a,client=%h '
+
+    # Development web UI service
+    webui-dev:
+        build:
+            context: ./webUi
+            dockerfile: ../Dockerfile
+            target: base
+        container_name: ipbot-webui-dev
+        working_dir: /app/webUi
+        environment:
+            NODE_ENV: development
+        volumes:
+            - ./webUi:/app/webUi
+            - webui_dev_node_modules:/app/webUi/node_modules
+        ports:
+            - "3001:3000"
+        command: ["bun", "run", "dev", "--host", "0.0.0.0"]
+        networks:
+            - ipbot-network
+
+    # Development tools container for running utilities
+    tools:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: runner
+        container_name: ipbot-tools-dev
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            DATABASE_URL: postgresql://ipbotuser:${POSTGRES_PASSWORD:-defaultpassword}@postgres:5432/ipbotdiscord
+            TOKEN: ${DISCORD_TOKEN}
+            CLIENT_ID: ${DISCORD_CLIENT_ID}
+            NODE_ENV: development
+        volumes:
+            - .:/app
+            - dev_tools_data:/app/data
+        networks:
+            - ipbot-network
+        profiles:
+            - tools
+        entrypoint: ["tail", "-f", "/dev/null"] # Keep container running
+
+volumes:
+    postgres_dev_data:
+        driver: local
+    webui_dev_node_modules:
+        driver: local
+    dev_tools_data:
+        driver: local
