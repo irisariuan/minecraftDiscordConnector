@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ipbot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ipbotdiscord
+      POSTGRES_USER: ipbotuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-defaultpassword}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - ipbot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ipbotuser -d ipbotdiscord"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Discord Bot
+  ipbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ipbot-discord
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://ipbotuser:${POSTGRES_PASSWORD:-defaultpassword}@postgres:5432/ipbotdiscord
+
+      # Discord Bot Configuration (required)
+      TOKEN: ${DISCORD_TOKEN}
+      CLIENT_ID: ${DISCORD_CLIENT_ID}
+
+      # Server Configuration
+      UPLOAD_URL: ${UPLOAD_URL:-http://localhost:3000}
+      SERVER_DIR: ${SERVER_DIR:-/app/servers/default}
+      MINECRAFT_VERSION: ${MINECRAFT_VERSION:-1.21.4}
+      LOADER_TYPE: ${LOADER_TYPE:-paper}
+      MOD_TYPE: ${MOD_TYPE:-plugin}
+
+      # Optional Configuration
+      CF_KEY: ${CF_KEY}
+      UPDATE_URL: ${UPDATE_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      APPROVAL_TIMEOUT: ${APPROVAL_TIMEOUT:-300000}
+
+      # Application settings
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "${BOT_PORT:-3000}:3000"
+      - "${API_PORT:-6001}:6001"
+    volumes:
+      # Minecraft server data (adjust path as needed)
+      - minecraft_data:/app/servers
+      # Bot data persistence
+      - bot_data:/app/data
+      # Logs
+      - ./logs:/app/logs
+    networks:
+      - ipbot-network
+    healthcheck:
+      test: ["CMD", "bun", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Web UI (optional, if you want to run it separately)
+  webui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: webui-builder
+    container_name: ipbot-webui
+    restart: unless-stopped
+    ports:
+      - "${WEBUI_PORT:-3001}:3000"
+    environment:
+      NODE_ENV: production
+    networks:
+      - ipbot-network
+    profiles:
+      - webui
+
+networks:
+  ipbot-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  minecraft_data:
+    driver: local
+  bot_data:
+    driver: local
