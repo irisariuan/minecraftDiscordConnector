@@ -1,10 +1,11 @@
 import {
-	ButtonInteraction,
+	ActionRowBuilder,
 	ComponentType,
 	MessageComponentInteraction,
 	StringSelectMenuInteraction,
 	type ChatInputCommandInteraction,
 	type ColorResolvable,
+	type MessageActionRowComponentBuilder,
 } from "discord.js";
 import { CacheItem } from "./cache";
 import {
@@ -16,7 +17,7 @@ import {
 	ModalAction,
 	PageAction,
 	type SelectMenuOption,
-} from "./embed";
+} from "./component/pagination";
 import { clamp } from "./utils";
 
 interface GetPageProps {
@@ -62,42 +63,75 @@ export interface PaginationOptions {
 	selectMenuPlaceholder?: string;
 }
 
-interface SendPaginationMessageProps<T> extends BasePaginationProps<T> {
-	getResult: (
-		pageNumber: number,
-		filter?: string,
-		force?: boolean,
-	) => Promise<T[] | undefined> | T[] | undefined;
+interface SendPaginationMessageProps<
+	ResultType,
+> extends BasePaginationProps<ResultType> {
+	getResult: (props: {
+		pageNumber: number;
+		filter?: string;
+		force?: boolean;
+	}) => Promise<ResultType[] | undefined> | ResultType[] | undefined;
 	/**
 	 * @returns {boolean} If we should stop to listen to the select menu
 	 */
 	onItemSelected?: (
 		interaction: StringSelectMenuInteraction,
-		currentResult: CacheItem<T[]>,
+		currentResult: CacheItem<ResultType[]>,
+	) => Promise<boolean> | boolean;
+	/**
+	 * @returns {boolean} If we should stop to listen to the component rows
+	 */
+	onComponentRowsReacted?: (
+		interaction: MessageComponentInteraction,
+		currentResult: CacheItem<ResultType[]>,
 	) => Promise<boolean> | boolean;
 }
 
-export async function sendPaginationMessage<T>(
-	props: SendPaginationMessageProps<T>,
+interface BasePaginationProps<T> {
+	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
+	filterFunc?: (filter?: string) => (v: T) => boolean;
+	selectMenuTransform?: (v: T) => SelectMenuOption;
+	customComponentRows?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
+	formatter: (v: T, i: number) => { name: string; value: string };
+	options?: PaginationOptions;
+}
+
+interface EditInteractionProps<T> extends BasePaginationProps<T> {
+	result: CacheItem<T[]>;
+	page: number;
+	showSelectMenu: boolean;
+}
+
+export async function sendPaginationMessage<ResultType>(
+	props: SendPaginationMessageProps<ResultType>,
 ) {
 	const {
 		getResult,
 		interaction,
 		options,
 		filterFunc,
-		formatter,
 		onItemSelected,
 		selectMenuTransform,
 		interactionFilter,
+		onComponentRowsReacted,
 	} = props;
 	let page = 0;
-	const result = new CacheItem<T[]>(null, {
+	const result = new CacheItem<ResultType[]>(null, {
 		updateMethod: async () =>
 			(filterFunc
-				? (await getResult(page, options?.filter, true))?.filter(
-						filterFunc(options?.filter),
-					)
-				: await getResult(page, options?.filter, true)) || [],
+				? (
+						await getResult({
+							pageNumber: page,
+							filter: options?.filter,
+							force: true,
+						})
+					)?.filter(filterFunc(options?.filter))
+				: await getResult({
+						pageNumber: page,
+						filter: options?.filter,
+						force: true,
+					})) ?? [],
 		interval: 1000 * 60 * 5,
 		ttl: 1000 * 60 * 3,
 	});
@@ -128,10 +162,10 @@ export async function sendPaginationMessage<T>(
 				page =
 					(Number(
 						reply.fields.getTextInputValue(ModalAction.PAGE_INPUT),
-					) || page + 1) - 1;
+					) ?? page + 1) - 1;
 				if (oldPage === page) return;
 				const maxPage = calculateMaxPage(
-					(await result.getData())?.length || 0,
+					(await result.getData())?.length ?? 0,
 				);
 				return editInteraction({
 					result,
@@ -156,14 +190,21 @@ export async function sendPaginationMessage<T>(
 					async () =>
 						(filterFunc
 							? (
-									await getResult(page, options?.filter, true)
+									await getResult({
+										pageNumber: page,
+										filter: options?.filter,
+										force: true,
+									})
 								)?.filter(filterFunc(filter))
-							: await getResult(page, options?.filter, true)) ||
-						[],
+							: await getResult({
+									pageNumber: page,
+									filter: options?.filter,
+									force: true,
+								})) ?? [],
 				);
 				await result.update();
 				const maxPage = calculateMaxPage(
-					(await result.getData())?.length || 0,
+					(await result.getData())?.length ?? 0,
 				);
 				page = getPage({
 					page,
@@ -185,7 +226,7 @@ export async function sendPaginationMessage<T>(
 			const data = await result.getData();
 			if (!data || data.length <= 0)
 				return interaction.editReply({
-					content: options?.notFoundMessage || "No results",
+					content: options?.notFoundMessage ?? "No results",
 					embeds: [],
 					components: createButtons({
 						page: 0,
@@ -220,45 +261,43 @@ export async function sendPaginationMessage<T>(
 			showSelectMenu = false;
 		}
 	});
+
+	const customCollector =
+		interactionResponse.createMessageComponentCollector();
+	customCollector.on("collect", async (reaction) => {
+		if (await onComponentRowsReacted?.(reaction, result)) {
+			customCollector.stop();
+		}
+	});
 	return paginationCollector;
 }
 
-interface BasePaginationProps<T> {
-	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
-	filterFunc?: (filter?: string) => (v: T) => boolean;
-	selectMenuTransform?: (v: T) => SelectMenuOption;
-	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
-	formatter: (v: T, i: number) => { name: string; value: string };
-	options?: PaginationOptions;
-}
-
-interface EditInteractionProps<T> extends BasePaginationProps<T> {
-	result: CacheItem<T[]>;
-	page: number;
-	showSelectMenu: boolean;
-}
-
-async function editInteraction<T>({
-	result,
-	interaction,
-	page,
-	options,
-	filterFunc,
-	formatter,
-	selectMenuTransform,
-	showSelectMenu,
-}: EditInteractionProps<T>) {
+async function editInteraction<T>(props: EditInteractionProps<T>) {
+	const {
+		result,
+		interaction,
+		page,
+		options,
+		filterFunc,
+		formatter,
+		selectMenuTransform,
+		showSelectMenu,
+		customComponentRows,
+	} = props;
 	const data = await result.getData();
 	if (!data || data.length <= 0) {
 		return await interaction.editReply({
-			content: options?.notFoundMessage || "No results",
+			content: options?.notFoundMessage ?? "No results",
 			embeds: [],
-			components: createButtons({
-				page: 0,
-				contentLength: 0,
-				unfixablePageNumber: options?.unfixablePageNumber,
-				haveFilter: !!filterFunc,
-			}),
+			components: [
+				...createButtons({
+					page: 0,
+					contentLength: 0,
+					unfixablePageNumber: options?.unfixablePageNumber,
+					haveFilter: !!filterFunc,
+				}),
+				...(customComponentRows ?? []),
+			],
 		});
 	}
 	const filteredResult = filterFunc

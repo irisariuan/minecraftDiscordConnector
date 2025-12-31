@@ -7,9 +7,17 @@ import {
 } from "discord.js";
 import "dotenv/config";
 import { updateApprovalMessage } from "./lib/approval";
-import { doNotRequireServer, loadCommands } from "./lib/commandFile";
+import {
+	doNotRequireServer,
+	getAllRegisteredCommandNames,
+	loadCommands,
+	registerCommands,
+} from "./lib/commandFile";
+import { isApprovalMessageComponentId } from "./lib/component/approval";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
+import { createServer, hasAnyServer } from "./lib/db";
 import { updateDnsRecord } from "./lib/dnsRecord";
+import { createServerSelectionMenu } from "./lib/component/server";
 import {
 	compareAllPermissions,
 	comparePermission,
@@ -17,17 +25,15 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "./lib/permission";
+import { createServerManager, Server } from "./lib/server";
+import { serverConfig } from "./lib/server/plugin";
 import {
 	changeCreditSettings,
 	loadCreditSettings,
 	settings,
 } from "./lib/settings";
-import { getNextTimestamp } from "./lib/time";
-import { isApprovalMessageComponentId } from "./lib/approval/component";
-import { createServerManager, Server } from "./lib/server";
-import { createServer, hasAnyServer } from "./lib/db";
-import { serverConfig } from "./lib/plugin";
-import { createServerSelectionMenu } from "./lib/embed/server";
+import { compareArrays, getNextTimestamp } from "./lib/utils";
+import { TOKEN } from "./lib/env";
 
 const commands = await loadCommands();
 if (!(await hasAnyServer())) {
@@ -109,6 +115,16 @@ if (process.argv.includes("-C")) {
 		),
 	});
 }
+if (
+	!compareArrays(
+		(await getAllRegisteredCommandNames()) ?? [],
+		commands.map((v) => v.command.name),
+	)
+) {
+	console.log("Updating registered commands...");
+	await registerCommands(commands);
+	console.log("Registered commands");
+}
 
 client.once("ready", async () => {
 	console.log(`Logged in as ${client.user?.tag}`);
@@ -181,19 +197,16 @@ client.on("interactionCreate", async (interaction) => {
 					content: "An error occurred while executing the command",
 					flags: [MessageFlags.Ephemeral],
 				})
-				.catch((err) => {
-					console.error(err);
+				.catch(() => {
 					interaction
 						.editReply({
 							content:
 								"An error occurred while executing the command",
 						})
-						.catch((err) => {
-							console.error(err);
+						.catch(() => {
 							interaction.followUp({
 								content:
 									"An error occurred while executing the command",
-								flags: [MessageFlags.Ephemeral],
 							});
 						});
 				});
@@ -201,7 +214,7 @@ client.on("interactionCreate", async (interaction) => {
 
 		if (doNotRequireServer(command)) {
 			return await Promise.try(() =>
-				command.execute({ interaction, client }),
+				command.execute({ interaction, client, serverManager }),
 			).catch(errorHandler);
 		}
 		const serverCount = serverManager.getServerCount();
@@ -248,12 +261,6 @@ client.on("interactionCreate", async (interaction) => {
 				const selectedServer = serverManager.getServer(
 					parseInt(serverId),
 				);
-				console.log(
-					"Selected",
-					serverId,
-					"returned:",
-					selectedServer?.id,
-				);
 				if (!selectedServer) {
 					return selection.update({
 						content: "Selected server not found",
@@ -262,33 +269,58 @@ client.on("interactionCreate", async (interaction) => {
 				}
 				server = selectedServer;
 				await selection.update({
-					content: "Server selected",
+					content: "Loading...",
 					components: [],
 				});
-				await interaction.editReply({
-					components: [],
-					content: "Loading...",
+				await selection.followUp({
+					content: `Selected ${server.config.tag || `*Server #${server.id}*`}`,
+					flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
 				});
 			} catch (e) {
-				console.error(e);
 				return await interaction.editReply({
 					content: "No server selected in time or an error occurred",
 					components: [],
 				});
 			}
 		}
-
 		if (
-			command.features?.suspendable &&
+			command.features?.unsuspendable &&
 			server.suspendingEvent.isSuspending() &&
 			!comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.suspend,
 			)
 		) {
-			return interaction.reply({
+			return await interaction.reply({
 				content:
 					"Server is suspending, you do not have permission to use this command",
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		if (
+			command.features?.supportedPlatforms &&
+			command.features.supportedPlatforms.length > 0 &&
+			!command.features.supportedPlatforms.includes(server.gameType)
+		) {
+			return await interaction.reply({
+				content: `This command is not supported on \`${server.gameType}\` servers`,
+				flags: [MessageFlags.Ephemeral],
+			});
+		}
+		if (
+			command.features?.requireStartedServer &&
+			!(await server.isOnline.getData(true))
+		) {
+			return await interaction.reply({
+				content: "Server is not online",
+				flags: [MessageFlags.Ephemeral],
+			});
+		} else if (
+			command.features?.requireStoppedServer &&
+			(await server.isOnline.getData(true))
+		) {
+			return await interaction.reply({
+				content: "Server is not stopped",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
@@ -307,6 +339,22 @@ client.on("interactionCreate", async (interaction) => {
 		if (isApprovalMessageComponentId(interaction.customId)) {
 			return updateApprovalMessage(serverManager, interaction);
 		}
+	} else if (interaction.isAutocomplete()) {
+		const { commandName } = interaction;
+		const command = commands.find(
+			(cmd) => cmd.command.name === commandName,
+		);
+		if (!command || !command.autoComplete) {
+			console.error(
+				"Autocomplete requested but command not found or does not support autocomplete",
+			);
+			return await interaction.respond([]);
+		}
+		await Promise.try(() =>
+			command.autoComplete?.({ interaction, client, serverManager }),
+		).catch((err) => {
+			console.error("Error running autocomplete:", err);
+		});
 	}
 });
 
@@ -378,4 +426,4 @@ process.on("exit", async (code) => {
 	process.exit(code);
 });
 
-client.login(process.env.TOKEN);
+client.login(TOKEN);

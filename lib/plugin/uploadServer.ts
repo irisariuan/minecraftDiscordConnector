@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Express } from "express";
 import multer from "multer";
 import bodyParser from "body-parser";
@@ -7,10 +8,11 @@ import EventEmitter from "events";
 import type { Server } from "http";
 import cors from "cors";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
-import { join, resolve } from "path";
 import { copyFile } from "fs/promises";
 import { writeFile } from "fs/promises";
 import { rename } from "fs/promises";
+import { safeJoin } from "../utils";
+import { CORS_ORIGIN } from "../env";
 
 const UploadRequestSchema = z.discriminatedUnion("action", [
 	z.object({
@@ -36,10 +38,10 @@ function createUploadServer(uploadServer: UploadServer) {
 	});
 	const jsonParser = bodyParser.json();
 
-	app.use(cors({ origin: "*" }));
+	app.use(cors({ origin: CORS_ORIGIN ?? "*" }));
 	app.use(
 		"/",
-		express.static(join(process.cwd(), "webUi", "dist", "client")),
+		express.static(safeJoin(process.cwd(), "webUi", "dist", "client")),
 	);
 	app.use(ssrHandler);
 
@@ -57,15 +59,21 @@ function createUploadServer(uploadServer: UploadServer) {
 				edited: !uploadServer.hasActiveToken(
 					req.params.id,
 					TokenType.EditToken,
-				), 
+				),
 			});
 		}
-		return res.status(200).send({ valid: false, uploaded: false, edited: false });
+		return res
+			.status(200)
+			.send({ valid: false, uploaded: false, edited: false });
 	});
 	app.get("/file/:id", (req, res) => {
 		if (!req.params.id || !uploadServer.fileTokenMap.has(req.params.id)) {
-			if (uploadServer.hasActiveToken(req.params.id, TokenType.EditToken)) {
-				const file = uploadServer.editTokenFilenameMap.get(req.params.id)
+			if (
+				uploadServer.hasActiveToken(req.params.id, TokenType.EditToken)
+			) {
+				const file = uploadServer.editTokenFilenameMap.get(
+					req.params.id,
+				);
 				if (!file) {
 					return res.status(404).send("Not Found");
 				}
@@ -170,12 +178,12 @@ function createUploadServer(uploadServer: UploadServer) {
 			}
 			case "rename": {
 				const { newFilename } = parsed.data;
-				const finalPath = resolve(newFilename);
-				// prevent path traversal
-				if (!finalPath.startsWith(resolve(file.containingFolderPath))) {
-					return res.status(400).send("Invalid new filename path");
-				}
-				await rename(file.filename, newFilename);
+				// Validate new filename
+				const finalPath = safeJoin(
+					file.containingFolderPath,
+					newFilename,
+				);
+				await rename(file.filename, finalPath);
 				return res.status(200).send("File renamed successfully");
 			}
 			case "delete": {

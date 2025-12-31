@@ -1,19 +1,21 @@
 import { ComponentType, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { removePluginByFileName } from "../lib/plugin";
+import { removePluginByFileName } from "../lib/server/plugin";
 import {
 	comparePermission,
 	readPermission,
 	PermissionFlags,
 	anyPerm,
 } from "../lib/permission";
-import { createRequestComponent, RequestComponentId } from "../lib/components";
 import {
+	createRequestComponent,
+	RequestComponentId,
+} from "../lib/component/request";
+import {
+	spendCredit,
 	changeCredit,
 	sendCreditNotification,
-	spendCredit,
 } from "../lib/credit";
-import { settings } from "../lib/settings";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -43,30 +45,22 @@ export default {
 		};
 		if (
 			comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.deletePlugin,
 			)
 		)
 			return await deleteFunc();
-		if (
-			!(await spendCredit({
-				userId: interaction.user.id,
-				cost: settings.deletePluginFee,
-				reason: "Delete Plugin Request",
-				serverId: server.id,
-			}))
-		) {
-			return await interaction.editReply({
-				content: `You don't have enough credit to delete a plugin. Deleting a plugin costs ${settings.deletePluginFee} credits.`,
-			});
-		}
-
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -settings.deletePluginFee,
-			reason: "Delete Plugin Request",
+		const payment = await spendCredit(interaction, {
+			userId: interaction.user.id,
+			cost: server.creditSettings.deletePluginFee,
+			reason: `Delete Plugin ${plugin}`,
 			serverId: server.id,
 		});
+		if (!payment) {
+			return await interaction.editReply({
+				content: `You don't have enough credit to delete a plugin. Deleting a plugin costs ${server.creditSettings.deletePluginFee} credits.`,
+			});
+		}
 
 		const message = await interaction.editReply({
 			content: `Please ask a staff to permit your request on deleting \`${plugin}\``,
@@ -76,7 +70,7 @@ export default {
 			.awaitMessageComponent({
 				filter: async (i) =>
 					comparePermission(
-						await readPermission(i.user),
+						await readPermission(i.user, server.id),
 						PermissionFlags.deletePlugin,
 					),
 				componentType: ComponentType.Button,
@@ -92,13 +86,13 @@ export default {
 		if (reply.customId === RequestComponentId.Deny) {
 			await changeCredit({
 				userId: interaction.user.id,
-				change: settings.deletePluginFee,
+				change: -payment.changed,
 				serverId: server.id,
 				reason: "Delete Plugin Request Denied Refund",
 			});
 			await sendCreditNotification({
 				user: interaction.user,
-				creditChanged: settings.deletePluginFee,
+				creditChanged: -payment.changed,
 				reason: "Delete Plugin Request Denied Refund",
 				serverId: server.id,
 			});

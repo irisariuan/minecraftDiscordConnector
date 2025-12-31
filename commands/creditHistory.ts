@@ -6,14 +6,15 @@ import {
 	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { getCredit, sendCreditNotification, spendCredit } from "../lib/credit";
+import { spendCredit, getCredit, type Transaction } from "../lib/credit";
 import { settings } from "../lib/settings";
+import { sendPaginationMessage } from "../lib/pagination";
 
 export default {
 	command: new SlashCommandBuilder()
 		.setName("credit")
 		.setDescription(
-			"Get your credit balance details, or check deetails of another user",
+			"Get your credit balance details, or check details of another user",
 		)
 		.addUserOption((option) =>
 			option
@@ -26,24 +27,18 @@ export default {
 		await interaction.deferReply({
 			flags: [MessageFlags.Ephemeral],
 		});
-		const user = interaction.options.getUser("user") || interaction.user;
-		if (user.id !== interaction.user.id) {
-			if (
-				!(await spendCredit({
-					userId: interaction.user.id,
-					cost: settings.checkUserCreditFee,
-					reason: "Check Credit of Other Users",
-				}))
-			) {
-				return await interaction.editReply({
-					content:
-						"You don't have enough credit to check other users' credit",
-				});
-			}
-			await sendCreditNotification({
-				user: interaction.user,
-				creditChanged: -settings.checkUserCreditFee,
-				reason: "Check Credit of Other Users",
+		const user = interaction.options.getUser("user") ?? interaction.user;
+		if (
+			user.id !== interaction.user.id &&
+			!(await spendCredit(interaction, {
+				userId: interaction.user.id,
+				cost: settings.checkUserCreditFee,
+				reason: `Check credit of user ${user.displayName}`,
+			}))
+		) {
+			return await interaction.editReply({
+				content:
+					"You don't have enough credit to check other users' credit",
 			});
 		}
 
@@ -54,28 +49,59 @@ export default {
 			});
 		}
 
-		await interaction.editReply({
-			embeds: [
-				new EmbedBuilder()
-					.setTitle(user.username)
-					.addFields({
-						name: "Current Credit",
-						value: `\`${creditData.currentCredit}\``,
-					})
-					.addFields(
-						creditData.histories
-							.sort((a, b) => b.timestamp - a.timestamp)
-							.slice(0, 21)
-							.map((history) => ({
-								name:
-									history.changed >= 0 ? "Income" : "Expense",
-								value: `${italic(`${history.changed > 0 ? "+" : ""}${history.changed}`)}\n\`${history.creditBefore}\`➡️\`${history.creditAfter}\`\nTimestamp: ${time(new Date(history.timestamp))}${history.reason ? `\nReason: \`${history.reason}\`` : ""}\nTracking ID: \`${history.trackingId}\``,
-							})),
-					)
-					.setFooter({
-						text: `Showing latest ${Math.min(20, creditData.histories.length)} histories`,
-					}),
-			],
+		// Sort histories by timestamp (newest first)
+		const sortedHistories = creditData.histories.sort(
+			(a, b) => b.timestamp - a.timestamp,
+		);
+
+		// If no history, show just current credit
+		if (sortedHistories.length === 0) {
+			return await interaction.editReply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle(`${user.username} - Credit Balance`)
+						.addFields({
+							name: "Current Credit",
+							value: `\`${creditData.currentCredit}\``,
+						})
+						.addFields({
+							name: "History",
+							value: "No credit history found",
+						}),
+				],
+			});
+		}
+
+		await sendPaginationMessage<Transaction>({
+			interaction,
+			getResult: async () => {
+				const newData = await getCredit(user.id);
+				return newData ? newData.histories : [];
+			},
+			formatter: (history) => ({
+				name: history.changed >= 0 ? "Income" : "Expense",
+				value: `${italic(`${history.changed > 0 ? "+" : ""}${history.changed}`)}\n\`${
+					history.creditBefore
+				}\`➡️\`${history.creditAfter}\`\nDate: ${time(
+					new Date(history.timestamp),
+				)}${history.reason ? `\nReason: \`${history.reason}\`` : ""}${
+					history.ticketUsed !== null
+						? `\nTicket Used: \`${history.ticketUsed.name}\` (\`${history.ticketUsed.ticketId}\`)`
+						: ""
+				}\nID: \`${history.trackingId}\`\n${
+					history.serverTag !== null
+						? `Related server: \`${history.serverTag}\``
+						: "*Non-server related*"
+				}`,
+			}),
+			options: {
+				title: `${user.username} - Credit History (Current: ${creditData.currentCredit})`,
+				notFoundMessage: "No credit history found",
+				mainColor: "Blue",
+			},
 		});
+	},
+	features: {
+		unsuspendable: true,
 	},
 } satisfies CommandFile<false>;

@@ -1,20 +1,20 @@
 import {
-	channelMention,
-	MessageFlags,
-	SlashCommandBuilder,
-	time,
-	userMention,
+    channelMention,
+    MessageFlags,
+    SlashCommandBuilder,
+    time,
+    userMention,
 } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
-import {
-	comparePermission,
-	getUsersWithMatchedPermission,
-	PermissionFlags,
-	readPermission,
-} from "../lib/permission";
 import { sendApprovalPoll } from "../lib/approval";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
+import type { CommandFile } from "../lib/commandFile";
+import { spendCredit } from "../lib/credit";
+import {
+    comparePermission,
+    getUsersWithMatchedPermission,
+    PermissionFlags,
+    readPermission,
+} from "../lib/permission";
+
 import { sendMessagesToUsersById } from "../lib/utils";
 
 export default {
@@ -36,7 +36,7 @@ export default {
 			});
 		}
 
-		const force = interaction.options.getBoolean("force") || false;
+		const force = interaction.options.getBoolean("force") ?? false;
 		if (await server.isOnline.getData(true))
 			return await interaction.followUp({
 				content: "Server is already online",
@@ -54,7 +54,7 @@ export default {
 		if (
 			force &&
 			comparePermission(
-				await readPermission(interaction.user),
+				await readPermission(interaction.user, server.id),
 				PermissionFlags.startServer,
 			)
 		) {
@@ -72,9 +72,9 @@ export default {
 		await interaction.deleteReply();
 
 		if (
-			!(await spendCredit({
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
-				cost: settings.newStartServerPollFee,
+				cost: server.creditSettings.newStartServerPollFee,
 				reason: "New Start Server Poll",
 				serverId: server.id,
 			}))
@@ -84,19 +84,13 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -settings.newStartServerPollFee,
-			reason: "New Start Server Poll",
-			serverId: server.id,
-		});
 
 		sendApprovalPoll(interaction, {
-			content: "Start Server",
+			content: `Start Server at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
-				startPollFee: settings.newStartServerPollFee,
+				startPollFee: server.creditSettings.newStartServerPollFee,
 				callerId: interaction.user.id,
-				description: "Start Server",
+				description: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
 					const pid = await server.start();
 					if (!pid) {
@@ -120,12 +114,16 @@ export default {
 						content: "Server started successfully",
 					});
 				},
-				approvalCount: 3,
-				disapprovalCount: 3,
-				credit: settings.startServerVoteFee,
+				approvalCount: server.approvalSettings.startServerApproval,
+				disapprovalCount:
+					server.approvalSettings.startServerDisapproval,
+				credit: server.creditSettings.startServerVoteFee,
 			},
 			server,
 		});
 	},
 	ephemeral: true,
+	features: {
+		requireStoppedServer: true,
+	},
 } satisfies CommandFile<true>;

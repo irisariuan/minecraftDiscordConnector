@@ -5,7 +5,10 @@ import {
 	time,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { createRequestComponent, RequestComponentId } from "../lib/components";
+import {
+	createRequestComponent,
+	RequestComponentId,
+} from "../lib/component/request";
 import { sendPaginationMessage } from "../lib/pagination";
 import {
 	anyPerm,
@@ -17,7 +20,7 @@ import {
 	downloadPluginFile,
 	listPluginVersions,
 	type PluginListVersionItem,
-} from "../lib/plugin";
+} from "../lib/server/plugin";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -36,7 +39,10 @@ export default {
 		),
 	requireServer: true,
 	async execute({ interaction, server }) {
-		const userPermission = await readPermission(interaction.user);
+		const userPermission = await readPermission(
+			interaction.user,
+			server.id,
+		);
 
 		const pluginOption = interaction.options.getString("plugin", true);
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
@@ -52,7 +58,7 @@ export default {
 					(await listPluginVersions(pluginOption, {
 						loaders: [server.config.loaderType],
 						game_versions: [server.config.minecraftVersion],
-					})) || []
+					})) ?? []
 				).filter((v) => !onlyRelease || v.version_type === "release"),
 			options: {
 				title: "Select a plugin version to download",
@@ -96,7 +102,7 @@ export default {
 							componentType: ComponentType.Button,
 							filter: async (i) =>
 								comparePermission(
-									await readPermission(i.user),
+									await readPermission(i.user, server.id),
 									PermissionFlags.downloadPlugin,
 								),
 							time: 1000 * 60 * 10,
@@ -121,10 +127,7 @@ export default {
 						components: [],
 					});
 				}
-				const { newDownload } = await downloadPluginFile(
-					server.config.pluginDir,
-					value,
-				);
+				const { newDownload } = await downloadPluginFile(server, value);
 				if (!newDownload) {
 					await menuInteraction.editReply({
 						content:
@@ -144,9 +147,16 @@ export default {
 				const found = (await result.getData())?.find(
 					(v) => v.id === value,
 				);
-				if (found && found.dependencies.length > 0) {
+				const filteredDependencies = found?.dependencies.filter(
+					(v) => !!v.file_name,
+				);
+				if (
+					found &&
+					filteredDependencies &&
+					filteredDependencies.length > 0
+				) {
 					await menuInteraction.followUp({
-						content: `Note: This plugin has dependencies: ${found.dependencies.map((d) => `\`${d.file_name}\` (Version \`${d.version_id}\`)`).join(", ")}. You may need to download and append them as well.`,
+						content: `Note: This plugin has dependencies: ${filteredDependencies.map((d) => `\`${d.file_name}\` (Version \`${d.version_id}\`)`).join(", ")}. You may need to download and append them as well.`,
 						flags: [MessageFlags.Ephemeral],
 					});
 				}
@@ -158,5 +168,7 @@ export default {
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),
-	
+	features: {
+		supportedPlatforms: ["minecraft"],
+	},
 } satisfies CommandFile<true>;

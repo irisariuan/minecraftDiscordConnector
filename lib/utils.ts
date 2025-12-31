@@ -4,7 +4,7 @@ import {
 	type Client,
 	type MessageCreateOptions,
 } from "discord.js";
-import { join } from "path";
+import { join, relative, resolve } from "path";
 
 export type PickAndOptional<
 	T,
@@ -134,11 +134,133 @@ export function clamp(value: number, min: number, max: number) {
 }
 
 export function safeJoin(...paths: string[]) {
-	const finalPath = join(...paths);
-	if (!paths[0] || !finalPath.startsWith(paths[0])) {
-		throw new Error("Unsafe path detected");
+	const [basePath, ...remainingPaths] = paths;
+	if (!basePath) throw new Error("Base path is required");
+	// Normalize and resolve the base path first
+	const normalizedBase = resolve(basePath);
+
+	// Join all paths
+	const joinedPath = join(basePath, ...remainingPaths);
+
+	// Resolve the final path
+	const finalPath = resolve(joinedPath);
+
+	// Check if the resolved path is within the base directory
+	const relativePath = relative(normalizedBase, finalPath);
+
+	// Ensure the relative path doesn't start with ".." or is absolute
+	if (
+		relativePath.startsWith("..") ||
+		relativePath.startsWith("/") ||
+		relativePath.includes(":")
+	) {
+		throw new Error("Path traversal detected");
 	}
+
 	return finalPath;
+}
+
+/**
+ * Parse time string in various formats and return total milliseconds
+ * Supported formats:
+ * - DD:HH:MM:SS (days:hours:minutes:seconds) - first part can be longer than 2 digits
+ * - HH:MM:SS (hours:minutes:seconds)
+ * - MM:SS (minutes:seconds)
+ * - S (seconds with 's' suffix, e.g., "102s")
+ */
+export function parseTimeString(timeStr: string): number | null {
+	if (!timeStr || typeof timeStr !== "string") {
+		return null;
+	}
+
+	const trimmedStr = timeStr.trim();
+
+	// Handle seconds format like "102s"
+	const secondsMatch = trimmedStr.match(/^(\d+)s$/i);
+	if (secondsMatch) {
+		const seconds = Number(secondsMatch[1]);
+		return seconds * 1000;
+	}
+
+	// Handle colon-separated formats
+	const parts = trimmedStr.split(":");
+
+	if (parts.length < 2 || parts.length > 4) {
+		return null;
+	}
+
+	// Parse parts as numbers
+	const numParts = parts.map((part) => {
+		const num = Number(part);
+		return isNaN(num) ? null : num;
+	});
+
+	// Check if any part is invalid
+	if (numParts.some((part) => part === null)) {
+		return null;
+	}
+
+	let days = 0,
+		hours = 0,
+		minutes = 0,
+		seconds = 0;
+
+	if (parts.length === 4) {
+		// DD:HH:MM:SS format
+		days = numParts[0]!;
+		hours = numParts[1]!;
+		minutes = numParts[2]!;
+		seconds = numParts[3]!;
+	} else if (parts.length === 3) {
+		// HH:MM:SS format
+		hours = numParts[0]!;
+		minutes = numParts[1]!;
+		seconds = numParts[2]!;
+	} else if (parts.length === 2) {
+		// MM:SS format
+		minutes = numParts[0]!;
+		seconds = numParts[1]!;
+	}
+
+	// Validate ranges (except for the first part which can be unlimited)
+	if (parts.length >= 3 && hours >= 24) return null;
+	if (minutes >= 60) return null;
+	if (seconds >= 60) return null;
+
+	// All values must be non-negative
+	if (days < 0 || hours < 0 || minutes < 0 || seconds < 0) return null;
+
+	// Calculate total milliseconds
+	const totalMs =
+		days * 24 * 60 * 60 * 1000 +
+		hours * 60 * 60 * 1000 +
+		minutes * 60 * 1000 +
+		seconds * 1000;
+
+	return totalMs > 0 ? totalMs : null;
+}
+
+/**
+ * Format time duration string from the parsed format
+ * Returns a human-readable string like "7 days 12 hours" or "30 minutes"
+ */
+export function formatTimeDuration(timeStr: string): string | null {
+	const ms = parseTimeString(timeStr);
+	if (ms === null) return null;
+
+	const totalSeconds = Math.floor(ms / 1000);
+	const days = Math.floor(totalSeconds / (24 * 60 * 60));
+	const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60));
+	const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+	const seconds = totalSeconds % 60;
+
+	const parts: string[] = [];
+	if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
+	if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
+	if (minutes > 0) parts.push(`${minutes} minute${minutes !== 1 ? "s" : ""}`);
+	if (seconds > 0) parts.push(`${seconds} second${seconds !== 1 ? "s" : ""}`);
+
+	return parts.length > 0 ? parts.join(" ") : null;
 }
 
 export async function sendMessagesToUsersById(
@@ -155,4 +277,60 @@ export async function sendMessagesToUsersById(
 			);
 		});
 	}
+}
+
+interface Time {
+	hour: number;
+	minute: number;
+}
+
+export function getNextTimestamp(time: Time) {
+	const now = new Date();
+	const next = new Date(
+		now.getFullYear(),
+		now.getMonth(),
+		now.getDate(),
+		time.hour,
+		time.minute,
+	);
+	if (next < now) {
+		next.setDate(next.getDate() + 1);
+	}
+	return next;
+}
+
+export function compareArrays(
+	arr1: any[],
+	arr2: any[],
+	force = false,
+): boolean {
+	const sortedArr1 = force ? arr1.toSorted() : arr1;
+	const sortedArr2 = force ? arr2.toSorted() : arr2;
+	if (sortedArr1.length !== sortedArr2.length) return false;
+	for (let i = 0; i < sortedArr1.length; i++) {
+		if (sortedArr1[i] !== sortedArr2[i]) return false;
+	}
+	return true;
+}
+
+export function compareObjectDeep(obj1: Object, obj2: Object): boolean {
+	const keys1 = Object.keys(obj1);
+	const keys2 = Object.keys(obj2);
+	if (!compareArrays(keys1, keys2)) return false;
+	for (const key of keys1) {
+		const val1 = (obj1 as any)[key];
+		const val2 = (obj2 as any)[key];
+		const areObjects =
+			val1 !== null &&
+			val2 !== null &&
+			typeof val1 === "object" &&
+			typeof val2 === "object";
+		if (
+			(areObjects && !compareObjectDeep(val1, val2)) ||
+			(!areObjects && val1 !== val2)
+		) {
+			return false;
+		}
+	}
+	return true;
 }

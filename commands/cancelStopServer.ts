@@ -1,14 +1,12 @@
-import { MessageFlags, Poll, SlashCommandBuilder } from "discord.js";
+import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	compareAnyPermissions,
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { sendApprovalPoll } from "../lib/approval";
-import { isServerAlive } from "../lib/request";
-import { sendCreditNotification, spendCredit } from "../lib/credit";
-import { settings } from "../lib/settings";
+import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -44,10 +42,10 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		if (
-			compareAnyPermissions(await readPermission(interaction.user), [
-				PermissionFlags.stopServer,
-				PermissionFlags.startServer,
-			])
+			compareAnyPermissions(
+				await readPermission(interaction.user, server.id),
+				[PermissionFlags.stopServer, PermissionFlags.startServer],
+			)
 		) {
 			let success = false;
 			if (server.haveLocalSideScheduledShutdown()) {
@@ -68,11 +66,11 @@ export default {
 			});
 		}
 		if (
-			!(await spendCredit({
+			!(await spendCredit(interaction, {
 				userId: interaction.user.id,
-				cost: settings.newCancelStopServerPollFee,
+				cost: server.creditSettings.newCancelStopServerPollFee,
 				serverId: server.id,
-				reason: "New Cancel Stop Server Poll",
+				reason: "Cancel Stop Server Poll",
 			}))
 		) {
 			return await interaction.followUp({
@@ -81,19 +79,13 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -settings.newCancelStopServerPollFee,
-			reason: "New Cancel Stop Server Poll",
-			serverId: server.id,
-		});
 
 		sendApprovalPoll(interaction, {
-			content: "Cancel Server Shutdown",
+			content: `Cancel Server Shutdown at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
-				startPollFee: settings.newCancelStopServerPollFee,
+				startPollFee: server.creditSettings.newCancelStopServerPollFee,
 				callerId: interaction.user.id,
-				description: "Cancel Server Shutdown",
+				description: `Cancel Server Shutdown (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
 					let success = false;
 					if (server.haveLocalSideScheduledShutdown()) {
@@ -111,11 +103,15 @@ export default {
 						content: "Cancelled scheduled shutdown",
 					});
 				},
-				approvalCount: 2,
-				disapprovalCount: 2,
-				credit: settings.cancelStopServerVoteFee,
+				approvalCount: server.approvalSettings.cancelStopServerApproval,
+				disapprovalCount:
+					server.approvalSettings.cancelStopServerDisapproval,
+				credit: server.creditSettings.cancelStopServerVoteFee,
 			},
 			server,
 		});
+	},
+	features: {
+		requireStartedServer: true,
 	},
 } satisfies CommandFile<true>;

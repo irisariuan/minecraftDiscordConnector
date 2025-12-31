@@ -1,26 +1,36 @@
-import type {
-	ChatInputCommandInteraction,
-	Client,
-	MessageReaction,
-	PartialMessageReaction,
-	PartialUser,
-	SlashCommandBuilder,
-	SlashCommandOptionsOnlyBuilder,
-	SlashCommandSubcommandsOnlyBuilder,
-	User,
+import {
+	REST,
+	Routes,
+	type AutocompleteInteraction,
+	type ChatInputCommandInteraction,
+	type Client,
+	type MessageReaction,
+	type PartialMessageReaction,
+	type PartialUser,
+	type SlashCommandBuilder,
+	type SlashCommandOptionsOnlyBuilder,
+	type SlashCommandSubcommandsOnlyBuilder,
+	type User,
 } from "discord.js";
-import { join } from "node:path";
 import type { Permission } from "./permission";
-import { Server, ServerManager } from "./server";
+import { Server, ServerManager, type ServerGameType } from "./server";
+import { safeJoin } from "./utils";
+import { CLIENT_ID, TOKEN } from "./env";
 
-interface ExecuteParams {
-	interaction: ChatInputCommandInteraction;
+type AcceptedInteractions =
+	| AutocompleteInteraction
+	| ChatInputCommandInteraction;
+
+interface ExecuteParams<Interaction extends AcceptedInteractions> {
+	interaction: Interaction;
+	serverManager: ServerManager;
 	client: Client;
 }
 
-interface ExecuteParamsWithServer extends ExecuteParams {
+interface ExecuteParamsWithServer<
+	Interaction extends AcceptedInteractions,
+> extends ExecuteParams<Interaction> {
 	server: Server;
-	serverManager: ServerManager;
 }
 
 interface ExecuteReactionParams {
@@ -30,33 +40,37 @@ interface ExecuteReactionParams {
 }
 
 export interface CommandFeatures {
-	requireStartedServer: boolean
-	requireStoppedServer: boolean
-	suspendable: boolean
+	requireStartedServer: boolean;
+	requireStoppedServer: boolean;
+	unsuspendable: boolean;
+	supportedPlatforms: ServerGameType[];
 }
 
 export interface CommandFile<RequireServer extends boolean> {
-	command: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
+	command:
+		| SlashCommandBuilder
+		| SlashCommandOptionsOnlyBuilder
+		| SlashCommandSubcommandsOnlyBuilder;
 	requireServer: RequireServer;
 	features?: Partial<CommandFeatures>;
 	execute: (
 		params: RequireServer extends true
-			? ExecuteParamsWithServer
-			: ExecuteParams,
-	) => unknown | Promise<unknown>;
-	executeReaction?: (
-		params: ExecuteReactionParams,
-	) => unknown | Promise<unknown>;
+			? ExecuteParamsWithServer<ChatInputCommandInteraction>
+			: ExecuteParams<ChatInputCommandInteraction>,
+	) => unknown;
+	executeReaction?: (params: ExecuteReactionParams) => unknown;
+	autoComplete?: (params: ExecuteParams<AutocompleteInteraction>) => unknown;
 	permissions?: Permission;
 	ephemeral?: boolean;
 }
 
 export async function loadCommands() {
-	const glob = new Bun.Glob("commands/**/*.ts");
+	const glob = new Bun.Glob("commands/*.ts");
 	const commands: CommandFile<boolean>[] = [];
 
 	for (const path of glob.scanSync(process.cwd())) {
-		const commandFile = (await import(join(process.cwd(), path))).default;
+		const commandFile = (await import(safeJoin(process.cwd(), path)))
+			.default;
 		if (!commandFile) continue;
 		commands.push(commandFile);
 	}
@@ -68,4 +82,28 @@ export function doNotRequireServer(
 	commandFile: CommandFile<boolean>,
 ): commandFile is CommandFile<false> {
 	return commandFile.requireServer === false;
+}
+
+export async function registerCommands(commandFiles: CommandFile<boolean>[]) {
+	const rest = new REST().setToken(TOKEN);
+	try {
+		await rest.put(Routes.applicationCommands(CLIENT_ID), {
+			body: commandFiles.map((file) => file.command),
+		});
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export async function getAllRegisteredCommandNames() {
+	const rest = new REST().setToken(TOKEN);
+	try {
+		const result = (await rest.get(
+			Routes.applicationCommands(CLIENT_ID),
+		)) as { name: string }[];
+		return result.map((command) => command.name);
+	} catch {
+		return null;
+	}
 }

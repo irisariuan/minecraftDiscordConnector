@@ -1,8 +1,11 @@
 import { User } from "discord.js";
 import {
 	getAllUserPermissions,
-	getUserPermission,
+	getUserGlobalPermission,
+	getUserLocalCombinedPermission,
+	getUserLocalPermission,
 	updateUserPermission,
+	type UserPermission,
 } from "./db";
 
 export const PermissionFlags = {
@@ -32,6 +35,7 @@ export const PermissionFlags = {
 	voteDeletePlugin: 1 << 18,
 	receiveNotification: 1 << 19,
 	editFiles: 1 << 20,
+	editTicket: 1 << 21,
 } as const;
 
 export const allPermission = Object.values(PermissionFlags).reduce(
@@ -49,10 +53,30 @@ export interface PermissionComparsion {
 	value: Permission[];
 }
 
-export function comparePermission(a: number, b: Permission): boolean {
+function compareNumberPermission(a: number, b: Permission): boolean {
 	if (typeof b === "number") return (a & b) === b;
-	if (b.type === "any") return b.value.some((v) => comparePermission(a, v));
-	return b.value.every((v) => comparePermission(a, v));
+	if (b.type === "any")
+		return b.value.some((v) => compareNumberPermission(a, v));
+	return b.value.every((v) => compareNumberPermission(a, v));
+}
+
+export function comparePermission(
+	a: UserPermission | number,
+	b: Permission,
+	serverId?: number,
+): boolean {
+	if (typeof a === "number") return compareNumberPermission(a, b);
+
+	const relatedServerPerm = a.serverPermissions.find(
+		(v) => v.serverId === serverId,
+	);
+	if (serverId && relatedServerPerm?.force) {
+		return compareNumberPermission(relatedServerPerm.permission, b);
+	}
+	const finalPermission = relatedServerPerm
+		? relatedServerPerm.permission | a.permission
+		: a.permission;
+	return compareNumberPermission(finalPermission, b);
 }
 
 export function compareAnyPermissions(a: number, b: number[]) {
@@ -63,11 +87,15 @@ export function compareAllPermissions(a: number, b: number[]) {
 	return b.every((v) => comparePermission(a, v));
 }
 
-export async function readPermission(user: string | Pick<User, "id">) {
-	return (
-		(await getUserPermission(typeof user === "string" ? user : user.id)) ??
-		0
-	);
+export async function readPermission(
+	user: string | Pick<User, "id">,
+	serverId?: number,
+) {
+	const userId = typeof user === "string" ? user : user.id;
+	if (serverId !== undefined) {
+		return (await getUserLocalCombinedPermission(userId, serverId)) ?? 0;
+	}
+	return (await getUserGlobalPermission(userId)) ?? 0;
 }
 
 export function createPermission(permissions: number[]) {
@@ -77,11 +105,20 @@ export function createPermission(permissions: number[]) {
 /**
  * Slow function, change to use native db query if possible (raw sql)
  */
-export async function getUsersWithMatchedPermission(permission: Permission) {
+export async function getUsersWithMatchedPermission(
+	permission: Permission,
+	serverId?: number,
+) {
 	const allPerm = await getAllUserPermissions();
-	return Object.entries(allPerm)
-		.filter(([_, perm]) => comparePermission(perm, permission))
-		.map(([user]) => user);
+
+	const matchedUsers: string[] = [];
+	for (const [userId, userPerm] of Object.entries(allPerm)) {
+		if (comparePermission(userPerm.permission, permission, serverId)) {
+			matchedUsers.push(userId);
+			continue;
+		}
+	}
+	return matchedUsers;
 }
 
 export function parsePermission(permission: number): string[] {
@@ -93,29 +130,38 @@ export function parsePermission(permission: number): string[] {
 export async function appendPermission(
 	user: string,
 	permission: number[] | number,
+	serverId?: number,
+	force?: boolean,
 ) {
-	const currentPermission = await readPermission(user);
+	const currentPermission = serverId
+		? ((await getUserLocalPermission(user, serverId)) ?? 0)
+		: await readPermission(user);
 	const newPermission = Array.isArray(permission)
 		? createPermission(permission)
 		: permission;
 	const updatedPermission = currentPermission | newPermission;
-	await updateUserPermission(user, updatedPermission);
+	await updateUserPermission(user, updatedPermission, serverId, force);
 	return updatedPermission;
 }
 
 export async function removePermission(
 	user: string,
 	permission: number[] | number,
+	serverId?: number,
+	force?: boolean,
 ) {
-	const currentPermission = await readPermission(user);
+	const currentPermission = serverId
+		? ((await getUserLocalPermission(user, serverId)) ?? 0)
+		: await readPermission(user);
 	const newPermission = Array.isArray(permission)
 		? createPermission(permission)
 		: permission;
 	const updatedPermission = currentPermission & ~newPermission;
-	await updateUserPermission(user, updatedPermission);
+	await updateUserPermission(user, updatedPermission, serverId, force);
 	return updatedPermission;
 }
 
+// Wrapper functions for PermissionComparsion
 export function anyPerm(...permissions: Permission[]): PermissionComparsion {
 	return {
 		type: "any",

@@ -20,7 +20,7 @@ export default {
 		sendPaginationMessage({
 			interaction,
 			options: {
-				filter: filter || undefined,
+				filter: filter ?? undefined,
 			},
 			async getResult() {
 				return server.outputLines;
@@ -28,7 +28,7 @@ export default {
 			filterFunc: (filter) => (log) => {
 				if (!filter) return true;
 				return (
-					log.type.includes(filter) || log.message.includes(filter)
+					log.type.includes(filter) ?? log.message.includes(filter)
 				);
 			},
 			formatter: (log) => {

@@ -12,32 +12,122 @@ model User {
     credits      Int           @default(0)
     permission   Int           @default(0)
     transactions Transaction[]
+    permissions  Permission[]
+    tickets      UserTicket[]
 }
 
 model Transaction {
-    id           String   @id @default(uuid())
-    amount       Int
-    beforeAmount Int
-    afterAmount  Int
-    reason       String?
-    timestamp    DateTime @default(now())
-    userId       String
-    serverId     Int?
-    server       Server?  @relation(fields: [serverId], references: [id])
-    user         User     @relation(fields: [userId], references: [id])
+    id                     String         @id @default(uuid())
+    amount                 Int
+    finalAmount            Int?
+    ticketId               String?
+    ticket                 UserTicket?    @relation(fields: [ticketId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+    beforeAmount           Int
+    afterAmount            Int
+    reason                 String?
+    timestamp              DateTime       @default(now())
+    userId                 String
+    serverId               Int?
+    server                 Server?        @relation(fields: [serverId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+    user                   User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    relatedTicketHistoryId String?
+    relatedTicketHistory   TicketHistory? @relation(fields: [relatedTicketHistoryId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+
+    @@index([userId])
+}
+
+model Permission {
+    userId     String  @id
+    user       User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    serverId   Int
+    server     Server  @relation(fields: [serverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    permission Int
+    force      Boolean @default(false)
 
     @@index([userId])
 }
 
 model Server {
-    id           Int           @id @default(autoincrement())
-    port         Int[]         @default([25565])
-    path         String        @unique
-    pluginPath   String        @unique
-    apiPort      Int?
-    loaderType   String
-    modType      String
-    version      String
-    tag          String?
+    id            Int           @id @default(autoincrement())
+    port          Int[]         @default([25565])
+    path          String        @unique
+    pluginPath    String        @unique
+    gameType      String        @default("minecraft")
+    startupScript String?
+    apiPort       Int?
+    loaderType    String
+    modType       String
+    version       String
+    tag           String?
+    transactions  Transaction[]
+    permissions   Permission[]
+    plugins       Plugin[]
+    settings      Setting[]
+}
+
+model Setting {
+    serverId Int
+    server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    type     String
+    name     String
+    value    Int
+
+    @@id([serverId, name, type])
+}
+
+model Plugin {
+    id Int @unique @default(autoincrement())
+
+    projectId String
+    versionId String
+
+    serverId Int
+    server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    filePath  String
+
+    @@id([projectId, versionId, serverId])
+}
+
+model Ticket {
+    id          String       @id
+    description String?
+    name        String
+    effect      String
+    value       Float
+    userTickets UserTicket[]
+}
+
+model UserTicket {
+    id       String @id @default(uuid())
+    ticketId String
+    ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+    userId String
+    user   User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    reason String?
+
+    maxUse       Int?            @default(1)
+    history      TicketHistory[]
     transactions Transaction[]
+
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    expiresAt DateTime?
+
+    @@index([userId])
+}
+
+model TicketHistory {
+    id           String        @id @default(uuid())
+    ticketId     String
+    ticket       UserTicket    @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    action       String
+    reason       String?
+    timestamp    DateTime      @default(now())
+    transactions Transaction[]
+
+    @@index([ticketId])
 }

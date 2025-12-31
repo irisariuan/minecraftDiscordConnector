@@ -14,11 +14,11 @@ import {
 } from "discord.js";
 import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
-import { createRequestComponent } from "../lib/components";
+import { createRequestComponent } from "../lib/component/request";
 import {
+	spendCredit,
 	changeCredit,
 	sendCreditNotification,
-	spendCredit,
 } from "../lib/credit";
 import {
 	anyPerm,
@@ -33,11 +33,7 @@ import {
 	copyLocalPluginFileToServer,
 	downloadWebPluginFileToLocal,
 } from "../lib/plugin/web";
-import { settings } from "../lib/settings";
-
-if (!process.env.UPLOAD_URL) {
-	throw new Error("UPLOAD_URL is not set in environment variables");
-}
+import { UPLOAD_URL } from "../lib/env";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -52,25 +48,17 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-
-		if (
-			!(await spendCredit({
-				userId: interaction.user.id,
-				cost: settings.uploadFileFee,
-				reason: "Upload Custom Mod to Server",
-				serverId: server.id,
-			}))
-		) {
+		const payment = await spendCredit(interaction, {
+			userId: interaction.user.id,
+			cost: server.creditSettings.uploadFileFee,
+			reason: "Upload Custom Mod to Server",
+			serverId: server.id,
+		});
+		if (!payment) {
 			return await interaction.editReply({
 				content: "You don't have enough credit to upload mod to server",
 			});
 		}
-		await sendCreditNotification({
-			user: interaction.user,
-			creditChanged: -settings.uploadFileFee,
-			reason: "Upload Custom Mod to Server",
-			serverId: server.id,
-		});
 		const thread = await interaction.channel.threads.create({
 			name: "Upload File",
 			invitable: false,
@@ -103,8 +91,7 @@ export default {
 			Collection<Snowflake, Message> | ButtonInteraction | FileBuffer
 		>[] = [
 			cancelMessage.awaitMessageComponent({
-				filter: (componentInteraction) =>
-					componentInteraction.user.id === interaction.user.id,
+				filter: (i) => i.user.id === interaction.user.id,
 				time: 1000 * 60 * 30, // 30 minutes
 				componentType: ComponentType.Button,
 			}),
@@ -117,35 +104,29 @@ export default {
 				errors: ["time"],
 			}),
 		];
-
 		let token: string | null = null;
-		if (
-			comparePermission(
-				await readPermission(interaction.user),
-				PermissionFlags.upload,
-			)
-		) {
+		if (UPLOAD_URL) {
 			token = uploadserver.createFileToken();
 			await thread.send(
-				`You may also upload the file to [our website](${process.env.UPLOAD_URL}/?id=${token})`,
+				`You may also upload the file to [our website](${UPLOAD_URL}/?id=${token})`,
 			);
 			promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
 		}
 		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction) {
-			await thread.send("Upload cancelled.");
+			await messages.reply("Upload cancelled.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
 			if (token) uploadserver.disposeToken(token);
 			changeCredit({
 				userId: interaction.user.id,
-				change: settings.uploadFileFee,
+				change: -payment.changed,
 				reason: "Refund for cancelled Upload Custom Mod to Server",
 				serverId: server.id,
 			});
 			sendCreditNotification({
 				user: interaction.user,
-				creditChanged: settings.uploadFileFee,
+				creditChanged: -payment.changed,
 				reason: "Refund for cancelled Upload Custom Mod to Server",
 				serverId: server.id,
 			});
@@ -154,9 +135,9 @@ export default {
 		}
 		let downloadingUrl: string;
 		let filename: string;
-		const isFile = "filename" in messages;
-		if (isFile) {
-			downloadingUrl = `${process.env.UPLOAD_URL}/file/${token}`;
+		const isFileBuffer = "filename" in messages;
+		if (isFileBuffer) {
+			downloadingUrl = `${UPLOAD_URL}/file/${token}`;
 			filename = messages.filename;
 		} else {
 			const firstMessage = messages.at(0);
@@ -170,13 +151,13 @@ export default {
 				await thread.setArchived(true);
 				changeCredit({
 					userId: interaction.user.id,
-					change: settings.uploadFileFee,
+					change: -payment.changed,
 					serverId: server.id,
 					reason: "Refund for cancelled Upload Custom Mod to Server",
 				});
 				sendCreditNotification({
 					user: interaction.user,
-					creditChanged: settings.uploadFileFee,
+					creditChanged: -payment.changed,
 					reason: "Refund for cancelled Upload Custom Mod to Server",
 				});
 				setTimeout(cleanUp, 1000 * 10);
@@ -192,17 +173,21 @@ export default {
 		);
 		if (
 			comparePermission(
-				await readPermission(interaction.user),
-				PermissionFlags.downloadPlugin,
+				await readPermission(interaction.user, server.id),
+				PermissionFlags.upload,
 			)
 		) {
 			await thread.send(`The file will be added to the server shortly.`);
-			const finalFilename = isFile
+			const finalFilename = isFileBuffer
 				? await copyLocalPluginFileToServer(
 						server.config.pluginDir,
 						messages,
 					)
-				: await downloadWebPluginFileToLocal(downloadingUrl, filename);
+				: await downloadWebPluginFileToLocal(
+						downloadingUrl,
+						server.config.pluginDir,
+						filename,
+					);
 			if (token) uploadserver.disposeToken(token);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
@@ -212,13 +197,13 @@ export default {
 				);
 				changeCredit({
 					userId: interaction.user.id,
-					change: settings.uploadFileFee,
+					change: -payment.changed,
 					serverId: server.id,
 					reason: "Refund for failed to add uploaded Custom Mod to Server",
 				});
 				sendCreditNotification({
 					user: interaction.user,
-					creditChanged: settings.uploadFileFee,
+					creditChanged: -payment.changed,
 					serverId: server.id,
 					reason: "Refund for failed to add uploaded Custom Mod to Server",
 				});
@@ -252,7 +237,7 @@ export default {
 						["✅", "❌"].includes(reaction.emoji.name) &&
 						!user.bot &&
 						comparePermission(
-							await readPermission(user),
+							await readPermission(user, server.id),
 							PermissionFlags.downloadPlugin,
 						)
 					),
@@ -268,13 +253,14 @@ export default {
 					await thread.send(
 						`The file will be added to the server shortly.`,
 					);
-					const finalFilename = isFile
+					const finalFilename = isFileBuffer
 						? await copyLocalPluginFileToServer(
-								server.config.serverDir,
+								server.config.pluginDir,
 								messages,
 							)
 						: await downloadWebPluginFileToLocal(
 								downloadingUrl,
+								server.config.pluginDir,
 								filename,
 							);
 					if (token) uploadserver.disposeToken(token);
@@ -292,13 +278,13 @@ export default {
 						);
 						changeCredit({
 							userId: interaction.user.id,
-							change: settings.uploadFileFee,
+							change: -payment.changed,
 							serverId: server.id,
 							reason: "Refund for failed to add uploaded Custom Mod to Server",
 						});
 						sendCreditNotification({
 							user: interaction.user,
-							creditChanged: settings.uploadFileFee,
+							creditChanged: -payment.changed,
 							serverId: server.id,
 							reason: "Refund for failed to add uploaded Custom Mod to Server",
 						});
@@ -324,6 +310,7 @@ export default {
 	permissions: anyPerm(
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
+		PermissionFlags.upload,
 	),
 	ephemeral: true,
 } satisfies CommandFile<true>;

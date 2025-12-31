@@ -35,7 +35,7 @@ export class CacheItem<T> {
 	constructor(initData: T | null, options?: Partial<CacheOptions<T>>) {
 		this.data = initData;
 		this.liveTime = Date.now();
-		this.ttl = options?.ttl || -1;
+		this.ttl = options?.ttl ?? -1;
 		this.updateMethod = options?.updateMethod;
 		this.cacheEvent = new CacheEventEmitter<T>();
 		if (!initData && this.updateMethod) {

@@ -13,7 +13,7 @@ import {
 	calculateMaxPage,
 	pageSize,
 	type PaginationOptions,
-} from "./pagination";
+} from "../pagination";
 
 interface CreateEmbedProps<T> {
 	result: T[];
