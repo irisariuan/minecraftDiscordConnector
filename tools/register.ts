@@ -1,10 +1,14 @@
 import { REST, Routes } from "discord.js";
 import { loadCommands } from "../lib/commandFile";
+import { confirm } from "@inquirer/prompts";
 
 if (!process.env.TOKEN || !process.env.CLIENT_ID)
 	throw new Error("No token provided");
-
-const commands = await loadCommands();
+const loadPlugins = await confirm({
+	message: "Load plugin commands?",
+	default: true,
+});
+const commands = await loadCommands(loadPlugins);
 const rest = new REST().setToken(process.env.TOKEN);
 console.log(`Registering commands, total ${commands.length}`);
 await rest

@@ -16,7 +16,6 @@ import {
 import { isApprovalMessageComponentId } from "./lib/component/approval";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { createServer, hasAnyServer } from "./lib/db";
-import { updateDnsRecord } from "./lib/dnsRecord";
 import { createServerSelectionMenu } from "./lib/component/server";
 import {
 	compareAllPermissions,
@@ -34,8 +33,10 @@ import {
 } from "./lib/settings";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
 import { TOKEN } from "./lib/env";
+import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
 
-const commands = await loadCommands();
+let enablePlugins = !process.argv.includes("--no-plugins");
+let commands = await loadCommands(!enablePlugins);
 if (!(await hasAnyServer())) {
 	console.log(
 		"No server found in database, creating a new server with default configuration...",
@@ -66,6 +67,119 @@ const client = new Client({
 		GatewayIntentBits.DirectMessagePolls,
 		GatewayIntentBits.DirectMessageReactions,
 	],
+});
+
+if (!enablePlugins) {
+	console.log("Running plugin scripts...");
+	const stime = performance.now();
+	const scriptPaths = getAllPluginScriptPaths();
+	await runScripts(scriptPaths);
+	console.log(
+		`Done! Ran ${scriptPaths.length} scripts in ${Math.round(performance.now() - stime)}ms`,
+	);
+}
+
+process.stdin.on("data", async (data) => {
+	const input = data.toString("utf8");
+	const trimmed = input.trim().toLowerCase();
+	const [cmd, subcommand, ...args] = trimmed.split(" ");
+	switch (cmd) {
+		case "exit": {
+			await serverManager
+				.exitAllServers(client)
+				.catch((err) =>
+					console.error("Error occurred before exit:", err),
+				);
+			process.exit(4);
+		}
+		case "command": {
+			switch (subcommand) {
+				case "register": {
+					console.log("Registering commands...");
+					await registerCommands(commands);
+					console.log("Registered commands");
+					break;
+				}
+				case "reload": {
+					console.log("Reloading commands...");
+					commands = await loadCommands(!enablePlugins);
+					console.log("Reloaded commands");
+					break;
+				}
+				default: {
+					console.log(
+						"Unknown subcommand. Available subcommands: register",
+					);
+				}
+			}
+			break;
+		}
+		case "plugins": {
+			switch (subcommand) {
+				case "enable": {
+					if (enablePlugins) {
+						console.log("Plugins are already enabled");
+						break;
+					}
+					enablePlugins = true;
+					commands = await loadCommands(true);
+					console.log("Plugins enabled and commands reloaded");
+					break;
+				}
+				case "disable": {
+					if (!enablePlugins) {
+						console.log("Plugins are already disabled");
+						break;
+					}
+					enablePlugins = false;
+					commands = await loadCommands(false);
+					console.log("Plugins disabled and commands reloaded");
+					break;
+				}
+				case "status": {
+					console.log(
+						`Plugins are currently ${enablePlugins ? "enabled" : "disabled"}`,
+					);
+					break;
+				}
+				default: {
+					console.log(
+						"Unknown subcommand. Available subcommands: enable, disable",
+					);
+				}
+			}
+			break;
+		}
+		case "servers": {
+			console.log(
+				`There are currently ${serverManager.getServerCount()} servers loaded:`,
+			);
+			for (const [id, server] of serverManager.getAllServerEntries()) {
+				console.log(
+					`- [${id}] ${server.config.tag || `*Server #${server.id}*`} (${server.gameType})`,
+				);
+			}
+			break;
+		}
+		case "help": {
+			console.log("Available commands:");
+			console.log("- exit: Exit the bot");
+			console.log("- servers: List all loaded servers");
+			console.log("- command register: Register commands to Discord");
+			console.log("- command reload: Reload command files");
+			console.log("- plugins enable: Enable plugins and reload commands");
+			console.log("- plugins disable: Disable plugins and reload commands");
+			console.log("- plugins status: Show whether plugins are enabled");
+			console.log("- help: Show this help message");
+			break;
+		}
+		default: {
+			if (trimmed.length > 0)
+				console.log(
+					`Unknown command: ${trimmed}. Type 'help' for a list of commands.`,
+				);
+		}
+	}
 });
 
 const giveCredits = process.argv.includes("-C")
@@ -358,9 +472,6 @@ client.on("interactionCreate", async (interaction) => {
 	}
 });
 
-setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
-updateDnsRecord();
-
 const timeBeforeFirstRun =
 	getNextTimestamp({ hour: 14, minute: 0 }).getTime() - Date.now();
 
@@ -410,11 +521,11 @@ process.on("SIGINT", async () => {
 	await serverManager
 		.exitAllServers(client)
 		.catch((err) => console.error("Error occurred before exit:", err));
-	process.exit(64);
+	process.exit(4);
 });
 
 process.on("beforeExit", async (code) => {
-	if (code === 64) return;
+	if (code === 4) return;
 	await serverManager
 		.exitAllServers(client)
 		.catch((err) => console.error("Error occurred before exit:", err));

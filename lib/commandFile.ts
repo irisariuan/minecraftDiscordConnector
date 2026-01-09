@@ -64,13 +64,24 @@ export interface CommandFile<RequireServer extends boolean> {
 	ephemeral?: boolean;
 }
 
-export async function loadCommands() {
+export async function loadCommands(loadPlugins = true) {
 	const glob = new Bun.Glob("commands/*.ts");
+	const paths = Array.from(glob.scanSync(process.cwd()));
+	if (loadPlugins) {
+		const pluginGlob = new Bun.Glob("plugins/**/*.commands.ts");
+		paths.push(...Array.from(pluginGlob.scanSync(process.cwd())));
+	}
 	const commands: CommandFile<boolean>[] = [];
 
-	for (const path of glob.scanSync(process.cwd())) {
-		const commandFile = (await import(safeJoin(process.cwd(), path)))
-			.default;
+	for (const path of paths) {
+		const commandFile = (
+			await Promise.try(
+				() =>
+					import(safeJoin(process.cwd(), path)) as Promise<{
+						default: CommandFile<boolean>;
+					}>,
+			).catch(() => null)
+		)?.default;
 		if (!commandFile) continue;
 		commands.push(commandFile);
 	}
