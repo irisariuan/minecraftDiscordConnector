@@ -1,8 +1,8 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
-import { updateDnsRecord, type UpdateResult } from "../lib/dnsRecord";
-import { settings } from "../lib/settings";
-import { spendCredit } from "../lib/credit";
+import type { CommandFile } from "../../lib/commandFile";
+import { updateDnsRecord, type UpdateResult } from "./lib";
+import { settings } from "../../lib/settings";
+import { spendCredit } from "../../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
