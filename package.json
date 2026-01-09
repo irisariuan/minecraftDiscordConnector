@@ -1,5 +1,5 @@
 {
-	"name": "ipbotdiscord",
+	"name": "mcDiscordBot",
 	"module": "index.ts",
 	"type": "module",
 	"private": true,
