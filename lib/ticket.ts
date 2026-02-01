@@ -217,6 +217,7 @@ export async function getUserSelectTicketChannel(
 		channel: createdChannel,
 		createdChannel: true,
 		cleanUp: async (message) => {
+			console.log('Cleaning up selection thread')
 			await createdChannel.setLocked(true).catch(() => {});
 			await message.edit({ components: [] }).catch(() => {});
 			await createdChannel.send({
