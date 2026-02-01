@@ -212,7 +212,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				}))
 			) {
 				return await interaction.editReply({
-					content: `You do not have enough credits to check tickets for other users!`,
+					content: `Failed to check tickets for other users!`,
 				});
 			}
 

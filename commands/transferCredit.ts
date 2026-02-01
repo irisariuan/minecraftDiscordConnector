@@ -123,7 +123,7 @@ export default {
 		});
 		if (!payment) {
 			return await interaction.editReply({
-				content: `You do not have enough credit (Requires ${totalTransferringFee}, current: ${fromUserCredit.currentCredit}) to transfer ${amount} credit to ${userMention(user.id)}`,
+				content: `Failed to transfer credit. Requires ${totalTransferringFee}, current: ${fromUserCredit.currentCredit}) to transfer ${amount} credit to ${userMention(user.id)}`,
 				components: [],
 			});
 		}

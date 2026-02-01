@@ -16,8 +16,7 @@ import {
 import { isApprovalMessageComponentId } from "./lib/component/approval";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { createServer, hasAnyServer } from "./lib/db";
-import { updateDnsRecord } from "./lib/dnsRecord";
-import { createServerSelectionMenu } from "./lib/component/server";
+import { getUserSelectedServer } from "./lib/component/server";
 import {
 	compareAllPermissions,
 	comparePermission,
@@ -34,8 +33,10 @@ import {
 } from "./lib/settings";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
 import { TOKEN } from "./lib/env";
+import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
 
-const commands = await loadCommands();
+let enablePlugins = !process.argv.includes("--no-plugins");
+let commands = await loadCommands(enablePlugins);
 if (!(await hasAnyServer())) {
 	console.log(
 		"No server found in database, creating a new server with default configuration...",
@@ -66,6 +67,121 @@ const client = new Client({
 		GatewayIntentBits.DirectMessagePolls,
 		GatewayIntentBits.DirectMessageReactions,
 	],
+});
+
+if (!enablePlugins) {
+	console.log("Running plugin scripts...");
+	const stime = performance.now();
+	const scriptPaths = getAllPluginScriptPaths();
+	await runScripts(scriptPaths);
+	console.log(
+		`Done! Ran ${scriptPaths.length} scripts in ${Math.round(performance.now() - stime)}ms`,
+	);
+}
+
+process.stdin.on("data", async (data) => {
+	const input = data.toString("utf8");
+	const trimmed = input.trim().toLowerCase();
+	const [cmd, subcommand, ...args] = trimmed.split(" ");
+	switch (cmd) {
+		case "exit": {
+			await serverManager
+				.exitAllServers(client)
+				.catch((err) =>
+					console.error("Error occurred before exit:", err),
+				);
+			process.exit(4);
+		}
+		case "command": {
+			switch (subcommand) {
+				case "register": {
+					console.log("Registering commands...");
+					await registerCommands(commands);
+					console.log("Registered commands");
+					break;
+				}
+				case "reload": {
+					console.log("Reloading commands...");
+					commands = await loadCommands(enablePlugins);
+					console.log("Reloaded commands");
+					break;
+				}
+				default: {
+					console.log(
+						"Unknown subcommand. Available subcommands: register",
+					);
+				}
+			}
+			break;
+		}
+		case "plugins": {
+			switch (subcommand) {
+				case "enable": {
+					if (enablePlugins) {
+						console.log("Plugins are already enabled");
+						break;
+					}
+					enablePlugins = true;
+					commands = await loadCommands(true);
+					console.log("Plugins enabled and commands reloaded");
+					break;
+				}
+				case "disable": {
+					if (!enablePlugins) {
+						console.log("Plugins are already disabled");
+						break;
+					}
+					enablePlugins = false;
+					commands = await loadCommands(false);
+					console.log("Plugins disabled and commands reloaded");
+					break;
+				}
+				case "status": {
+					console.log(
+						`Plugins are currently ${enablePlugins ? "enabled" : "disabled"}`,
+					);
+					break;
+				}
+				default: {
+					console.log(
+						"Unknown subcommand. Available subcommands: enable, disable",
+					);
+				}
+			}
+			break;
+		}
+		case "servers": {
+			console.log(
+				`There are currently ${serverManager.getServerCount()} servers loaded:`,
+			);
+			for (const [id, server] of serverManager.getAllServerEntries()) {
+				console.log(
+					`- [${id}] ${server.config.tag || `*Server #${server.id}*`} (${server.gameType})`,
+				);
+			}
+			break;
+		}
+		case "help": {
+			console.log("Available commands:");
+			console.log("- exit: Exit the bot");
+			console.log("- servers: List all loaded servers");
+			console.log("- command register: Register commands to Discord");
+			console.log("- command reload: Reload command files");
+			console.log("- plugins enable: Enable plugins and reload commands");
+			console.log(
+				"- plugins disable: Disable plugins and reload commands",
+			);
+			console.log("- plugins status: Show whether plugins are enabled");
+			console.log("- help: Show this help message");
+			break;
+		}
+		default: {
+			if (trimmed.length > 0)
+				console.log(
+					`Unknown command: ${trimmed}. Type 'help' for a list of commands.`,
+				);
+		}
+	}
 });
 
 const giveCredits = process.argv.includes("-C")
@@ -123,7 +239,10 @@ if (
 ) {
 	console.log("Updating registered commands...");
 	await registerCommands(commands);
-	console.log("Registered commands");
+	console.log(
+		"Registered commands",
+		commands.map((v) => v.command.name).join(", "),
+	);
 }
 
 client.once("ready", async () => {
@@ -217,72 +336,12 @@ client.on("interactionCreate", async (interaction) => {
 				command.execute({ interaction, client, serverManager }),
 			).catch(errorHandler);
 		}
-		const serverCount = serverManager.getServerCount();
-		if (serverCount === 0) {
-			return interaction.reply({
-				content: "No servers available",
-				flags: [MessageFlags.Ephemeral],
-			});
-		}
-		let server: Server;
-		if (serverCount === 1) {
-			const servers = serverManager.getAllServerEntries();
-			if (!servers[0]) {
-				return interaction.reply({
-					content: "No servers available",
-					flags: [MessageFlags.Ephemeral],
-				});
-			}
-			server = servers[0][1];
-			await interaction.deferReply({
-				flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
-			});
-		} else {
-			const reply = await interaction.reply({
-				content: "Please select a server:",
-				components: [
-					createServerSelectionMenu(serverManager.getAllTagPairs()),
-				],
-				flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
-			});
-			try {
-				const selection = await reply.awaitMessageComponent({
-					time: 60000,
-					filter: (i) => i.user.id === interaction.user.id,
-					componentType: ComponentType.StringSelect,
-				});
-				const serverId = selection.values[0];
-				if (!serverId) {
-					return selection.update({
-						content: "No server selected",
-						components: [],
-					});
-				}
-				const selectedServer = serverManager.getServer(
-					parseInt(serverId),
-				);
-				if (!selectedServer) {
-					return selection.update({
-						content: "Selected server not found",
-						components: [],
-					});
-				}
-				server = selectedServer;
-				await selection.update({
-					content: "Loading...",
-					components: [],
-				});
-				await selection.followUp({
-					content: `Selected ${server.config.tag || `*Server #${server.id}*`}`,
-					flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
-				});
-			} catch (e) {
-				return await interaction.editReply({
-					content: "No server selected in time or an error occurred",
-					components: [],
-				});
-			}
-		}
+		const server = await getUserSelectedServer(
+			serverManager,
+			interaction,
+			command.ephemeral ?? false,
+		);
+		if (!server) return;
 		if (
 			command.features?.unsuspendable &&
 			server.suspendingEvent.isSuspending() &&
@@ -358,9 +417,6 @@ client.on("interactionCreate", async (interaction) => {
 	}
 });
 
-setInterval(updateDnsRecord, 24 * 60 * 60 * 1000);
-updateDnsRecord();
-
 const timeBeforeFirstRun =
 	getNextTimestamp({ hour: 14, minute: 0 }).getTime() - Date.now();
 
@@ -410,11 +466,11 @@ process.on("SIGINT", async () => {
 	await serverManager
 		.exitAllServers(client)
 		.catch((err) => console.error("Error occurred before exit:", err));
-	process.exit(64);
+	process.exit(4);
 });
 
 process.on("beforeExit", async (code) => {
-	if (code === 64) return;
+	if (code === 4) return;
 	await serverManager
 		.exitAllServers(client)
 		.catch((err) => console.error("Error occurred before exit:", err));
