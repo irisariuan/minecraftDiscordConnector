@@ -16,7 +16,7 @@ import {
 import { isApprovalMessageComponentId } from "./lib/component/approval";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { createServer, hasAnyServer } from "./lib/db";
-import { createServerSelectionMenu } from "./lib/component/server";
+import { getUserSelectedServer } from "./lib/component/server";
 import {
 	compareAllPermissions,
 	comparePermission,
@@ -336,75 +336,12 @@ client.on("interactionCreate", async (interaction) => {
 				command.execute({ interaction, client, serverManager }),
 			).catch(errorHandler);
 		}
-		const serverCount = serverManager.getServerCount();
-		if (serverCount === 0) {
-			return interaction.reply({
-				content: "No servers available",
-				flags: [MessageFlags.Ephemeral],
-			});
-		}
-		let server: Server;
-		if (serverCount === 1) {
-			const servers = serverManager.getAllServerEntries();
-			if (!servers[0]) {
-				return interaction.reply({
-					content: "No servers available",
-					flags: [MessageFlags.Ephemeral],
-				});
-			}
-			server = servers[0][1];
-			await interaction.deferReply({
-				flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
-			});
-		} else {
-			const reply = await interaction.reply({
-				content: "Please select a server:",
-				components: [
-					createServerSelectionMenu(serverManager.getAllTagPairs()),
-				],
-				flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
-			});
-			try {
-				const selection = await reply.awaitMessageComponent({
-					time: 60000,
-					filter: (i) => i.user.id === interaction.user.id,
-					componentType: ComponentType.StringSelect,
-				});
-				const serverId = selection.values[0];
-				if (!serverId) {
-					return selection.update({
-						content: "No server selected",
-						components: [],
-					});
-				}
-				const selectedServer = serverManager.getServer(
-					parseInt(serverId),
-				);
-				if (!selectedServer) {
-					return selection.update({
-						content: "Selected server not found",
-						components: [],
-					});
-				}
-				server = selectedServer;
-				await selection.update({
-					content: "Loading...",
-					components: [],
-				});
-				const followUp = await selection.followUp({
-					content: `Selected ${server.config.tag || `*Server #${server.id}*`}`,
-					flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
-				});
-				setTimeout(() => {
-					followUp.delete().catch(() => {});
-				}, 1000 * 5);
-			} catch (e) {
-				return await interaction.editReply({
-					content: "No server selected in time or an error occurred",
-					components: [],
-				});
-			}
-		}
+		const server = await getUserSelectedServer(
+			serverManager,
+			interaction,
+			command.ephemeral ?? false,
+		);
+		if (!server) return;
 		if (
 			command.features?.unsuspendable &&
 			server.suspendingEvent.isSuspending() &&

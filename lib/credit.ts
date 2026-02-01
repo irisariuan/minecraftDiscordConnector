@@ -268,6 +268,7 @@ export async function spendCredit(
 			const finalCost = calculateTicketEffect(ticket.effect, cost);
 			return `After using this ticket, you will have to pay \`${finalCost}\` credits`;
 		},
+		insideThread: createdChannel,
 	});
 
 	if (cancelled) {
