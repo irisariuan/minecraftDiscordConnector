@@ -270,16 +270,15 @@ export async function spendCredit(
 		},
 		insideThread: createdChannel,
 	});
+	await cleanUp(message);
 
 	if (cancelled) {
 		console.error("No ticket selected, cancelling payment.");
-		await cleanUp(message);
 		return null;
 	}
 	if (selectedTicket && useTicket) {
 		const finalCost = calculateTicketEffect(selectedTicket.effect, cost);
 		if (!(await canSpendCredit(userId, finalCost))) {
-			await cleanUp(message);
 			return null;
 		}
 		if (await useUserTicket(selectedTicket.ticketId, reason)) {
@@ -291,7 +290,6 @@ export async function spendCredit(
 				serverId,
 				ticketId: selectedTicket.ticketId,
 			});
-			await message.delete().catch(() => {});
 			await sendCreditNotification({
 				user: interaction.user,
 				creditChanged: -finalCost,
@@ -313,15 +311,8 @@ export async function spendCredit(
 		await message.edit({
 			content: "Failed to use the selected ticket. Paying full price.",
 		});
-		setTimeout(() => {
-			cleanUp(message);
-		}, 1000 * 15);
-	} else {
-		await cleanUp(message);
 	}
-	if (!(await canSpendCredit(userId, cost))) {
-		return null;
-	}
+	if (!(await canSpendCredit(userId, cost))) return null;
 	await changeCredit({
 		userId,
 		change: -cost,
