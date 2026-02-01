@@ -68,7 +68,7 @@ export async function loadCommands(loadPlugins = true) {
 	const glob = new Bun.Glob("commands/*.ts");
 	const paths = Array.from(glob.scanSync(process.cwd()));
 	if (loadPlugins) {
-		const pluginGlob = new Bun.Glob("plugins/**/*.commands.ts");
+		const pluginGlob = new Bun.Glob("plugins/**/*.command.ts");
 		paths.push(...Array.from(pluginGlob.scanSync(process.cwd())));
 	}
 	const commands: CommandFile<boolean>[] = [];

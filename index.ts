@@ -36,7 +36,7 @@ import { TOKEN } from "./lib/env";
 import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
 
 let enablePlugins = !process.argv.includes("--no-plugins");
-let commands = await loadCommands(!enablePlugins);
+let commands = await loadCommands(enablePlugins);
 if (!(await hasAnyServer())) {
 	console.log(
 		"No server found in database, creating a new server with default configuration...",
@@ -102,7 +102,7 @@ process.stdin.on("data", async (data) => {
 				}
 				case "reload": {
 					console.log("Reloading commands...");
-					commands = await loadCommands(!enablePlugins);
+					commands = await loadCommands(enablePlugins);
 					console.log("Reloaded commands");
 					break;
 				}
@@ -168,7 +168,9 @@ process.stdin.on("data", async (data) => {
 			console.log("- command register: Register commands to Discord");
 			console.log("- command reload: Reload command files");
 			console.log("- plugins enable: Enable plugins and reload commands");
-			console.log("- plugins disable: Disable plugins and reload commands");
+			console.log(
+				"- plugins disable: Disable plugins and reload commands",
+			);
 			console.log("- plugins status: Show whether plugins are enabled");
 			console.log("- help: Show this help message");
 			break;
@@ -237,7 +239,10 @@ if (
 ) {
 	console.log("Updating registered commands...");
 	await registerCommands(commands);
-	console.log("Registered commands");
+	console.log(
+		"Registered commands",
+		commands.map((v) => v.command.name).join(", "),
+	);
 }
 
 client.once("ready", async () => {
@@ -386,10 +391,13 @@ client.on("interactionCreate", async (interaction) => {
 					content: "Loading...",
 					components: [],
 				});
-				await selection.followUp({
+				const followUp = await selection.followUp({
 					content: `Selected ${server.config.tag || `*Server #${server.id}*`}`,
 					flags: command.ephemeral ? [MessageFlags.Ephemeral] : [],
 				});
+				setTimeout(() => {
+					followUp.delete().catch(() => {});
+				}, 1000 * 5);
 			} catch (e) {
 				return await interaction.editReply({
 					content: "No server selected in time or an error occurred",

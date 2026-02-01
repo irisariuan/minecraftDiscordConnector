@@ -74,8 +74,7 @@ export default {
 			}))
 		) {
 			return await interaction.followUp({
-				content:
-					"You don't have enough credit to cancel the server shutdown",
+				content: "Failed to cancel the server shutdown",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}

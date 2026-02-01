@@ -56,7 +56,7 @@ export default {
 		});
 		if (!payment) {
 			return await interaction.editReply({
-				content: "You don't have enough credit to upload mod to server",
+				content: "Failed to upload mod to server",
 			});
 		}
 		const thread = await interaction.channel.threads.create({

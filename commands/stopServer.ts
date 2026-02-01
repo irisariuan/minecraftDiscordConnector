@@ -103,7 +103,7 @@ export default {
 			}))
 		) {
 			return await interaction.reply({
-				content: "You don't have enough credit to stop the server",
+				content: "Failed to stop the server",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
