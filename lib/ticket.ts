@@ -217,7 +217,7 @@ export async function getUserSelectTicketChannel(
 		channel: createdChannel,
 		createdChannel: true,
 		cleanUp: async (message) => {
-			console.log('Cleaning up selection thread')
+			console.log("Cleaning up selection thread");
 			await createdChannel.setLocked(true).catch(() => {});
 			await message.edit({ components: [] }).catch(() => {});
 			await createdChannel.send({
@@ -341,11 +341,15 @@ export async function getUserSelectedTicket(
 				}
 				if (requestStatus.customId !== RequestComponentId.Allow) {
 					await updateMessage();
-					await requestStatus.reply({
+					const replied = await requestStatus.reply({
 						content:
 							"Ticket application cancelled. You can choose another ticket or not use any.",
 						flags,
 					});
+					setTimeout(
+						() => replied.delete().catch(() => {}),
+						1000 * 5,
+					);
 					return;
 				}
 				await requestStatus.reply({
