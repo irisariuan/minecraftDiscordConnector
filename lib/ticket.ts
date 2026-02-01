@@ -164,6 +164,7 @@ export async function useUserTicket(ticketId: string, reason?: string) {
 
 interface GetUserSelectedTicketMessageSetting {
 	confirmationMessage: (ticket: Ticket) => Promise<string> | string;
+	insideThread: boolean;
 }
 
 interface GetUserSelectedTicketReturn<UseTicket extends boolean> {
@@ -234,6 +235,7 @@ export async function getUserSelectedTicket(
 ): Promise<GetUserSelectedTicketReturn<boolean>> {
 	const time = 1000 * 60 * 2;
 	const indexPage = 0;
+	const flags = setting?.insideThread ? undefined : MessageFlags.Ephemeral;
 	const updateMessage = async () =>
 		await message.edit({
 			components: [
@@ -289,7 +291,7 @@ export async function getUserSelectedTicket(
 					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 				}
 				const ticketFound = tickets.find((v) => v.ticketId === value);
@@ -297,7 +299,7 @@ export async function getUserSelectedTicket(
 					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 				}
 				const confirmation = await interaction.reply({
@@ -328,7 +330,7 @@ export async function getUserSelectedTicket(
 				if (!requestStatus) {
 					await interaction.followUp({
 						content: "Request timed out.",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 					return resolve({
 						cancelled: true,
@@ -341,13 +343,13 @@ export async function getUserSelectedTicket(
 					await requestStatus.reply({
 						content:
 							"Ticket application cancelled. You can choose another ticket or not use any.",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 					return;
 				}
 				await requestStatus.reply({
 					content: `Ticket \`${ticketFound.name}\` applied.`,
-					flags: [MessageFlags.Ephemeral],
+					flags,
 				});
 				resolve({
 					useTicket: true,
