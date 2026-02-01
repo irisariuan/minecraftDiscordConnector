@@ -8,7 +8,16 @@ import type {
 	UserTicket as DbUserTicket,
 	Ticket as DbTicketType,
 } from "../generated/prisma/client";
-import { type Message, ComponentType, MessageFlags } from "discord.js";
+import {
+	type Message,
+	type SendableChannels,
+	channelMention,
+	ChannelType,
+	ComponentType,
+	MessageFlags,
+	User,
+	userMention,
+} from "discord.js";
 import {
 	createTicketSelectMenu,
 	createTicketButtons,
@@ -155,12 +164,67 @@ export async function useUserTicket(ticketId: string, reason?: string) {
 
 interface GetUserSelectedTicketMessageSetting {
 	confirmationMessage: (ticket: Ticket) => Promise<string> | string;
+	insideThread: boolean;
 }
 
 interface GetUserSelectedTicketReturn<UseTicket extends boolean> {
 	useTicket: UseTicket;
 	ticket: UseTicket extends true ? Ticket : null;
 	cancelled: UseTicket extends false ? boolean : false;
+}
+
+export async function getUserSelectTicketChannel(
+	channel: SendableChannels,
+	user: User,
+): Promise<{
+	channel: SendableChannels;
+	createdChannel: boolean;
+	cleanUp: (message: Message) => Promise<unknown>;
+}> {
+	if (
+		!("threads" in channel) ||
+		channel.type === ChannelType.GuildAnnouncement
+	)
+		return {
+			channel,
+			createdChannel: false,
+			cleanUp: async (message) => await message.delete().catch(() => {}),
+		};
+	const createdChannel = await channel.threads
+		.create({
+			name: `Ticket Selection - ${user.username}`,
+			reason: "User ticket selection",
+			type: ChannelType.PrivateThread,
+			invitable: false,
+		})
+		.catch(() => null);
+	if (!createdChannel) {
+		return {
+			channel,
+			createdChannel: false,
+			cleanUp: async (message) => await message.delete().catch(() => {}),
+		};
+	}
+	await createdChannel.members.add(user);
+	const selectTicketMessage = await channel.send({
+		content: `${userMention(user.id)}, please select your ticket in ${channelMention(createdChannel.id)}.`,
+	});
+	setTimeout(() => {
+		if (selectTicketMessage.deletable)
+			selectTicketMessage.delete().catch(() => {});
+	}, 1000 * 5);
+	return {
+		channel: createdChannel,
+		createdChannel: true,
+		cleanUp: async (message) => {
+			await createdChannel.setLocked(true).catch(() => {});
+			await message.edit({ components: [] }).catch(() => {});
+			await createdChannel.send({
+				content: `Please return to ${channelMention(channel.id)} for further interactions.`,
+			});
+			setTimeout(() => createdChannel.delete().catch(() => {}), 1000 * 5);
+		},
+	};
 }
 
 export async function getUserSelectedTicket(
@@ -171,6 +235,7 @@ export async function getUserSelectedTicket(
 ): Promise<GetUserSelectedTicketReturn<boolean>> {
 	const time = 1000 * 60 * 2;
 	const indexPage = 0;
+	const flags = setting?.insideThread ? undefined : MessageFlags.Ephemeral;
 	const updateMessage = async () =>
 		await message.edit({
 			components: [
@@ -226,7 +291,7 @@ export async function getUserSelectedTicket(
 					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 				}
 				const ticketFound = tickets.find((v) => v.ticketId === value);
@@ -234,7 +299,7 @@ export async function getUserSelectedTicket(
 					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 				}
 				const confirmation = await interaction.reply({
@@ -265,7 +330,7 @@ export async function getUserSelectedTicket(
 				if (!requestStatus) {
 					await interaction.followUp({
 						content: "Request timed out.",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 					return resolve({
 						cancelled: true,
@@ -278,13 +343,13 @@ export async function getUserSelectedTicket(
 					await requestStatus.reply({
 						content:
 							"Ticket application cancelled. You can choose another ticket or not use any.",
-						flags: [MessageFlags.Ephemeral],
+						flags,
 					});
 					return;
 				}
 				await requestStatus.reply({
 					content: `Ticket \`${ticketFound.name}\` applied.`,
-					flags: [MessageFlags.Ephemeral],
+					flags,
 				});
 				resolve({
 					useTicket: true,

@@ -17,9 +17,19 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { createServerSelectionMenu } from "../lib/component/server";
+import {
+	createServerSelectionMenu,
+	getUserSelectedServer,
+} from "../lib/component/server";
 import type { Server } from "../lib/server";
 import { SettingType } from "../lib/db";
+
+interface Setting {
+	type: "credit" | "approval";
+	name: string;
+	description?: string;
+}
+
 export default {
 	command: new SlashCommandBuilder()
 		.setName("settings")
@@ -32,7 +42,8 @@ export default {
 					option
 						.setName("setting")
 						.setDescription("The setting to change")
-						.setRequired(true),
+						.setRequired(true)
+						.setAutocomplete(true),
 				)
 				.addNumberOption((option) =>
 					option
@@ -71,50 +82,10 @@ export default {
 	async execute({ interaction, serverManager }) {
 		const subcommand = interaction.options.getSubcommand(true);
 		const local = interaction.options.getBoolean("local") ?? false;
-		let server: Server | undefined = undefined;
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		if (local) {
-			const reply = await interaction.editReply({
-				content: "Please select a server:",
-				components: [
-					createServerSelectionMenu(serverManager.getAllTagPairs()),
-				],
-			});
-			try {
-				const selection = await reply.awaitMessageComponent({
-					time: 60000,
-					filter: (i) => i.user.id === interaction.user.id,
-					componentType: ComponentType.StringSelect,
-				});
-				const selectedServerId = selection.values[0];
-				if (!selectedServerId) {
-					return selection.update({
-						content: "No server selected",
-						components: [],
-					});
-				}
-				const selectedServer = serverManager.getServer(
-					parseInt(selectedServerId),
-				);
-				if (!selectedServer) {
-					return selection.update({
-						content: "Selected server not found",
-						components: [],
-					});
-				}
-				server = selectedServer;
-				await selection.update({
-					content: "Server selected",
-					components: [],
-				});
-			} catch (e) {
-				console.error(e);
-				return await interaction.editReply({
-					content: "No server selected in time or an error occurred",
-					components: [],
-				});
-			}
-		}
+		const server: Server | null = local
+			? await getUserSelectedServer(serverManager, interaction, true)
+			: null;
 		if (subcommand === "set") {
 			if (
 				!comparePermission(
@@ -139,7 +110,7 @@ export default {
 						).join(", ")}\``,
 					});
 				}
-				if (server !== undefined) {
+				if (server) {
 					await editSetting(server, SettingType.Approval, {
 						[setting]: value,
 					});
@@ -160,7 +131,7 @@ export default {
 					content: `Setting ${setting} not found, settings available: \`${Object.keys(settings).join(", ")}\``,
 				});
 			}
-			if (server !== undefined) {
+			if (server) {
 				await editSetting(server, SettingType.ServerCredit, {
 					[setting]: value,
 				});
@@ -191,6 +162,66 @@ export default {
 						: "**"
 				}:\n\n${creditSettingsList}\n\n**Approval Settings**:\n\n${approvalSettingsList}`,
 			});
+		}
+	},
+	autoComplete: async ({ interaction }) => {
+		const subcommand = interaction.options.getSubcommand(true);
+		if (subcommand === "set") {
+			const focusedOption = interaction.options.getFocused(true);
+			if (focusedOption.name === "setting") {
+				const input = focusedOption.value.toLowerCase();
+				const isApproval = interaction.options.getBoolean("approval");
+				const isLocal =
+					interaction.options.getBoolean("local") ?? false;
+
+				const creditMappedSettings: Setting[] = Object.keys(
+					settings,
+				).map(
+					(name) =>
+						({
+							type: "credit",
+							name,
+							description: isLocal
+								? undefined
+								: `Now global value: ${
+										settings[
+											name as keyof typeof settings
+										] ?? "unknown"
+									}`,
+						}) satisfies Setting,
+				);
+				const approvalMappedSettings: Setting[] = Object.keys(
+					approvalSettings,
+				).map(
+					(name) =>
+						({
+							type: "approval",
+							name,
+							description: isLocal
+								? undefined
+								: `Now global value: ${
+										approvalSettings[
+											name as keyof typeof approvalSettings
+										] ?? "unknown"
+									}`,
+						}) satisfies Setting,
+				);
+
+				const allSettings: Setting[] = isApproval
+					? approvalMappedSettings
+					: [...creditMappedSettings, ...approvalMappedSettings];
+
+				const filtered = allSettings.filter(
+					(setting) =>
+						setting.name.toLowerCase().includes(input) ||
+						setting.description?.toLowerCase().includes(input),
+				);
+				const choices = filtered.slice(0, 25).map((setting) => ({
+					name: `${setting.name} (${setting.type} setting)${setting.description ? ` - ${setting.description}` : ""}`,
+					value: setting.name,
+				}));
+				return interaction.respond(choices);
+			}
 		}
 	},
 } satisfies CommandFile<false>;

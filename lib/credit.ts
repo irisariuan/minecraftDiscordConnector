@@ -6,6 +6,7 @@ import {
 	italic,
 	MessageFlags,
 	time,
+	userMention,
 	type GuildMember,
 	type Interaction,
 	type PartialUser,
@@ -20,6 +21,7 @@ import {
 import {
 	calculateTicketEffect,
 	getUserSelectedTicket,
+	getUserSelectTicketChannel,
 	getUserTicketsByUserId,
 	TicketEffectType,
 	useUserTicket,
@@ -252,8 +254,10 @@ export async function spendCredit(
 	) {
 		return spendCreditWithoutTicket(interaction.user, credit, params);
 	}
-	const message = await interaction.channel.send({
-		content: `You need to pay \`${cost}\` credits for this action. You have \`${credit.currentCredit}\` credits.\nYou can also use a ticket to reduce the cost.`,
+	const { channel, cleanUp, createdChannel } =
+		await getUserSelectTicketChannel(interaction.channel, interaction.user);
+	const message = await channel.send({
+		content: `${createdChannel ? "" : `${userMention(interaction.user.id)}\n`}You need to pay \`${cost}\` credits for this action. You have \`${credit.currentCredit}\` credits.\nYou can also use a ticket to reduce the cost.`,
 	});
 	const {
 		cancelled,
@@ -264,17 +268,18 @@ export async function spendCredit(
 			const finalCost = calculateTicketEffect(ticket.effect, cost);
 			return `After using this ticket, you will have to pay \`${finalCost}\` credits`;
 		},
+		insideThread: createdChannel,
 	});
 
 	if (cancelled) {
 		console.error("No ticket selected, cancelling payment.");
-		await message.delete().catch(() => {});
+		await cleanUp(message);
 		return null;
 	}
 	if (selectedTicket && useTicket) {
 		const finalCost = calculateTicketEffect(selectedTicket.effect, cost);
 		if (!(await canSpendCredit(userId, finalCost))) {
-			await message.delete().catch(() => {});
+			await cleanUp(message);
 			return null;
 		}
 		if (await useUserTicket(selectedTicket.ticketId, reason)) {
@@ -309,10 +314,10 @@ export async function spendCredit(
 			content: "Failed to use the selected ticket. Paying full price.",
 		});
 		setTimeout(() => {
-			message.delete().catch(() => {});
+			cleanUp(message);
 		}, 1000 * 15);
 	} else {
-		await message.delete().catch(() => {});
+		await cleanUp(message);
 	}
 	if (!(await canSpendCredit(userId, cost))) {
 		return null;

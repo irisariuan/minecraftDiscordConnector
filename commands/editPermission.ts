@@ -18,13 +18,17 @@ import {
 	removePermission,
 } from "../lib/permission";
 import { updateUserPermission } from "../lib/db";
-import { createServerSelectionMenu } from "../lib/component/server";
+import {
+	createServerSelectionMenu,
+	getUserSelectedServer,
+} from "../lib/component/server";
 import {
 	createPermissionResetButton,
 	createPermissionSelectionMenu,
 	PermissionSelectionMenu,
 } from "../lib/component/permission";
 import { clamp } from "../lib/utils";
+import type { Server } from "../lib/server";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -147,50 +151,11 @@ export default {
 		const users = interaction.options.getMentionable("users", true);
 		const force = interaction.options.getBoolean("force") ?? false;
 		const local = interaction.options.getBoolean("local") ?? false;
-		let serverId: number | undefined = undefined;
 		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		if (local) {
-			const reply = await interaction.editReply({
-				content: "Please select a server:",
-				components: [
-					createServerSelectionMenu(serverManager.getAllTagPairs()),
-				],
-			});
-			try {
-				const selection = await reply.awaitMessageComponent({
-					time: 60000,
-					filter: (i) => i.user.id === interaction.user.id,
-					componentType: ComponentType.StringSelect,
-				});
-				const selectedServerId = selection.values[0];
-				if (!selectedServerId) {
-					return selection.update({
-						content: "No server selected",
-						components: [],
-					});
-				}
-				const selectedServer = serverManager.getServer(
-					parseInt(selectedServerId),
-				);
-				if (!selectedServer) {
-					return selection.update({
-						content: "Selected server not found",
-						components: [],
-					});
-				}
-				serverId = selectedServer.id;
-				await selection.update({
-					content: "Server selected",
-					components: [],
-				});
-			} catch (e) {
-				console.error(e);
-				return await interaction.editReply({
-					content: "No server selected in time or an error occurred",
-					components: [],
-				});
-			}
-		}
+		const serverId = local
+			? (await getUserSelectedServer(serverManager, interaction, true))
+					?.id
+			: undefined;
 		switch (subcommand) {
 			case "tags": {
 				const addPerm = interaction.options.getBoolean("action", true);

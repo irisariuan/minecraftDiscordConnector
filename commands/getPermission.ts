@@ -11,7 +11,10 @@ import {
 	readPermission,
 } from "../lib/permission";
 import { settings } from "../lib/settings";
-import { createServerSelectionMenu } from "../lib/component/server";
+import {
+	createServerSelectionMenu,
+	getUserSelectedServer,
+} from "../lib/component/server";
 import { getUserLocalPermission } from "../lib/db";
 import { spendCredit } from "../lib/credit";
 
@@ -35,51 +38,10 @@ export default {
 	async execute({ interaction, serverManager }) {
 		const user = interaction.options.getUser("user") ?? interaction.user;
 		const local = interaction.options.getBoolean("local") ?? false;
-		let serverId: number | undefined = undefined;
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-		if (local) {
-			const reply = await interaction.editReply({
-				content: "Please select a server:",
-				components: [
-					createServerSelectionMenu(serverManager.getAllTagPairs()),
-				],
-			});
-			try {
-				const selection = await reply.awaitMessageComponent({
-					time: 60000,
-					filter: (i) => i.user.id === interaction.user.id,
-					componentType: ComponentType.StringSelect,
-				});
-				const selectedServerId = selection.values[0];
-				if (!selectedServerId) {
-					return selection.update({
-						content: "No server selected",
-						components: [],
-					});
-				}
-				const selectedServer = serverManager.getServer(
-					parseInt(selectedServerId),
-				);
-				if (!selectedServer) {
-					return selection.update({
-						content: "Selected server not found",
-						components: [],
-					});
-				}
-				serverId = selectedServer.id;
-				await selection.update({
-					content: "Server selected",
-					components: [],
-				});
-			} catch (e) {
-				console.error(e);
-				return await interaction.editReply({
-					content: "No server selected in time or an error occurred",
-					components: [],
-				});
-			}
-		}
-
+		const serverId = local
+			? (await getUserSelectedServer(serverManager, interaction, true))
+					?.id
+			: undefined;
 		const permission =
 			serverId !== undefined && local
 				? await getUserLocalPermission(user.id, serverId)
@@ -95,8 +57,7 @@ export default {
 			}))
 		) {
 			return await interaction.editReply({
-				content:
-					"You don't have enough credit to check other users' permission",
+				content: "Failed to check other users' permission",
 			});
 		}
 

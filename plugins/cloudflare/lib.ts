@@ -1,4 +1,4 @@
-import { CF_KEY, UPDATE_URL } from "./env";
+import { CF_KEY, UPDATE_URL } from "../../lib/env";
 
 export const apiHeader = {
 	Authorization: `Bearer ${CF_KEY}`,
