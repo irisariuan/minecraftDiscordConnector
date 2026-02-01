@@ -93,7 +93,7 @@ export default {
 			}))
 		) {
 			return await interaction.followUp({
-				content: "You don't have enough credit to run this command",
+				content: "Failed to run this command",
 				flags: [MessageFlags.Ephemeral],
 			});
 		}

@@ -95,8 +95,7 @@ export default {
 			}))
 		) {
 			return await interaction.editReply({
-				content:
-					"You don't have enough credit to check other users' permission",
+				content: "Failed to check other users' permission",
 			});
 		}
 
