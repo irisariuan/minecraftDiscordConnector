@@ -2,7 +2,7 @@ import { createWriteStream } from "fs";
 import { Entry, fromBuffer } from "yauzl";
 import { mkdir, exists, writeFile } from "fs/promises";
 import { safeJoin } from "../utils";
-import type { FileBuffer } from "./uploadServer";
+import type { FileBuffer } from "./uploadServer/utils";
 
 export async function copyLocalPluginFileToServer(
 	pluginDir: string,

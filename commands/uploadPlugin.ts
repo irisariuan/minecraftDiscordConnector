@@ -27,8 +27,8 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import type { FileBuffer } from "../lib/plugin/uploadServer";
-import { uploadserver } from "../lib/plugin/uploadServer";
+import type { FileBuffer } from "../lib/plugin/uploadServer/utils";
+import { uploadServer } from "../lib/plugin/uploadServer";
 import {
 	copyLocalPluginFileToServer,
 	downloadWebPluginFileToLocal,
@@ -67,10 +67,6 @@ export default {
 			reason: `Upload file thread for ${interaction.user.tag}`,
 			rateLimitPerUser: 10, // 10 seconds
 		});
-		const cleanUp = () => {
-			thread.delete().catch(() => {});
-			interaction.deleteReply().catch(() => {});
-		};
 
 		await interaction.editReply({
 			content: `Please upload your file in ${channelMention(thread.id)}, if the file is too large, please try to zip it first.`,
@@ -106,18 +102,22 @@ export default {
 		];
 		let token: string | null = null;
 		if (UPLOAD_URL) {
-			token = uploadserver.createFileToken();
+			token = uploadServer.createFileToken();
 			await thread.send(
 				`You may also upload the file to [our website](${UPLOAD_URL}/?id=${token})`,
 			);
-			promises.push(uploadserver.awaitFileToken(token, 1000 * 60 * 30));
+			promises.push(uploadServer.awaitFileToken(token, 1000 * 60 * 30));
 		}
+		const cleanUp = () => {
+			thread.delete().catch(() => {});
+			interaction.deleteReply().catch(() => {});
+		};
 		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction) {
 			await messages.reply("Upload cancelled.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
-			if (token) uploadserver.disposeToken(token);
+			if (token) uploadServer.disposeToken(token);
 			changeCredit({
 				userId: interaction.user.id,
 				change: -payment.changed,
@@ -188,7 +188,7 @@ export default {
 						server.config.pluginDir,
 						filename,
 					);
-			if (token) uploadserver.disposeToken(token);
+			if (token) uploadServer.disposeToken(token);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
 			} else {
@@ -263,7 +263,7 @@ export default {
 								server.config.pluginDir,
 								filename,
 							);
-					if (token) uploadserver.disposeToken(token);
+					if (token) uploadServer.disposeToken(token);
 					if (finalFilename) {
 						await thread.send(`File added to server.`);
 						await interaction.user.send(
@@ -290,7 +290,7 @@ export default {
 						});
 					}
 				} else {
-					if (token) uploadserver.disposeToken(token);
+					if (token) uploadServer.disposeToken(token);
 					await thread.send(
 						`File rejected by ${userMention(user.id)}.`,
 					);

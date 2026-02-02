@@ -36,6 +36,7 @@ export const PermissionFlags = {
 	receiveNotification: 1 << 19,
 	editFiles: 1 << 20,
 	editTicket: 1 << 21,
+	approveEditFiles: 1 << 22,
 } as const;
 
 export const allPermission = Object.values(PermissionFlags).reduce(
