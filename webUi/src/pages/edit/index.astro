@@ -1,0 +1,18 @@
+---
+export const prerender = false
+interface Props {
+    id: string
+}
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { verifyId } from "../../lib/request";
+const { id } = Astro.props;
+const result = await verifyId(id)
+if (!result.valid || result.edited) {
+    return Astro.redirect("/edit/error");
+}
+const title = "Edit Page";
+---
+
+<BaseLayout title={title}>
+    <div></div>
+</BaseLayout>
