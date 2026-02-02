@@ -244,14 +244,14 @@ export default {
 				max: 1,
 				time: 1000 * 60 * 10, // 10 minutes
 			})
-			.on("collect", async (interaction) => {
-				if (interaction.customId === RequestComponentId.Allow) {
-					message.edit({ components: [] }).catch(() => {});
-					await thread.send(
+			.on("collect", async (messageInteraction) => {
+				message.edit({ components: [] }).catch(() => {});
+				if (messageInteraction.customId === RequestComponentId.Allow) {
+					await messageInteraction.reply(
 						`File approved by ${userMention(interaction.user.id)}.`,
 					);
 					await thread.send(
-						`The file will be added to the server shortly.`,
+						"The file will be added to the server shortly.",
 					);
 					const finalFilename = isFileBuffer
 						? await copyLocalPluginFileToServer(
@@ -291,7 +291,7 @@ export default {
 					}
 				} else {
 					if (token) uploadServer.disposeToken(token);
-					await thread.send(
+					await messageInteraction.reply(
 						`File rejected by ${userMention(interaction.user.id)}.`,
 					);
 					await thread.send(

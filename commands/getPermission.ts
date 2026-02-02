@@ -38,6 +38,7 @@ export default {
 	async execute({ interaction, serverManager }) {
 		const user = interaction.options.getUser("user") ?? interaction.user;
 		const local = interaction.options.getBoolean("local") ?? false;
+		await interaction.deferReply({ ephemeral: true });
 		const serverId = local
 			? (await getUserSelectedServer(serverManager, interaction, true))
 					?.id
