@@ -1,3 +1,3 @@
 [submodule "webUi"]
 	path = webUi
-	url = ./webUi
+	url = https://github.com/irisariuan/minecraftDiscordConnectorWeb.git
