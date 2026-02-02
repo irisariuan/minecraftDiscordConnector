@@ -26,6 +26,7 @@ export interface ServerCreditSettings {
 
 	uploadFileFee: number;
 	deletePluginFee: number;
+	editFileFee: number;
 }
 
 export interface CreditSettings extends ServerCreditSettings {

@@ -339,19 +339,24 @@ export class UploadServer extends EventEmitter {
 		sessionId,
 		bypassFileExistCheck = false,
 	}: CreateEditTokenParams) {
-		if (
-			!bypassFileExistCheck &&
-			type !== TokenType.EditDiffToken &&
-			!existsSync(safeJoin(file.containingFolderPath, file.filename))
-		)
+		try {
+			const path = safeJoin(file.containingFolderPath, file.filename);
+			if (
+				!bypassFileExistCheck &&
+				type !== TokenType.EditDiffToken &&
+				!existsSync(path)
+			)
+				return null;
+			const token = this.createToken(type);
+			const finalSessionId = sessionId ?? generateSessionId();
+			this.editTokenMap.set(token, {
+				...file,
+				sessionId: finalSessionId,
+			});
+			return { token, sessionId: finalSessionId };
+		} catch {
 			return null;
-		const token = this.createToken(type);
-		const finalSessionId = sessionId ?? generateSessionId();
-		this.editTokenMap.set(token, {
-			...file,
-			sessionId: finalSessionId,
-		});
-		return { token, sessionId: finalSessionId };
+		}
 	}
 
 	private createToken(type: TokenType) {

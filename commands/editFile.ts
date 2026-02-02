@@ -23,6 +23,11 @@ import {
 	createRequestComponent,
 	RequestComponentId,
 } from "../lib/component/request";
+import {
+	changeCredit,
+	sendCreditNotification,
+	spendCredit,
+} from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -56,6 +61,18 @@ export default {
 			});
 		}
 		const filename = interaction.options.getString("filename", true);
+		const payment = await spendCredit(interaction, {
+			userId: interaction.user.id,
+			cost: server.creditSettings.editFileFee,
+			reason: `Edit File ${filename}`,
+			serverId: server.id,
+		});
+		if (!payment) {
+			return await interaction.followUp({
+				content:
+					"You do not have enough credit to edit files on this server.",
+			});
+		}
 		const createIfNotExist =
 			interaction.options.getBoolean("create") ?? false;
 		const editTokenType = comparePermission(
@@ -73,15 +90,27 @@ export default {
 			bypassFileExistCheck: createIfNotExist,
 		});
 		if (!result) {
+			await changeCredit({
+				userId: interaction.user.id,
+				change: -payment.changed,
+				serverId: server.id,
+				reason: "Edit File Request Failed Refund",
+			});
+			await sendCreditNotification({
+				user: interaction.user,
+				creditChanged: -payment.changed,
+				reason: "Edit File Request Failed Refund",
+				serverId: server.id,
+			});
 			return await interaction.followUp({
-				content: `Failed to create edit session for file ${filename}. It may not exist.`,
+				content: `Failed to create edit session for file \`${filename}\`. It may not exist or is out of boundary.`,
 			});
 		}
 		const { token, sessionId } = result;
 		const editUrl = `${UPLOAD_URL}/edit/?id=${token}`;
 		try {
 			await interaction.user.send({
-				content: `You can edit the file using the [following link](${editUrl}). The link will expire in 15 minutes.`,
+				content: `You can edit the file \`${filename}\` using the [following link](${editUrl}). The link will expire in 15 minutes.`,
 			});
 			await interaction.followUp({
 				content: `I've sent you a DM with the edit link for file \`${filename}\`.`,

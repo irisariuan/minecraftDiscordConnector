@@ -14,7 +14,10 @@ import {
 } from "discord.js";
 import "dotenv/config";
 import type { CommandFile } from "../lib/commandFile";
-import { createRequestComponent } from "../lib/component/request";
+import {
+	createRequestComponent,
+	RequestComponentId,
+} from "../lib/component/request";
 import {
 	spendCredit,
 	changeCredit,
@@ -215,9 +218,10 @@ export default {
 			`Please notify the staff to review your file. This thread will be deleted in 10 minutes.`,
 		);
 		await thread.members.remove(interaction.user);
-		const message = await thread.send("Approve this file?");
-		await message.react("✅");
-		await message.react("❌");
+		const message = await thread.send({
+			content: "Approve this file?",
+			components: [createRequestComponent()],
+		});
 		for (const userId of await getUsersWithMatchedPermission(
 			PermissionFlags.downloadPlugin,
 		)) {
@@ -230,25 +234,21 @@ export default {
 			}
 		}
 		message
-			.createReactionCollector({
-				filter: async (reaction, user) =>
-					!!(
-						reaction.emoji.name &&
-						["✅", "❌"].includes(reaction.emoji.name) &&
-						!user.bot &&
-						comparePermission(
-							await readPermission(user, server.id),
-							PermissionFlags.downloadPlugin,
-						)
+			.createMessageComponentCollector({
+				filter: async (interaction) =>
+					!interaction.user.bot &&
+					comparePermission(
+						await readPermission(interaction.user, server.id),
+						PermissionFlags.downloadPlugin,
 					),
 				max: 1,
 				time: 1000 * 60 * 10, // 10 minutes
 			})
-			.on("collect", async (reaction, user) => {
-				await message.reactions.removeAll();
-				if (reaction.emoji.name === "✅") {
+			.on("collect", async (interaction) => {
+				if (interaction.customId === RequestComponentId.Allow) {
+					message.edit({ components: [] }).catch(() => {});
 					await thread.send(
-						`File approved by ${userMention(user.id)}.`,
+						`File approved by ${userMention(interaction.user.id)}.`,
 					);
 					await thread.send(
 						`The file will be added to the server shortly.`,
@@ -292,7 +292,7 @@ export default {
 				} else {
 					if (token) uploadServer.disposeToken(token);
 					await thread.send(
-						`File rejected by ${userMention(user.id)}.`,
+						`File rejected by ${userMention(interaction.user.id)}.`,
 					);
 					await thread.send(
 						`The file will not be added to the server.`,
