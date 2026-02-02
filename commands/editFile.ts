@@ -81,17 +81,15 @@ export default {
 		const editUrl = `${UPLOAD_URL}/edit/?id=${token}`;
 		try {
 			await interaction.user.send({
-				content: `You can edit the file using the following [link](${editUrl}). The link will expire in 15 minutes.`,
+				content: `You can edit the file using the [following link](${editUrl}). The link will expire in 15 minutes.`,
 			});
 			await interaction.followUp({
 				content: `I've sent you a DM with the edit link for file \`${filename}\`.`,
 			});
 		} catch {
-			await interaction.followUp({
-				content:
-					"I couldn't send you a DM. Please make sure your DMs are open and try again.",
+			await interaction.editReply({
+				content: `I couldn't send you a DM. Please use the [following link](${editUrl}) to edit the file \`${filename}\``,
 			});
-			return uploadServer.disposeToken(token);
 		}
 		const disposeTokenTimeout = setTimeout(
 			() => uploadServer.disposeToken(token),
