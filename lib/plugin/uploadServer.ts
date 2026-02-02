@@ -153,6 +153,7 @@ function createUploadServer(uploadServer: UploadServer) {
 					file.containingFolderPath,
 					file.filename,
 				);
+				if (!existsSync(filepath)) return res.send("");
 				if (
 					uploadServer.getTokenType(req.params.id) ===
 					TokenType.EditDiffToken
