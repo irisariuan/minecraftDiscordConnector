@@ -87,7 +87,7 @@ export async function editHandler(
 		? TokenType.EditForceToken
 		: TokenType.EditToken;
 
-	const result = uploadServer.createEditToken({
+	const result = uploadServer.token.createEditToken({
 		file: {
 			filename,
 			containingFolderPath: server.config.serverDir,
@@ -131,26 +131,28 @@ export async function editHandler(
 	}
 
 	const disposeTokenTimeout = setTimeout(
-		() => uploadServer.disposeToken(token),
+		() => uploadServer.token.disposeToken(token),
 		1000 * 60 * 15,
 	);
 
 	console.log("Awaiting file");
-	const editFile = await uploadServer.awaitEditToken(token).catch(() => {
-		uploadServer.disposeToken(token);
-		return null;
-	});
+	const editFile = await uploadServer.token
+		.awaitEditToken(token)
+		.catch(() => {
+			uploadServer.token.disposeToken(token);
+			return null;
+		});
 
 	clearTimeout(disposeTokenTimeout);
 
 	if (!editFile) {
-		uploadServer.disposeToken(token);
+		uploadServer.token.disposeToken(token);
 		return console.log("File edit session expired or was cancelled");
 	}
 
 	if (editTokenType === TokenType.EditForceToken) {
 		console.log("File edited forcefully");
-		uploadServer.disposeToken(token);
+		uploadServer.token.disposeToken(token);
 		return await interaction.followUp({
 			content: `Your changes to file \`${filename}\` have been applied to the server.`,
 		});
@@ -177,7 +179,7 @@ export async function editHandler(
 		setTimeout(r, expireTime),
 	);
 
-	const diffTokenResult = uploadServer.createEditToken({
+	const diffTokenResult = uploadServer.token.createEditToken({
 		file: editFile,
 		type: TokenType.EditDiffToken,
 		bypassFileExistCheck: true,
@@ -222,11 +224,11 @@ export async function editHandler(
 
 	try {
 		const result = await Promise.race([
-			uploadServer.awaitEditToken(diffToken),
+			uploadServer.token.awaitEditToken(diffToken),
 			expirePromise,
 			reactionPromise,
 		]);
-		uploadServer.disposeToken(diffToken);
+		uploadServer.token.disposeToken(diffToken);
 		if (result instanceof ButtonInteraction) {
 			await message.edit({ components: [] }).catch(() => {});
 			await result

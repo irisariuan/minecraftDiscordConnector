@@ -105,11 +105,13 @@ export default {
 		];
 		let token: string | null = null;
 		if (UPLOAD_URL) {
-			token = uploadServer.createFileToken();
+			token = uploadServer.token.createFileToken();
 			await thread.send(
 				`You may also upload the file to [our website](${UPLOAD_URL}/?id=${token})`,
 			);
-			promises.push(uploadServer.awaitFileToken(token, 1000 * 60 * 30));
+			promises.push(
+				uploadServer.token.awaitFileToken(token, 1000 * 60 * 30),
+			);
 		}
 		const cleanUp = () => {
 			thread.delete().catch(() => {});
@@ -120,7 +122,7 @@ export default {
 			await messages.reply("Upload cancelled.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
-			if (token) uploadServer.disposeToken(token);
+			if (token) uploadServer.token.disposeToken(token);
 			changeCredit({
 				userId: interaction.user.id,
 				change: -payment.changed,
@@ -191,7 +193,7 @@ export default {
 						server.config.pluginDir,
 						filename,
 					);
-			if (token) uploadServer.disposeToken(token);
+			if (token) uploadServer.token.disposeToken(token);
 			if (finalFilename) {
 				await thread.send(`File \`${finalFilename}\` added to server.`);
 			} else {
@@ -263,7 +265,7 @@ export default {
 								server.config.pluginDir,
 								filename,
 							);
-					if (token) uploadServer.disposeToken(token);
+					if (token) uploadServer.token.disposeToken(token);
 					if (finalFilename) {
 						await thread.send(`File added to server.`);
 						await interaction.user.send(
@@ -290,7 +292,7 @@ export default {
 						});
 					}
 				} else {
-					if (token) uploadServer.disposeToken(token);
+					if (token) uploadServer.token.disposeToken(token);
 					await messageInteraction.reply(
 						`File rejected by ${userMention(interaction.user.id)}.`,
 					);

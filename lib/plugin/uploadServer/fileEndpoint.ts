@@ -3,10 +3,13 @@ import type { UploadServer } from "../uploadServer";
 
 export function setupFileEndpoint(uploadServer: UploadServer) {
 	return (req: Request, res: Response) => {
-		if (!req.params.id || !uploadServer.fileTokenMap.has(req.params.id))
+		if (
+			!req.params.id ||
+			!uploadServer.token.hasFileToken(req.params.id)
+		)
 			return res.status(404).send("Not Found");
 
-		const file = uploadServer.fileTokenMap.get(req.params.id);
+		const file = uploadServer.token.getFileToken(req.params.id);
 		if (!file) {
 			return res.status(404).send("Not Found");
 		}

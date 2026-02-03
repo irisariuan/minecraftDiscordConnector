@@ -7,18 +7,21 @@ export function setupVerifyEndpoint(uploadServer: UploadServer) {
 		if (!req.params.id) {
 			return res.status(403).send("Forbidden");
 		}
-		if (uploadServer.hasActiveToken(req.params.id, null)) {
+		if (uploadServer.token.hasActiveToken(req.params.id, null)) {
 			return res.status(200).send({
 				valid: true,
-				uploaded: !uploadServer.hasActiveToken(
+				uploaded: !uploadServer.token.hasActiveToken(
 					req.params.id,
 					TokenType.FileToken,
 				),
-				edited: !uploadServer.hasActiveToken(req.params.id, [
-					TokenType.EditToken,
-					TokenType.EditDiffToken,
-					TokenType.EditForceToken,
-				]),
+				edited: !uploadServer.token.hasActiveToken(
+					req.params.id,
+					[
+						TokenType.EditToken,
+						TokenType.EditDiffToken,
+						TokenType.EditForceToken,
+					],
+				),
 			});
 		}
 		return res

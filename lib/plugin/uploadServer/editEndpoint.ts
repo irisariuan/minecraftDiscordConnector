@@ -9,7 +9,7 @@ export function setupEditEndpoint(uploadServer: UploadServer) {
 	return async (req: Request, res: Response) => {
 		if (
 			!req.params.id ||
-			!uploadServer.hasActiveToken(req.params.id, [
+			!uploadServer.token.hasActiveToken(req.params.id, [
 				TokenType.EditToken,
 				TokenType.EditForceToken,
 				TokenType.EditDiffToken,
@@ -21,7 +21,7 @@ export function setupEditEndpoint(uploadServer: UploadServer) {
 		if (!req.body || !parsed.success) {
 			return res.status(400).send("Invalid request body");
 		}
-		const file = uploadServer.editTokenMap.get(req.params.id);
+		const file = uploadServer.token.getEditToken(req.params.id);
 		/**
 		 * @description with dot
 		 */
@@ -40,11 +40,13 @@ export function setupEditEndpoint(uploadServer: UploadServer) {
 					filename: file.filename,
 					extension,
 					isDiff:
-						uploadServer.getTokenType(req.params.id) ===
-						TokenType.EditDiffToken,
+						uploadServer.token.getTokenType(
+							req.params.id,
+						) === TokenType.EditDiffToken,
 					isForce:
-						uploadServer.getTokenType(req.params.id) ===
-						TokenType.EditForceToken,
+						uploadServer.token.getTokenType(
+							req.params.id,
+						) === TokenType.EditForceToken,
 				});
 			}
 			case "fetch": {
@@ -54,13 +56,15 @@ export function setupEditEndpoint(uploadServer: UploadServer) {
 				);
 				if (!existsSync(filepath)) return res.send("");
 				if (
-					uploadServer.getTokenType(req.params.id) ===
+					uploadServer.token.getTokenType(req.params.id) ===
 					TokenType.EditDiffToken
 				) {
 					const rawContent = await readFile(filepath, "utf-8").catch(
 						() => "",
 					);
-					const diff = uploadServer.getDiff(file.sessionId);
+					const diff = uploadServer.token.getDiff(
+						file.sessionId,
+					);
 					if (diff) {
 						return res.status(200).send(
 							JSON.stringify({
@@ -69,7 +73,7 @@ export function setupEditEndpoint(uploadServer: UploadServer) {
 							}),
 						);
 					} else {
-						uploadServer.useEditToken(req.params.id);
+						uploadServer.token.useEditToken(req.params.id);
 						return res
 							.status(404)
 							.send("No diff content available");
@@ -79,10 +83,13 @@ export function setupEditEndpoint(uploadServer: UploadServer) {
 			}
 			case "edit": {
 				const { editedContent } = parsed.data;
-				switch (uploadServer.getTokenType(req.params.id)) {
+				switch (uploadServer.token.getTokenType(req.params.id)) {
 					case TokenType.EditToken: {
-						uploadServer.useEditToken(req.params.id);
-						uploadServer.newDiff(file.sessionId, editedContent);
+						uploadServer.token.useEditToken(req.params.id);
+						uploadServer.token.newDiff(
+							file.sessionId,
+							editedContent,
+						);
 						return res
 							.status(200)
 							.send("Uploaded content received");
@@ -107,8 +114,12 @@ export function setupEditEndpoint(uploadServer: UploadServer) {
 							})
 							.then(() => {
 								if (tokenId) {
-									uploadServer.useEditToken(tokenId);
-									uploadServer.disposeToken(tokenId);
+									uploadServer.token.useEditToken(
+										tokenId,
+									);
+									uploadServer.token.disposeToken(
+										tokenId,
+									);
 								}
 								return res
 									.status(200)

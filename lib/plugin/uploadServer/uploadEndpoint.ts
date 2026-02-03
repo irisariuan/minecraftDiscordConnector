@@ -6,7 +6,10 @@ export function setupUploadEndpoint(uploadServer: UploadServer) {
 	return (req: Request, res: Response) => {
 		if (
 			!req.params.id ||
-			!uploadServer.hasActiveToken(req.params.id, TokenType.FileToken)
+			!uploadServer.token.hasActiveToken(
+				req.params.id,
+				TokenType.FileToken,
+			)
 		) {
 			return res.status(403).send("Forbidden");
 		}
@@ -30,7 +33,7 @@ export function setupUploadEndpoint(uploadServer: UploadServer) {
 			buffer: req.file.buffer,
 			filename: req.file.originalname,
 		};
-		if (uploadServer.useFileToken(req.params.id, file)) {
+		if (uploadServer.token.useFileToken(req.params.id, file)) {
 			return res.status(200).send("File uploaded successfully");
 		} else {
 			return res.status(500).send("Unexpected token usage failed");
