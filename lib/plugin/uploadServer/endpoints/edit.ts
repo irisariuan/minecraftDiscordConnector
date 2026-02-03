@@ -1,9 +1,9 @@
 import type { Request, Response } from "express";
 import { existsSync } from "fs";
 import { readFile, rename, writeFile } from "fs/promises";
-import type { UploadServer } from "../uploadServer";
-import { safeJoin } from "../../utils";
-import { TokenType, UploadRequestSchema } from "./utils";
+import type { UploadServer } from "../../uploadServer";
+import { safeJoin } from "../../../utils";
+import { TokenType, UploadRequestSchema } from "../utils";
 
 export function setupEditEndpoint(uploadServer: UploadServer) {
 	return async (req: Request, res: Response) => {

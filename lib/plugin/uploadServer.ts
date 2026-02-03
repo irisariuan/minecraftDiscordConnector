@@ -7,12 +7,12 @@ import multer from "multer";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
 import { CORS_ORIGIN } from "../env";
 import { safeJoin } from "../utils";
-import { setupVerifyEndpoint } from "./uploadServer/verifyEndpoint";
-import { setupFileEndpoint } from "./uploadServer/fileEndpoint";
-import { setupUploadEndpoint } from "./uploadServer/uploadEndpoint";
-import { setupEditEndpoint } from "./uploadServer/editEndpoint";
-import { setupViewEndpoint } from "./uploadServer/viewEndpoint";
-import { setupDeleteTokenEndpoint } from "./uploadServer/deleteTokenEndpoint";
+import { setupVerifyEndpoint } from "./uploadServer/endpoints/verify";
+import { setupFileEndpoint } from "./uploadServer/endpoints/file";
+import { setupUploadEndpoint } from "./uploadServer/endpoints/upload";
+import { setupEditEndpoint } from "./uploadServer/endpoints/edit";
+import { setupViewEndpoint } from "./uploadServer/endpoints/view";
+import { setupDeleteTokenEndpoint } from "./uploadServer/endpoints/deleteToken";
 import { TokenManager } from "./uploadServer/tokenManager";
 
 function createUploadServer(uploadServer: UploadServer) {

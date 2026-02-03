@@ -397,9 +397,16 @@ export function readDir(dirpath: string) {
  * Join path segments together safely
  * Returns empty string if any segment is empty/null
  */
-export function joinPath(...segments: string[]): string | null {
+export function joinPathSafe(...segments: string[]): string | null {
 	const filtered = segments.filter((s) => s);
-	return filtered.join("/");
+	if (filtered.length !== segments.length) return null;
+	return joinPath(...filtered);
+}
+
+export function joinPath(...segments: string[]): string {
+	return segments
+		.map((v) => (v.endsWith("/") ? v.slice(0, -1) : v))
+		.join("/");
 }
 
 /**

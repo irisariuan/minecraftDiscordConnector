@@ -1,12 +1,11 @@
-import { SlashCommandBuilder, MessageFlags, time } from "discord.js";
-import {
-	listPluginVersions,
-	searchPlugins,
-	type PluginListVersionItem,
-	type PluginSearchQueryItem,
-} from "../lib/server/plugin";
+import { SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { sendPaginationMessage } from "../lib/pagination";
+import { listPluginVersions, searchPlugins } from "../lib/server/plugin";
+import {
+	type PluginListVersionItem,
+	type PluginSearchQueryItem,
+} from "../lib/server/plugin/types";
 import { trimTextWithSuffix } from "../lib/utils";
 
 export default {

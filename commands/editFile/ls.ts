@@ -17,7 +17,7 @@ import type { Server } from "../../lib/server";
 import {
 	formatFileSize,
 	getParentPath,
-	joinPath,
+	joinPathSafe,
 	validateAndReadDir,
 	type FileInfo,
 } from "../../lib/utils";
@@ -193,7 +193,7 @@ export async function lsHandler(
 			if (selectedFile.isDirectory) {
 				await selectInteraction.deferUpdate();
 				// Update current path using helper
-				const newPath = joinPath(
+				const newPath = joinPathSafe(
 					currentNavigationPath,
 					selectedFile.name,
 				);
@@ -204,12 +204,12 @@ export async function lsHandler(
 				await refreshDisplay();
 				return false; // Don't stop collector
 			} else {
-				const fullPath = joinPath(
+				const fullPath = joinPathSafe(
 					currentNavigationPath,
 					selectedFile.name,
 				);
 				await selectInteraction.reply({
-					content: `Selected file: \`${fullPath}\`.${
+					content: `Selected file: \`${fullPath ?? selectedFile.name}\`.${
 						selectedFile.size
 							? ` Size: ${formatFileSize(selectedFile.size)}.`
 							: ""

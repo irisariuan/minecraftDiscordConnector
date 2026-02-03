@@ -1,11 +1,5 @@
 import { input } from "@inquirer/prompts";
-import {
-	Client,
-	ComponentType,
-	Events,
-	GatewayIntentBits,
-	MessageFlags,
-} from "discord.js";
+import { Client, Events, GatewayIntentBits, MessageFlags } from "discord.js";
 import "dotenv/config";
 import { updateApprovalMessage } from "./lib/approval";
 import {
@@ -15,9 +9,10 @@ import {
 	registerCommands,
 } from "./lib/commandFile";
 import { isApprovalMessageComponentId } from "./lib/component/approval";
+import { getUserSelectedServer } from "./lib/component/server";
 import { changeCredit, getCredit, sendCreditNotification } from "./lib/credit";
 import { createServer, hasAnyServer } from "./lib/db";
-import { getUserSelectedServer } from "./lib/component/server";
+import { TOKEN } from "./lib/env";
 import {
 	compareAllPermissions,
 	comparePermission,
@@ -25,16 +20,15 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "./lib/permission";
-import { createServerManager, Server } from "./lib/server";
-import { serverConfig } from "./lib/server/plugin";
+import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
+import { createServerManager } from "./lib/server";
+import { serverConfig } from "./lib/server/plugin/types";
 import {
 	changeCreditSettings,
 	loadCreditSettings,
 	settings,
 } from "./lib/settings";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
-import { TOKEN } from "./lib/env";
-import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
 
 let enablePlugins = !process.argv.includes("--no-plugins");
 let commands = await loadCommands(enablePlugins);

@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
 import { readFile } from "fs/promises";
-import type { UploadServer } from "../uploadServer";
-import { safeJoin } from "../../utils";
-import { TokenType } from "./utils";
+import type { UploadServer } from "../../uploadServer";
+import { safeJoin } from "../../../utils";
+import { TokenType } from "../utils";
 
 export function setupViewEndpoint(uploadServer: UploadServer) {
 	return async (req: Request, res: Response) => {

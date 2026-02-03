@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import type { UploadServer } from "../uploadServer";
-import { TokenType, type FileBuffer } from "./utils";
+import type { UploadServer } from "../../uploadServer";
+import { TokenType, type FileBuffer } from "../utils";
 
 export function setupUploadEndpoint(uploadServer: UploadServer) {
 	return (req: Request, res: Response) => {

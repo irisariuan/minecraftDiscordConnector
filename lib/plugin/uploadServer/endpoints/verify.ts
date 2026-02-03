@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import type { UploadServer } from "../uploadServer";
-import { TokenType } from "./utils";
+import type { UploadServer } from "../../uploadServer";
+import { TokenType } from "../utils";
 
 export function setupVerifyEndpoint(uploadServer: UploadServer) {
 	return (req: Request, res: Response) => {

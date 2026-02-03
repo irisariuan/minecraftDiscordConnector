@@ -1,21 +1,21 @@
 import { ComponentType, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { removePluginByFileName } from "../lib/server/plugin";
-import {
-	comparePermission,
-	readPermission,
-	PermissionFlags,
-	anyPerm,
-} from "../lib/permission";
 import {
 	createRequestComponent,
 	RequestComponentId,
 } from "../lib/component/request";
 import {
-	spendCredit,
 	changeCredit,
 	sendCreditNotification,
+	spendCredit,
 } from "../lib/credit";
+import {
+	anyPerm,
+	comparePermission,
+	PermissionFlags,
+	readPermission,
+} from "../lib/permission";
+import { removePluginByFileName } from "../lib/server/plugin";
 
 export default {
 	command: new SlashCommandBuilder()

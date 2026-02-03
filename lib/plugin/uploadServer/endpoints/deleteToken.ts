@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import type { UploadServer } from "../uploadServer";
+import type { UploadServer } from "../../uploadServer";
 
 export function setupDeleteTokenEndpoint(uploadServer: UploadServer) {
 	return (req: Request, res: Response) => {

@@ -1,5 +1,6 @@
 import type { UserCredit } from "../lib/credit";
 import { createUser, newBulkTransactions } from "../lib/db";
+import { safeJoin } from "../lib/utils";
 
 export const CREDIT = `${process.cwd()}/data/credit.json`;
 
@@ -24,7 +25,7 @@ async function getCreditJson(): Promise<CreditJson> {
 }
 
 async function readPermissionJson(): Promise<Record<string, number>> {
-	const file = Bun.file(process.cwd() + "/data/permissions.json");
+	const file = Bun.file(safeJoin(process.cwd(), "/data/permissions.json"));
 	if (!(await file.exists())) {
 		return {};
 	}

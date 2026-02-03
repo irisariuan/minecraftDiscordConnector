@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import type { UploadServer } from "../uploadServer";
+import type { UploadServer } from "../../uploadServer";
 
 export function setupFileEndpoint(uploadServer: UploadServer) {
 	return (req: Request, res: Response) => {
