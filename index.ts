@@ -2,6 +2,7 @@ import { input } from "@inquirer/prompts";
 import {
 	Client,
 	ComponentType,
+	Events,
 	GatewayIntentBits,
 	MessageFlags,
 } from "discord.js";
@@ -245,7 +246,7 @@ if (
 	);
 }
 
-client.once("ready", async () => {
+client.once(Events.ClientReady, async () => {
 	console.log(`Logged in as ${client.user?.tag}`);
 	if (giveCredits > 0) {
 		const users = await getUsersWithMatchedPermission(PermissionFlags.use);
@@ -269,7 +270,7 @@ client.once("ready", async () => {
 	}
 });
 
-client.on("interactionCreate", async (interaction) => {
+client.on(Events.InteractionCreate, async (interaction) => {
 	if (interaction.isChatInputCommand()) {
 		if (
 			!compareAllPermissions(await readPermission(interaction.user), [
