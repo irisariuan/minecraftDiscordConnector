@@ -14,6 +14,7 @@ import {
 	pageSize,
 	type PaginationOptions,
 } from "../pagination";
+import { resolveCallable, resolveCallableSync } from "../utils";
 
 interface CreateEmbedProps<T> {
 	result: T[];
@@ -32,7 +33,7 @@ export function createEmbed<T>({
 	formatter,
 }: CreateEmbedProps<T>) {
 	return new EmbedBuilder()
-		.setTitle(options?.title || "Logs")
+		.setTitle(resolveCallableSync(options?.title) || "Logs")
 		.setTimestamp(Date.now())
 		.setColor(options?.mainColor || "Green")
 		.addFields(

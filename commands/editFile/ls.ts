@@ -166,9 +166,9 @@ export async function lsHandler(
 			const searchText = filter.toLowerCase();
 			return file.name.toLowerCase().includes(searchText);
 		},
-		selectMenuTransform: (file: FileInfo) => ({
+		selectMenuTransform: (file: FileInfo, index: number) => ({
 			label: file.isDirectory ? `📁 ${file.name}` : `📄 ${file.name}`,
-			value: file.name,
+			value: index.toString(),
 			description: file.isDirectory
 				? "Navigate to this directory"
 				: `File (${formatFileSize(file.size)})`,
@@ -178,9 +178,17 @@ export async function lsHandler(
 			currentResult,
 			refreshDisplay,
 		) => {
-			const selectedFileName = selectInteraction.values[0];
+			const selectedValue = selectInteraction.values[0];
+			if (!selectedValue) {
+				await selectInteraction.reply({
+					content: "No item selected.",
+					flags: MessageFlags.Ephemeral,
+				});
+				return false;
+			}
+			const selectedIndex = Number.parseInt(selectedValue);
 			const data = await currentResult.getData();
-			const selectedFile = data?.find((f) => f.name === selectedFileName);
+			const selectedFile = data?.[selectedIndex];
 
 			if (!selectedFile) {
 				await selectInteraction.reply({
@@ -193,11 +201,17 @@ export async function lsHandler(
 			if (selectedFile.isDirectory) {
 				await selectInteraction.deferUpdate();
 				// Update current path using helper
-				const newPath = joinPathSafe(
-					currentNavigationPath,
-					selectedFile.name,
-				);
-				if (newPath === null) return false; // Invalid path, do nothing
+				const newPath = currentNavigationPath
+					? joinPathSafe(currentNavigationPath, selectedFile.name)
+					: selectedFile.name;
+				if (newPath === null) {
+					console.error(
+						"Invalid path navigation attempted.",
+						currentNavigationPath,
+						selectedFile.name,
+					);
+					return false; // Invalid path, do nothing
+				}
 				currentNavigationPath = newPath;
 
 				// Refresh the display with new path

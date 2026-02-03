@@ -86,6 +86,14 @@ export function removeSuffix(str: string, suffix: string) {
 	if (str.endsWith(suffix)) return str.slice(0, -suffix.length);
 	return str;
 }
+export function removePrefix(str: string, prefix: string) {
+	if (str.startsWith(prefix)) return str.slice(prefix.length);
+	return str;
+}
+export function ensurePrefix(str: string, prefix: string) {
+	if (str.startsWith(prefix)) return str;
+	return prefix + str;
+}
 
 export function trimTextWithSuffix(
 	text: string,
@@ -398,14 +406,16 @@ export function readDir(dirpath: string) {
  * Returns empty string if any segment is empty/null
  */
 export function joinPathSafe(...segments: string[]): string | null {
-	const filtered = segments.filter((s) => s);
+	const filtered = segments.filter(
+		(s) => removePrefix(removeSuffix(s, "/"), "/").length > 0,
+	);
 	if (filtered.length !== segments.length) return null;
 	return joinPath(...filtered);
 }
 
 export function joinPath(...segments: string[]): string {
 	return segments
-		.map((v) => (v.endsWith("/") ? v.slice(0, -1) : v))
+		.map((v) => removePrefix(removeSuffix(v, "/"), "/"))
 		.join("/");
 }
 
@@ -451,8 +461,15 @@ export function validateAndReadDir(
 	}
 }
 
-export type Callable<T> = Promise<T> | T | (() => T | Promise<T>);
-export async function resolveCallable<T>(value: Callable<T>): Promise<T> {
+export type ResolvableSync<T> = T | (() => T);
+export type Resolvable<T> = Promise<T> | T | (() => T | Promise<T>);
+export function resolveCallableSync<T>(value: ResolvableSync<T>): T {
+	if (typeof value === "function") {
+		return (value as () => T)();
+	}
+	return value;
+}
+export async function resolveCallable<T>(value: Resolvable<T>): Promise<T> {
 	if (typeof value === "function") {
 		return await (value as () => T)();
 	}

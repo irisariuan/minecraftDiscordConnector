@@ -74,7 +74,7 @@ export default {
 				notFoundMessage: "No plugin found",
 				unfixablePageNumber: true,
 			},
-			selectMenuTransform: (plugin) => ({
+			selectMenuTransform: (plugin, index) => ({
 				label: trimTextWithSuffix(plugin.title, 100),
 				description: trimTextWithSuffix(plugin.description, 100),
 				value: plugin.slug,

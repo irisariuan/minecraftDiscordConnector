@@ -292,7 +292,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					notFoundMessage: `${user.id === interaction.user.id ? "You have" : `${userMention(user.id)} has`} no tickets.`,
 				},
 				interactionFilter: (i) => i.user.id === interaction.user.id,
-				selectMenuTransform: (ticket: Ticket) => ({
+				selectMenuTransform: (ticket: Ticket, index: number) => ({
 					label: trimTextWithSuffix(ticket.name, 100),
 					value: ticket.ticketId,
 					description: ticket.description

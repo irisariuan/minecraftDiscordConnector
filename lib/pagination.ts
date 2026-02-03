@@ -18,7 +18,12 @@ import {
 	PageAction,
 	type SelectMenuOption,
 } from "./component/pagination";
-import { clamp, resolveCallable, type Callable } from "./utils";
+import {
+	clamp,
+	resolveCallable,
+	type Resolvable,
+	type ResolvableSync,
+} from "./utils";
 
 interface GetPageProps {
 	page: number;
@@ -57,7 +62,7 @@ export const pageSize = 20;
 export interface PaginationOptions {
 	filter?: string;
 	notFoundMessage?: string;
-	title?: string | (() => string);
+	title?: ResolvableSync<string>;
 	mainColor?: ColorResolvable;
 	unfixablePageNumber?: boolean;
 	selectMenuPlaceholder?: string;
@@ -92,8 +97,8 @@ interface SendPaginationMessageProps<
 interface BasePaginationProps<T> {
 	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
 	filterFunc?: (filter?: string) => (v: T) => boolean;
-	selectMenuTransform?: (v: T) => SelectMenuOption;
-	customComponentRows?: Callable<
+	selectMenuTransform?: (v: T, index: number) => SelectMenuOption;
+	customComponentRows?: Resolvable<
 		ActionRowBuilder<MessageActionRowComponentBuilder>[]
 	>;
 	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
@@ -341,7 +346,9 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 	const selectMenuRow =
 		selectMenuTransform && showSelectMenu && filteredResult.length > 0
 			? createSelectMenu(
-					filteredResult.map(selectMenuTransform),
+					filteredResult.map((item, index) =>
+						selectMenuTransform(item, page * pageSize + index),
+					),
 					page,
 					options?.selectMenuPlaceholder,
 				)
