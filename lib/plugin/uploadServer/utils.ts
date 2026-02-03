@@ -23,6 +23,7 @@ export enum TokenType {
 	EditToken = "edit",
 	EditForceToken = "editforce",
 	EditDiffToken = "editdiff",
+	ViewToken = "view",
 }
 export type EditTokenType =
 	| TokenType.EditDiffToken

@@ -5,6 +5,7 @@ import { safeJoin } from "../../utils";
 import {
 	generateSessionId,
 	TokenType,
+	type BaseFile,
 	type CreateEditTokenParams,
 	type Diff,
 	type EditFile,
@@ -35,6 +36,38 @@ export class TokenManager extends EventEmitter {
 
 	createFileToken(): string {
 		return this.createToken(TokenType.FileToken);
+	}
+
+	createViewToken({
+		file,
+		expirationTime = 1000 * 60 * 15, // 15 minutes default
+	}: {
+		file: BaseFile;
+		expirationTime?: number;
+	}): { token: string } | null {
+		try {
+			const path = safeJoin(file.containingFolderPath, file.filename);
+			if (!existsSync(path)) return null;
+
+			const token = this.createToken(TokenType.ViewToken);
+			this.editTokenMap.set(token, {
+				...file,
+				sessionId: generateSessionId(),
+			});
+
+			// Auto-expire the view token after the specified time
+			if (expirationTime > 0) {
+				const timeoutId = setTimeout(() => {
+					this.disposeToken(token);
+					this.emit("tokenExpired", token);
+				}, expirationTime);
+				this.fileTokenTimeouts.set(token, timeoutId);
+			}
+
+			return { token };
+		} catch {
+			return null;
+		}
 	}
 
 	createEditToken({
@@ -334,6 +367,7 @@ export class TokenManager extends EventEmitter {
 		listener: (token: string, file?: FileBuffer) => void,
 	): this;
 	on(event: "fileExpired", listener: (token: string) => void): this;
+	on(event: "tokenExpired", listener: (token: string) => void): this;
 	on(event: string, listener: (...args: any[]) => void): this {
 		return super.on(event, listener);
 	}
@@ -342,6 +376,7 @@ export class TokenManager extends EventEmitter {
 	emit(event: "tokenDeleted", token: string): boolean;
 	emit(event: "tokenUsed", token: string, file?: FileBuffer): boolean;
 	emit(event: "fileExpired", token: string): boolean;
+	emit(event: "tokenExpired", token: string): boolean;
 	emit(event: string, ...args: any[]): boolean {
 		return super.emit(event, ...args);
 	}

@@ -11,6 +11,7 @@ import { setupVerifyEndpoint } from "./uploadServer/verifyEndpoint";
 import { setupFileEndpoint } from "./uploadServer/fileEndpoint";
 import { setupUploadEndpoint } from "./uploadServer/uploadEndpoint";
 import { setupEditEndpoint } from "./uploadServer/editEndpoint";
+import { setupViewEndpoint } from "./uploadServer/viewEndpoint";
 import { setupDeleteTokenEndpoint } from "./uploadServer/deleteTokenEndpoint";
 import { TokenManager } from "./uploadServer/tokenManager";
 
@@ -39,6 +40,7 @@ function createUploadServer(uploadServer: UploadServer) {
 		setupUploadEndpoint(uploadServer),
 	);
 	app.post("/api/edit/:id", jsonParser, setupEditEndpoint(uploadServer));
+	app.get("/api/view/:id", setupViewEndpoint(uploadServer));
 	app.delete(
 		"/api/token/:id",
 		jsonParser,
@@ -79,6 +81,7 @@ export class UploadServer {
 		this.token.on("tokenUsed", () => this.checkTokens());
 		this.token.on("tokenDeleted", () => this.checkTokens());
 		this.token.on("fileExpired", () => this.checkTokens());
+		this.token.on("tokenExpired", () => this.checkTokens());
 
 		this.app = createUploadServer(this);
 	}
