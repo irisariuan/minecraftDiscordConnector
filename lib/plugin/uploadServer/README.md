@@ -12,7 +12,7 @@ The upload server is split into two main components:
 ## Structure
 
 - `utils.ts` - Shared utilities, types, and schemas
-- `TokenManager.ts` - Token lifecycle management and validation
+- `tokenManager.ts` - Token lifecycle management and validation
 - `verifyEndpoint.ts` - Token verification endpoint
 - `fileEndpoint.ts` - File download endpoint
 - `uploadEndpoint.ts` - File upload endpoint
