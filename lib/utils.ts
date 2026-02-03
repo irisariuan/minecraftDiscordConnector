@@ -392,3 +392,62 @@ export function readDir(dirpath: string) {
 	});
 	return fileInfos;
 }
+
+/**
+ * Join path segments together safely
+ * Returns empty string if any segment is empty/null
+ */
+export function joinPath(...segments: string[]): string | null {
+	const filtered = segments.filter((s) => s);
+	return filtered.join("/");
+}
+
+/**
+ * Get the parent path by removing the last segment
+ * Returns empty string if already at root
+ */
+export function getParentPath(path: string): string {
+	if (!path) return "";
+	return path.split("/").slice(0, -1).join("/");
+}
+
+/**
+ * Sort FileInfo array: directories first, then alphabetically by name
+ */
+export function sortFileInfos(fileInfos: FileInfo[]): FileInfo[] {
+	return fileInfos.sort((a, b) => {
+		if (a.isDirectory !== b.isDirectory) {
+			return a.isDirectory ? -1 : 1;
+		}
+		return a.name.localeCompare(b.name);
+	});
+}
+
+/**
+ * Validate path is within base directory and read directory contents
+ * Returns sorted FileInfo array or empty array if invalid/not a directory
+ */
+export function validateAndReadDir(
+	baseDir: string,
+	relativePath: string,
+): FileInfo[] {
+	const dirpath = safeJoinWithoutError(baseDir, relativePath);
+	if (!dirpath) return [];
+
+	try {
+		const stat = statSync(dirpath);
+		if (!stat.isDirectory()) return [];
+		const fileInfos = readDir(dirpath);
+		return sortFileInfos(fileInfos);
+	} catch {
+		return [];
+	}
+}
+
+export type Callable<T> = Promise<T> | T | (() => T | Promise<T>);
+export async function resolveCallable<T>(value: Callable<T>): Promise<T> {
+	if (typeof value === "function") {
+		return await (value as () => T)();
+	}
+	return await value;
+}

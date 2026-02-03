@@ -18,7 +18,7 @@ import {
 	PageAction,
 	type SelectMenuOption,
 } from "./component/pagination";
-import { clamp } from "./utils";
+import { clamp, resolveCallable, type Callable } from "./utils";
 
 interface GetPageProps {
 	page: number;
@@ -57,7 +57,7 @@ export const pageSize = 20;
 export interface PaginationOptions {
 	filter?: string;
 	notFoundMessage?: string;
-	title?: string;
+	title?: string | (() => string);
 	mainColor?: ColorResolvable;
 	unfixablePageNumber?: boolean;
 	selectMenuPlaceholder?: string;
@@ -77,6 +77,7 @@ interface SendPaginationMessageProps<
 	onItemSelected?: (
 		interaction: StringSelectMenuInteraction,
 		currentResult: CacheItem<ResultType[]>,
+		refreshDisplay: () => Promise<void>,
 	) => Promise<boolean> | boolean;
 	/**
 	 * @returns {boolean} If we should stop to listen to the component rows
@@ -84,6 +85,7 @@ interface SendPaginationMessageProps<
 	onComponentRowsReacted?: (
 		interaction: MessageComponentInteraction,
 		currentResult: CacheItem<ResultType[]>,
+		refreshDisplay: () => Promise<void>,
 	) => Promise<boolean> | boolean;
 }
 
@@ -91,7 +93,9 @@ interface BasePaginationProps<T> {
 	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
 	filterFunc?: (filter?: string) => (v: T) => boolean;
 	selectMenuTransform?: (v: T) => SelectMenuOption;
-	customComponentRows?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+	customComponentRows?: Callable<
+		ActionRowBuilder<MessageActionRowComponentBuilder>[]
+	>;
 	interactionFilter?: (interaction: MessageComponentInteraction) => boolean;
 	formatter: (v: T, i: number) => { name: string; value: string };
 	options?: PaginationOptions;
@@ -137,6 +141,18 @@ export async function sendPaginationMessage<ResultType>(
 	});
 	let showSelectMenu = selectMenuTransform !== undefined;
 
+	// Helper function to refresh the display
+	const refreshDisplay = async (newPage = 0) => {
+		page = newPage;
+		await result.update();
+		await editInteraction({
+			...props,
+			result,
+			page,
+			showSelectMenu,
+		});
+	};
+
 	const interactionResponse = await editInteraction({
 		...props,
 		result,
@@ -168,10 +184,10 @@ export async function sendPaginationMessage<ResultType>(
 					(await result.getData())?.length ?? 0,
 				);
 				return editInteraction({
+					...props,
 					result,
 					page: clamp(page, 0, maxPage),
 					showSelectMenu,
-					...props,
 				});
 			}
 
@@ -212,10 +228,10 @@ export async function sendPaginationMessage<ResultType>(
 					pageAction: PageAction.SET_FILTER,
 				});
 				return editInteraction({
+					...props,
 					result,
 					page: clamp(page, 0, maxPage),
 					showSelectMenu,
-					...props,
 				});
 			}
 
@@ -243,10 +259,10 @@ export async function sendPaginationMessage<ResultType>(
 				pageAction: i.customId as PageAction,
 			});
 			await editInteraction({
+				...props,
 				result,
 				page,
 				showSelectMenu,
-				...props,
 			});
 		});
 
@@ -256,7 +272,7 @@ export async function sendPaginationMessage<ResultType>(
 	});
 
 	collector.on("collect", async (item) => {
-		if (await onItemSelected?.(item, result)) {
+		if (await onItemSelected?.(item, result, refreshDisplay)) {
 			collector.stop();
 			showSelectMenu = false;
 		}
@@ -265,7 +281,7 @@ export async function sendPaginationMessage<ResultType>(
 	const customCollector =
 		interactionResponse.createMessageComponentCollector();
 	customCollector.on("collect", async (reaction) => {
-		if (await onComponentRowsReacted?.(reaction, result)) {
+		if (await onComponentRowsReacted?.(reaction, result, refreshDisplay)) {
 			customCollector.stop();
 		}
 	});
@@ -296,7 +312,7 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 					unfixablePageNumber: options?.unfixablePageNumber,
 					haveFilter: !!filterFunc,
 				}),
-				...(customComponentRows ?? []),
+				...((await resolveCallable(customComponentRows)) ?? []),
 			],
 		});
 	}
@@ -306,7 +322,13 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 	const embed = createEmbed({
 		result: filteredResult,
 		page,
-		options,
+		options: {
+			...options,
+			title:
+				typeof options?.title === "function"
+					? options.title()
+					: options?.title,
+		},
 		formatter,
 	});
 	const maxPage = calculateMaxPage(filteredResult.length);
@@ -326,7 +348,11 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 			: [];
 	return await interaction.editReply({
 		embeds: [embed],
-		components: [...buttonRow, ...selectMenuRow],
+		components: [
+			...buttonRow,
+			...selectMenuRow,
+			...((await resolveCallable(customComponentRows)) ?? []),
+		],
 		content: `Page ${page + 1}/${maxPage + 1}`.trim(),
 	});
 }
