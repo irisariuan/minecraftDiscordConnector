@@ -1,5 +1,7 @@
 import {
+	ComponentType,
 	SlashCommandSubcommandBuilder,
+	time,
 	type ChatInputCommandInteraction,
 } from "discord.js";
 import {
@@ -16,6 +18,10 @@ import type { Server } from "../../lib/server";
 import { safeJoin, safeJoinWithoutError } from "../../lib/utils";
 import { existsSync } from "fs";
 import { unlink } from "fs/promises";
+import {
+	createRequestComponent,
+	RequestComponentId,
+} from "../../lib/component/request";
 
 export function initDeleteSubcommand(
 	subcommand: SlashCommandSubcommandBuilder,
@@ -28,7 +34,7 @@ export function initDeleteSubcommand(
 				.setName("filename")
 				.setDescription("The name of the file to delete")
 				.setRequired(true),
-		)
+		);
 }
 
 export async function deleteHandler(
@@ -43,12 +49,6 @@ export async function deleteHandler(
 		userPermission,
 		PermissionFlags.approveEditFiles,
 	);
-	if (!hasApprovalPermission) {
-		const message = await interaction.followUp({
-			content: `Deleting \`${filename}\` requires approval, please ask a staff to approve the following`
-		})
-	}
-	
 
 	// Charge credit for file deletion
 	const payment = await spendCredit(interaction, {
@@ -63,6 +63,36 @@ export async function deleteHandler(
 			content:
 				"You do not have enough credit to delete files on this server.",
 		});
+	}
+
+	if (!hasApprovalPermission) {
+		const expires = 10 * 60 * 1000; // 10 minutes
+		const expireTime = Date.now() + expires;
+		const message = await interaction.followUp({
+			content: `Deleting \`${filename}\` requires approval, please ask a staff to approve the deletion before ${time(expireTime)}.`,
+			components: [createRequestComponent()],
+		});
+		const response = await message
+			.awaitMessageComponent({
+				componentType: ComponentType.Button,
+				filter: async (i) =>
+					comparePermission(
+						await readPermission(i.user, server.id),
+						PermissionFlags.approveEditFiles,
+					),
+				time: expires,
+			})
+			.catch(() => null);
+		if (!response) {
+			return await interaction.editReply({
+				content: `Deletion of \`${filename}\` not approved in time, please try again.`,
+			});
+		}
+		if (response.customId === RequestComponentId.Deny) {
+			return await interaction.editReply({
+				content: `Deletion of \`${filename}\` was denied by staff.`,
+			});
+		}
 	}
 
 	try {
