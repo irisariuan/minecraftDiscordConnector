@@ -12,7 +12,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { sendApprovalPoll } from "../lib/approval";
+import { buildInteractionFetcher, sendApprovalPoll } from "../lib/approval";
 import { sendMessagesToUsersById } from "../lib/utils";
 import { spendCredit } from "../lib/credit";
 
@@ -107,7 +107,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		sendApprovalPoll(interaction, {
+		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: displayString,
 			options: {
 				startPollFee: server.creditSettings.newStopServerPollFee,

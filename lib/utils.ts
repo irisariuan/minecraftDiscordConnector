@@ -4,6 +4,7 @@ import {
 	type Client,
 	type MessageCreateOptions,
 } from "discord.js";
+import { readdirSync, statSync } from "fs";
 import { join, relative, resolve } from "path";
 
 export type PickAndOptional<
@@ -160,6 +161,33 @@ export function safeJoin(...paths: string[]) {
 	return finalPath;
 }
 
+export function safeJoinWithoutError(...paths: string[]) {
+	const [basePath, ...remainingPaths] = paths;
+	if (!basePath) return null;
+	// Normalize and resolve the base path first
+	const normalizedBase = resolve(basePath);
+
+	// Join all paths
+	const joinedPath = join(basePath, ...remainingPaths);
+
+	// Resolve the final path
+	const finalPath = resolve(joinedPath);
+
+	// Check if the resolved path is within the base directory
+	const relativePath = relative(normalizedBase, finalPath);
+
+	// Ensure the relative path doesn't start with ".." or is absolute
+	if (
+		relativePath.startsWith("..") ||
+		relativePath.startsWith("/") ||
+		relativePath.includes(":")
+	) {
+		return null;
+	}
+
+	return finalPath;
+}
+
 /**
  * Parse time string in various formats and return total milliseconds
  * Supported formats:
@@ -279,6 +307,14 @@ export async function sendMessagesToUsersById(
 	}
 }
 
+export function formatFileSize(bytes: number): string {
+	if (bytes === 0) return "0 B";
+	const k = 1024;
+	const sizes = ["B", "KB", "MB", "GB", "TB"];
+	const i = Math.floor(Math.log(bytes) / Math.log(k));
+	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
 interface Time {
 	hour: number;
 	minute: number;
@@ -333,4 +369,26 @@ export function compareObjectDeep(obj1: Object, obj2: Object): boolean {
 		}
 	}
 	return true;
+}
+
+export interface FileInfo {
+	name: string;
+	isDirectory: boolean;
+	size: number;
+	modified: Date;
+}
+
+export function readDir(dirpath: string) {
+	const files = readdirSync(dirpath, { withFileTypes: true });
+	const fileInfos: FileInfo[] = files.map((file) => {
+		const filePath = safeJoin(dirpath, file.name);
+		const fileStat = statSync(filePath);
+		return {
+			name: file.name,
+			isDirectory: file.isDirectory(),
+			size: fileStat.size,
+			modified: fileStat.mtime,
+		};
+	});
+	return fileInfos;
 }

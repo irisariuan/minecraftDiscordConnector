@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import { sendApprovalPoll } from "../lib/approval";
+import { buildInteractionFetcher, sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	compareAnyPermissions,
@@ -79,7 +79,7 @@ export default {
 			});
 		}
 
-		sendApprovalPoll(interaction, {
+		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: `Cancel Server Shutdown at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
 				startPollFee: server.creditSettings.newCancelStopServerPollFee,

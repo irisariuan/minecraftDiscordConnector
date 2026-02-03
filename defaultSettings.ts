@@ -26,8 +26,10 @@ export const defaultCreditSettings: CreditSettings = {
 	stopServerVoteFee: 15,
 	uploadFileFee: 70,
 	deletePluginFee: 70,
-	
+
 	editFileFee: 120,
+	deleteFileFee: 200,
+	lsFilesFee: 20,
 };
 export const defaultApprovalSettings: ApprovalSettings = {
 	cancelStopServerApproval: 2,

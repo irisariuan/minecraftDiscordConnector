@@ -5,7 +5,7 @@ import {
 	time,
 	userMention,
 } from "discord.js";
-import { sendApprovalPoll } from "../lib/approval";
+import { buildInteractionFetcher, sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	compareAllPermissions,
@@ -97,7 +97,7 @@ export default {
 				flags: [MessageFlags.Ephemeral],
 			});
 		}
-		return await sendApprovalPoll(interaction, {
+		return await sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: command,
 			options: {
 				approvalCount: server.approvalSettings.runCommandApproval,

@@ -5,7 +5,6 @@ import "dotenv/config";
 import EventEmitter from "events";
 import express, { type Express } from "express";
 import { existsSync } from "fs";
-import { readFile, rename, writeFile } from "fs/promises";
 import type { Server } from "http";
 import multer from "multer";
 import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
@@ -14,12 +13,16 @@ import { safeJoin } from "../utils";
 import {
 	generateSessionId,
 	TokenType,
-	UploadRequestSchema,
 	type CreateEditTokenParams,
 	type Diff,
 	type EditFile,
 	type FileBuffer,
 } from "./uploadServer/utils";
+import { setupVerifyEndpoint } from "./uploadServer/verifyEndpoint";
+import { setupFileEndpoint } from "./uploadServer/fileEndpoint";
+import { setupUploadEndpoint } from "./uploadServer/uploadEndpoint";
+import { setupEditEndpoint } from "./uploadServer/editEndpoint";
+import { setupDeleteTokenEndpoint } from "./uploadServer/deleteTokenEndpoint";
 
 function createUploadServer(uploadServer: UploadServer) {
 	const app = express();
@@ -37,204 +40,21 @@ function createUploadServer(uploadServer: UploadServer) {
 	);
 	app.use(ssrHandler);
 
-	app.get("/api/verify/:id", (req, res) => {
-		if (!req.params.id) {
-			return res.status(403).send("Forbidden");
-		}
-		if (uploadServer.hasActiveToken(req.params.id, null)) {
-			return res.status(200).send({
-				valid: true,
-				uploaded: !uploadServer.hasActiveToken(
-					req.params.id,
-					TokenType.FileToken,
-				),
-				edited: !uploadServer.hasActiveToken(req.params.id, [
-					TokenType.EditToken,
-					TokenType.EditDiffToken,
-					TokenType.EditForceToken,
-				]),
-			});
-		}
-		return res
-			.status(200)
-			.send({ valid: false, uploaded: false, edited: false });
-	});
-	app.get("/api/file/:id", (req, res) => {
-		if (!req.params.id || !uploadServer.fileTokenMap.has(req.params.id))
-			return res.status(404).send("Not Found");
+	// Setup endpoints
+	app.get("/api/verify/:id", setupVerifyEndpoint(uploadServer));
+	app.get("/api/file/:id", setupFileEndpoint(uploadServer));
+	app.post(
+		"/api/upload/:id",
+		upload.single("upload"),
+		setupUploadEndpoint(uploadServer),
+	);
+	app.post("/api/edit/:id", jsonParser, setupEditEndpoint(uploadServer));
+	app.delete(
+		"/api/token/:id",
+		jsonParser,
+		setupDeleteTokenEndpoint(uploadServer),
+	);
 
-		const file = uploadServer.fileTokenMap.get(req.params.id);
-		if (!file) {
-			return res.status(404).send("Not Found");
-		}
-		res.setHeader(
-			"Content-Disposition",
-			`attachment; filename="${file.filename}"`,
-		);
-		res.setHeader("Content-Type", "application/octet-stream");
-		return res.status(200).send(file.buffer);
-	});
-	app.post("/api/upload/:id", upload.single("upload"), (req, res) => {
-		if (
-			!req.params.id ||
-			!uploadServer.hasActiveToken(req.params.id, TokenType.FileToken)
-		) {
-			return res.status(403).send("Forbidden");
-		}
-		// Handle file upload here
-		if (!req.file) {
-			return res.status(400).send("No file uploaded");
-		}
-		if (
-			!uploadServer.acceptedExtensions.some((v) =>
-				req.file?.originalname.endsWith(v),
-			)
-		) {
-			return res
-				.status(400)
-				.send(
-					`Invalid file type. Accepted types: ${uploadServer.acceptedExtensions.join(", ")}`,
-				);
-		}
-		console.log(`Received file: ${req.file?.originalname}`);
-		const file: FileBuffer = {
-			buffer: req.file.buffer,
-			filename: req.file.originalname,
-		};
-		if (uploadServer.useFileToken(req.params.id, file)) {
-			return res.status(200).send("File uploaded successfully");
-		} else {
-			return res.status(500).send("Unexpected token usage failed");
-		}
-	});
-	app.post("/api/edit/:id", jsonParser, async (req, res) => {
-		if (
-			!req.params.id ||
-			!uploadServer.hasActiveToken(req.params.id, [
-				TokenType.EditToken,
-				TokenType.EditForceToken,
-				TokenType.EditDiffToken,
-			])
-		) {
-			return res.status(403).send("Forbidden");
-		}
-		const parsed = UploadRequestSchema.safeParse(req.body);
-		if (!req.body || !parsed.success) {
-			return res.status(400).send("Invalid request body");
-		}
-		const file = uploadServer.editTokenMap.get(req.params.id);
-		/**
-		 * @description with dot
-		 */
-		const extension = file?.filename
-			.substring(file.filename.lastIndexOf("."))
-			.slice(1);
-		const action = parsed.data.action;
-		if (!file || !extension) {
-			return res
-				.status(500)
-				.send("Unexpected missing filename or extension");
-		}
-		switch (action) {
-			case "metadata": {
-				return res.status(200).send({
-					filename: file.filename,
-					extension,
-					isDiff:
-						uploadServer.getTokenType(req.params.id) ===
-						TokenType.EditDiffToken,
-					isForce:
-						uploadServer.getTokenType(req.params.id) ===
-						TokenType.EditForceToken,
-				});
-			}
-			case "fetch": {
-				const filepath = safeJoin(
-					file.containingFolderPath,
-					file.filename,
-				);
-				if (!existsSync(filepath)) return res.send("");
-				if (
-					uploadServer.getTokenType(req.params.id) ===
-					TokenType.EditDiffToken
-				) {
-					const rawContent = await readFile(filepath, "utf-8").catch(
-						() => "",
-					);
-					const diff = uploadServer.getDiff(file.sessionId);
-					if (diff) {
-						return res.status(200).send(
-							JSON.stringify({
-								edited: diff.content,
-								raw: rawContent,
-							}),
-						);
-					} else {
-						uploadServer.useEditToken(req.params.id);
-						return res
-							.status(404)
-							.send("No diff content available");
-					}
-				}
-				return res.sendFile(filepath);
-			}
-			case "edit": {
-				const { editedContent } = parsed.data;
-				switch (uploadServer.getTokenType(req.params.id)) {
-					case TokenType.EditToken: {
-						uploadServer.useEditToken(req.params.id);
-						uploadServer.newDiff(file.sessionId, editedContent);
-						return res
-							.status(200)
-							.send("Uploaded content received");
-					}
-					case TokenType.EditForceToken:
-					case TokenType.EditDiffToken: {
-						console.log(`Received edited file: ${file.filename}`);
-						return await writeFile(
-							safeJoin(file.containingFolderPath, file.filename),
-							editedContent,
-							"utf-8",
-						)
-							.catch((err) => {
-								console.error(
-									"Error writing edited file:",
-									err,
-								);
-								return res
-									.status(500)
-									.send("Error writing edited file");
-							})
-							.then(() => {
-								uploadServer.useEditToken(req.params.id);
-								uploadServer.disposeToken(req.params.id);
-								return res
-									.status(200)
-									.send("File edited successfully");
-							});
-					}
-					default:
-						return res.status(400).send("Invalid edit token type");
-				}
-			}
-			case "rename": {
-				const { newFilename } = parsed.data;
-				// Validate new filename
-				const finalPath = safeJoin(
-					file.containingFolderPath,
-					newFilename,
-				);
-				await rename(file.filename, finalPath);
-				return res.status(200).send("File renamed successfully");
-			}
-			case "delete": {
-				await rename(file.filename, `${file}.deleted`);
-				return res.status(200).send("File deleted successfully");
-			}
-			default:
-				return res.status(400).send("Invalid action");
-		}
-	});
 	return app;
 }
 
@@ -405,6 +225,7 @@ export class UploadServer extends EventEmitter {
 
 	/**
 	 * @param timeout The time in milliseconds to wait for the edit token to be used (default 1 hour), <= 0 for infinite
+	 * Rejects when timeout, return null if it is deleted early
 	 */
 	awaitEditToken(token: string, timeout = 1000 * 60 * 60) {
 		const file = this.editTokenMap.get(token);
@@ -417,22 +238,30 @@ export class UploadServer extends EventEmitter {
 			!file
 		)
 			return Promise.reject(new Error("Invalid token"));
-		return new Promise<EditFile>((resolve, reject) => {
+		return new Promise<EditFile | null>((resolve, reject) => {
 			let tid: NodeJS.Timeout;
-			const listener = (usedToken: string) => {
+			const tokenUsedListener = (usedToken: string) => {
 				if (usedToken === token) {
-					this.off("tokenUsed", listener);
-					this.off("tokenDeleted", listener);
+					this.off("tokenUsed", tokenUsedListener);
+					this.off("tokenDeleted", tokenDeletedListner);
 					clearTimeout(tid);
 					resolve(file);
 				}
 			};
-			this.on("tokenUsed", listener);
-			this.on("tokenDeleted", listener);
+			const tokenDeletedListner = (usedToken: string) => {
+				if (usedToken === token) {
+					this.off("tokenUsed", tokenUsedListener);
+					this.off("tokenDeleted", tokenDeletedListner);
+					clearTimeout(tid);
+					resolve(null);
+				}
+			};
+			this.on("tokenUsed", tokenUsedListener);
+			this.on("tokenDeleted", tokenDeletedListner);
 			if (timeout > 0) {
 				tid = setTimeout(() => {
-					this.off("tokenUsed", listener);
-					this.off("tokenDeleted", listener);
+					this.off("tokenUsed", tokenUsedListener);
+					this.off("tokenDeleted", tokenDeletedListner);
 					this.checkTokens();
 					reject();
 				}, timeout);
@@ -489,6 +318,7 @@ export class UploadServer extends EventEmitter {
 			this.editTokenMap.delete(token);
 			this.deleteDiff(editFile.sessionId);
 		}
+		this.emit("tokenDelete", token);
 		this.checkTokens();
 	}
 

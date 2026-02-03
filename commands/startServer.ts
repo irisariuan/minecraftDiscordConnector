@@ -5,7 +5,7 @@ import {
 	time,
 	userMention,
 } from "discord.js";
-import { sendApprovalPoll } from "../lib/approval";
+import { buildInteractionFetcher, sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import { spendCredit } from "../lib/credit";
 import {
@@ -85,7 +85,7 @@ export default {
 			});
 		}
 
-		sendApprovalPoll(interaction, {
+		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: `Start Server at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
 				startPollFee: server.creditSettings.newStartServerPollFee,

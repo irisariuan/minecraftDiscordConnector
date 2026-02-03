@@ -1,6 +1,7 @@
 import {
 	ButtonInteraction,
 	ComponentType,
+	EmbedBuilder,
 	MessageFlags,
 	userMention,
 	type CommandInteraction,
@@ -244,8 +245,17 @@ export function getApproval(
 	return null;
 }
 
+export function buildInteractionFetcher(interaction: CommandInteraction) {
+	return (embed: EmbedBuilder) =>
+		interaction.followUp({
+			embeds: [embed],
+			components: [createApprovalMessageComponent()],
+			withResponse: true,
+		});
+}
+
 export async function sendApprovalPoll(
-	interaction: CommandInteraction,
+	fetchMessage: (embed: EmbedBuilder) => Promise<Message>,
 	approvalOptions: PickAndOptional<
 		Approval,
 		"content" | "options" | "server",
@@ -272,11 +282,7 @@ export async function sendApprovalPoll(
 		0x0099ff,
 		"Pending",
 	);
-	const message = await interaction.followUp({
-		embeds: [embed],
-		components: [createApprovalMessageComponent()],
-		withResponse: true,
-	});
+	const message = await fetchMessage(embed);
 	newApproval(
 		{
 			createdAt: Date.now(),
@@ -314,15 +320,15 @@ export async function sendApprovalPoll(
 			if (approval.message.deletable) {
 				approval.message.delete().catch(console.error);
 			}
-			const newMessage = await approval.message.channel.send({
-				embeds: [createApprovalEmbed(approval)],
-				components: [createApprovalMessageComponent()],
-			});
+			const newMessage = await approval.message.channel
+				.send({
+					embeds: [createApprovalEmbed(approval)],
+					components: [createApprovalMessageComponent()],
+				})
+				.catch(() => null);
+			if (!newMessage) return;
 			transferApproval(approval, newMessage);
 		},
-	);
-	console.log(
-		`Polling for command ${interaction.commandName} with message id ${message.id}`,
 	);
 }
 
