@@ -107,7 +107,7 @@ export default {
 		if (UPLOAD_URL) {
 			token = uploadServer.token.createFileToken();
 			await thread.send(
-				`You may also upload the file to [our website](${UPLOAD_URL}/?id=${token})`,
+				`You may also upload the file to [our website](${UPLOAD_URL}/${token})`,
 			);
 			promises.push(
 				uploadServer.token.awaitFileToken(token, 1000 * 60 * 30),

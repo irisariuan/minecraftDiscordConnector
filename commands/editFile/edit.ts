@@ -115,7 +115,7 @@ export async function editHandler(
 	}
 
 	const { token, sessionId } = result;
-	const editUrl = `${UPLOAD_URL}/edit/?id=${token}`;
+	const editUrl = `${UPLOAD_URL}/edit/${token}`;
 
 	try {
 		await interaction.user.send({
@@ -189,7 +189,7 @@ export async function editHandler(
 	if (!diffTokenResult) throw new Error("Failed to create edit diff token");
 
 	const { token: diffToken } = diffTokenResult;
-	const editDiffUrl = `${UPLOAD_URL}/edit/?id=${diffToken}`;
+	const editDiffUrl = `${UPLOAD_URL}/edit/${diffToken}`;
 
 	for (const userId of await getUsersWithMatchedPermission(
 		PermissionFlags.approveEditFiles,
@@ -229,11 +229,11 @@ export async function editHandler(
 			reactionPromise,
 		]);
 		uploadServer.token.disposeToken(diffToken);
-		if (result instanceof ButtonInteraction) {
+		if (result === null || result instanceof ButtonInteraction) {
 			await message.edit({ components: [] }).catch(() => {});
 			await result
-				.reply({ content: "The edit has been rejected." })
-				.catch(() => {});
+				?.reply({ content: "The edit has been rejected." })
+				?.catch(() => {});
 			throw new Error();
 		}
 		console.log("File edit approved");

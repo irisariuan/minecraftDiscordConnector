@@ -93,7 +93,7 @@ export async function viewHandler(
 
 	await interaction.editReply({
 		content: [
-			`Read-only view link created for: \`${filename}\`\nView it (here)[${viewUrl}]\nExpires at ${time(expirationTime)}`,
+			`Read-only view link created for: \`${filename}\`\nView it [here](${viewUrl})\nExpires at ${time(expirationTime)}`,
 		].join("\n"),
 	});
 	console.log(
