@@ -44,7 +44,7 @@ export async function viewHandler(
 	// Charge credit for viewing file
 	const payment = await spendCredit(interaction, {
 		userId: interaction.user.id,
-		cost: server.creditSettings.editFileFee * 0.5, // Half the cost of editing
+		cost: server.creditSettings.viewFileFee,
 		reason: `View File ${filename}`,
 		serverId: server.id,
 	});

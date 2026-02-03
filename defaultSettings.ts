@@ -30,6 +30,7 @@ export const defaultCreditSettings: CreditSettings = {
 	editFileFee: 120,
 	deleteFileFee: 200,
 	lsFilesFee: 20,
+	viewFileFee: 30,
 };
 export const defaultApprovalSettings: ApprovalSettings = {
 	cancelStopServerApproval: 2,
