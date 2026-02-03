@@ -16,8 +16,6 @@ export default {
 	async execute({ interaction, server }) {
 		const subcommand = interaction.options.getSubcommand(true);
 
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-
 		switch (subcommand) {
 			case "edit": {
 				return await editHandler(interaction, server);

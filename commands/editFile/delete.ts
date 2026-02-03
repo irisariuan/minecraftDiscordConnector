@@ -83,6 +83,7 @@ export async function deleteHandler(
 				time: expires,
 			})
 			.catch(() => null);
+		message.edit({ components: [] });
 		if (!response) {
 			return await interaction.editReply({
 				content: `Deletion of \`${filename}\` not approved in time, please try again.`,
