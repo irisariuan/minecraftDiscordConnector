@@ -83,6 +83,13 @@ export class UploadServer {
 		this.token.on("fileExpired", () => this.checkTokens());
 		this.token.on("tokenExpired", () => this.checkTokens());
 
+		setInterval(
+			() => {
+				this.checkTokens();
+			},
+			5 * 60 * 1000,
+		); // Check every 5 minutes
+
 		this.app = createUploadServer(this);
 	}
 
@@ -112,6 +119,7 @@ export class UploadServer {
 		if (
 			this.token.getActiveTokenCount() === 0 &&
 			this.token.getFileTokenCount() === 0 &&
+			this.token.getEditTokenCount() === 0 &&
 			this.autoHost
 		) {
 			this.stopHost();

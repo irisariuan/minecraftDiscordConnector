@@ -344,6 +344,10 @@ export class TokenManager extends EventEmitter {
 		return this.fileTokenMap.size;
 	}
 
+	getEditTokenCount(): number {
+		return this.editTokenMap.size;
+	}
+
 	getAllTokenCount(): number {
 		return this.allTokens.size;
 	}
