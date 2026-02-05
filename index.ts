@@ -345,6 +345,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 				PermissionFlags.suspend,
 			)
 		) {
+			if (interaction.replied) {
+				return await interaction.editReply({
+					content:
+						"Server is suspending, you do not have permission to use this command",
+				});
+			}
 			return await interaction.reply({
 				content:
 					"Server is suspending, you do not have permission to use this command",
@@ -356,6 +362,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			command.features.supportedPlatforms.length > 0 &&
 			!command.features.supportedPlatforms.includes(server.gameType)
 		) {
+			if (interaction.replied) {
+				return await interaction.editReply({
+					content: `This command is not supported on \`${server.gameType}\` servers`,
+				});
+			}
 			return await interaction.reply({
 				content: `This command is not supported on \`${server.gameType}\` servers`,
 				flags: [MessageFlags.Ephemeral],
@@ -365,6 +376,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			command.features?.requireStartedServer &&
 			!(await server.isOnline.getData(true))
 		) {
+			if (interaction.replied) {
+				return await interaction.editReply({
+					content: "Server is not online",
+				});
+			}
 			return await interaction.reply({
 				content: "Server is not online",
 				flags: [MessageFlags.Ephemeral],
@@ -373,6 +389,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			command.features?.requireStoppedServer &&
 			(await server.isOnline.getData(true))
 		) {
+			if (interaction.replied) {
+				return await interaction.editReply({
+					content: "Server is not stopped",
+				});
+			}
 			return await interaction.reply({
 				content: "Server is not stopped",
 				flags: [MessageFlags.Ephemeral],
