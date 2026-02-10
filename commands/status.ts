@@ -8,7 +8,7 @@ export default {
 	requireServer: true,
 	async execute({ interaction, client, server }) {
 		return await interaction.editReply({
-			content: `The server ${server.config.tag ?? `*Server #${server.id}*`} is now ${(await server.isOnline.getData()) ? "online" : "offline"}`,
+			content: `The server ${server.config.tag ?? `*Server #${server.id}*`} is now ${(await server.isOnline.getData()) ? "online" : "offline"}${server.suspendingEvent.isSuspending() ? "(Suspending)" : ""}`,
 		});
 	},
 } satisfies CommandFile<true>;

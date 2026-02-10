@@ -1,34 +1,32 @@
 import {
-	ComponentType,
-	GuildMember,
-	MessageFlags,
-	Role,
-	roleMention,
-	SlashCommandBuilder,
-	StringSelectMenuInteraction,
-	User,
-	userMention,
+    ComponentType,
+    GuildMember,
+    MessageFlags,
+    Role,
+    roleMention,
+    SlashCommandBuilder,
+    StringSelectMenuInteraction,
+    User,
+    userMention,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
-	allPermission,
-	appendPermission,
-	parsePermission,
-	PermissionFlags,
-	removePermission,
-} from "../lib/permission";
+    createPermissionResetButton,
+    createPermissionSelectionMenu,
+    PermissionSelectionMenu,
+} from "../lib/component/permission";
+import {
+    getUserSelectedServer
+} from "../lib/component/server";
 import { updateUserPermission } from "../lib/db";
 import {
-	createServerSelectionMenu,
-	getUserSelectedServer,
-} from "../lib/component/server";
-import {
-	createPermissionResetButton,
-	createPermissionSelectionMenu,
-	PermissionSelectionMenu,
-} from "../lib/component/permission";
+    allPermission,
+    appendPermission,
+    parsePermission,
+    PermissionFlags,
+    removePermission,
+} from "../lib/permission";
 import { clamp } from "../lib/utils";
-import type { Server } from "../lib/server";
 
 export default {
 	command: new SlashCommandBuilder()

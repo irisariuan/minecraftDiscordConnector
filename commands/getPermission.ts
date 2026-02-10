@@ -1,22 +1,19 @@
 import {
-	ComponentType,
-	MessageFlags,
-	SlashCommandBuilder,
-	userMention,
+    SlashCommandBuilder,
+    userMention
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
-	allPermission,
-	parsePermission,
-	readPermission,
+    getUserSelectedServer
+} from "../lib/component/server";
+import { spendCredit } from "../lib/credit";
+import { getUserLocalPermission } from "../lib/db";
+import {
+    allPermission,
+    parsePermission,
+    readPermission,
 } from "../lib/permission";
 import { settings } from "../lib/settings";
-import {
-	createServerSelectionMenu,
-	getUserSelectedServer,
-} from "../lib/component/server";
-import { getUserLocalPermission } from "../lib/db";
-import { spendCredit } from "../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()

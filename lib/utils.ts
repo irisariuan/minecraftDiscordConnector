@@ -5,7 +5,7 @@ import {
 	type MessageCreateOptions,
 } from "discord.js";
 import { readdirSync, statSync } from "fs";
-import { join, relative, resolve } from "path";
+import { join, relative, resolve as resolvePath } from "path";
 
 export type PickAndOptional<
 	T,
@@ -146,13 +146,13 @@ export function safeJoin(...paths: string[]) {
 	const [basePath, ...remainingPaths] = paths;
 	if (!basePath) throw new Error("Base path is required");
 	// Normalize and resolve the base path first
-	const normalizedBase = resolve(basePath);
+	const normalizedBase = resolvePath(basePath);
 
 	// Join all paths
 	const joinedPath = join(basePath, ...remainingPaths);
 
 	// Resolve the final path
-	const finalPath = resolve(joinedPath);
+	const finalPath = resolvePath(joinedPath);
 
 	// Check if the resolved path is within the base directory
 	const relativePath = relative(normalizedBase, finalPath);
@@ -173,13 +173,13 @@ export function safeJoinWithoutError(...paths: string[]) {
 	const [basePath, ...remainingPaths] = paths;
 	if (!basePath) return null;
 	// Normalize and resolve the base path first
-	const normalizedBase = resolve(basePath);
+	const normalizedBase = resolvePath(basePath);
 
 	// Join all paths
 	const joinedPath = join(basePath, ...remainingPaths);
 
 	// Resolve the final path
-	const finalPath = resolve(joinedPath);
+	const finalPath = resolvePath(joinedPath);
 
 	// Check if the resolved path is within the base directory
 	const relativePath = relative(normalizedBase, finalPath);
@@ -461,17 +461,36 @@ export function validateAndReadDir(
 	}
 }
 
-export type ResolvableSync<T> = T | (() => T);
-export type Resolvable<T> = Promise<T> | T | (() => T | Promise<T>);
-export function resolveCallableSync<T>(value: ResolvableSync<T>): T {
+export type ResolvableSync<T, P = void> = T | ((param: P) => T);
+export type Resolvable<T, P = void> =
+	| PromiseLike<T>
+	| T
+	| ((param: P) => T | PromiseLike<T>);
+
+export function resolveSync<T, P extends void>(value: ResolvableSync<T, P>): T;
+export function resolveSync<T, P>(value: ResolvableSync<T, P>, param: P): T;
+export function resolveSync<T, P>(value: ResolvableSync<T, P>, param?: P): T {
 	if (typeof value === "function") {
-		return (value as () => T)();
+		if (!param) throw new Error("Cannot resolve value");
+		return (value as (param: P) => T)(param);
 	}
 	return value;
 }
-export async function resolveCallable<T>(value: Resolvable<T>): Promise<T> {
+
+export async function resolve<T, P extends void>(
+	value: Resolvable<T, P>,
+): Promise<T>;
+export async function resolve<T, P>(
+	value: Resolvable<T, P>,
+	param: P,
+): Promise<T>;
+export async function resolve<T, P>(
+	value: Resolvable<T, P>,
+	param?: P,
+): Promise<T> {
 	if (typeof value === "function") {
-		return await (value as () => T)();
+		if (!param) throw new Error("Cannot resolve async value");
+		return await (value as (param: P) => T | PromiseLike<T>)(param);
 	}
 	return await value;
 }

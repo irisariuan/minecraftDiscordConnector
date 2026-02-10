@@ -18,12 +18,7 @@ import {
 	PageAction,
 	type SelectMenuOption,
 } from "./component/pagination";
-import {
-	clamp,
-	resolveCallable,
-	type Resolvable,
-	type ResolvableSync,
-} from "./utils";
+import { clamp, resolve, type Resolvable, type ResolvableSync } from "./utils";
 
 interface GetPageProps {
 	page: number;
@@ -317,7 +312,7 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 					unfixablePageNumber: options?.unfixablePageNumber,
 					haveFilter: !!filterFunc,
 				}),
-				...((await resolveCallable(customComponentRows)) ?? []),
+				...((await resolve(customComponentRows)) ?? []),
 			],
 		});
 	}
@@ -329,10 +324,7 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 		page,
 		options: {
 			...options,
-			title:
-				typeof options?.title === "function"
-					? options.title()
-					: options?.title,
+			title: await resolve(options?.title),
 		},
 		formatter,
 	});
@@ -358,7 +350,7 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 		components: [
 			...buttonRow,
 			...selectMenuRow,
-			...((await resolveCallable(customComponentRows)) ?? []),
+			...((await resolve(customComponentRows)) ?? []),
 		],
 		content: `Page ${page + 1}/${maxPage + 1}`.trim(),
 	});

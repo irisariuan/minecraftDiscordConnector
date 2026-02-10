@@ -4,6 +4,7 @@ import {
 	type ApprovalOptions,
 	type Approval,
 	checkApprovalStatus,
+	ApprovalStatus,
 } from "../approval";
 import { createUserMentions } from "../approval/utils";
 
@@ -40,28 +41,28 @@ export function createInternalApprovalEmbed(
 
 export function createApprovalEmbed(approval: Approval) {
 	switch (checkApprovalStatus(approval)) {
-		case "pending": {
+		case ApprovalStatus.Pending: {
 			return createInternalApprovalEmbed(approval, 0x0099ff, "Pending");
 		}
-		case "approved": {
+		case ApprovalStatus.Approved: {
 			return createInternalApprovalEmbed(
 				approval,
 				0x00ff00,
-				approval.superStatus === "approved"
+				approval.superStatus === ApprovalStatus.Approved
 					? "Approved (Force)"
 					: "Approved",
 			);
 		}
-		case "disapproved": {
+		case ApprovalStatus.Disapproved: {
 			return createInternalApprovalEmbed(
 				approval,
 				0xff0000,
-				approval.superStatus === "disapproved"
+				approval.superStatus === ApprovalStatus.Disapproved
 					? "Disapproved (Force)"
 					: "Disapproved",
 			);
 		}
-		case "timeout": {
+		case ApprovalStatus.Timeout: {
 			return createInternalApprovalEmbed(approval, 0xff0000, "Timeout");
 		}
 	}

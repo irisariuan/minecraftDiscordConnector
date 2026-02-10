@@ -3,6 +3,7 @@ import {
 	ComponentType,
 	EmbedBuilder,
 	MessageFlags,
+	User,
 	userMention,
 	type CommandInteraction,
 	type Message,
@@ -27,7 +28,7 @@ import {
 	readPermission,
 } from "./permission";
 import type { Server, ServerManager } from "./server";
-import type { PickAndOptional } from "./utils";
+import { resolve, type PickAndOptional, type Resolvable } from "./utils";
 import {
 	createInternalApprovalEmbed,
 	createApprovalEmbed,
@@ -48,7 +49,7 @@ export interface CoreApproval {
 }
 
 export interface Approval extends CoreApproval {
-	superStatus: "approved" | "disapproved" | null;
+	superStatus: ApprovalStatus.Approved | ApprovalStatus.Disapproved | null;
 	createdAt: number;
 	options: ApprovalOptions;
 	message: Message | PartialMessage;
@@ -81,6 +82,7 @@ export interface ApprovalOptions {
 		approval: Approval,
 		message: Message | PartialMessage,
 	) => Promise<unknown>;
+	canRepeatApprove?: Resolvable<boolean, [User, Approval, Server]>;
 }
 
 export const MESSAGE_VALID_TIME = 14 * 60 * 1000; // 14 minutes, since discord message valid time is 15 minutes
@@ -161,7 +163,7 @@ export function approve(
 	if (!approval) return;
 	approval.approvalIds.push(userId);
 	if (force) {
-		approval.superStatus = "approved";
+		approval.superStatus = ApprovalStatus.Approved;
 	}
 	return checkApprovalStatus(approval);
 }
@@ -175,7 +177,7 @@ export function disapprove(
 	if (!approval) return;
 	approval.disapprovalIds.push(userId);
 	if (force) {
-		approval.superStatus = "disapproved";
+		approval.superStatus = ApprovalStatus.Disapproved;
 	}
 	return checkApprovalStatus(approval);
 }
@@ -199,7 +201,12 @@ export async function removeApproval(approval: Approval) {
 	}
 }
 
-type ApprovalStatus = "approved" | "disapproved" | "pending" | "timeout";
+export enum ApprovalStatus {
+	Approved = "approvalApproved",
+	Disapproved = "approvalDisapproved",
+	Pending = "approvalPending",
+	Timeout = "approvalTimeout",
+}
 
 export function checkApprovalStatus(approval: Approval): ApprovalStatus {
 	const approvalCount = approval.options.approvalCount;
@@ -211,13 +218,13 @@ export function checkApprovalStatus(approval: Approval): ApprovalStatus {
 			approval.approvalIds.length >= approvalCount &&
 			!requireSuperApproval
 		)
-			return "approved";
+			return ApprovalStatus.Approved;
 		if (approval.disapprovalIds.length >= disapprovalCount)
-			return "disapproved";
+			return ApprovalStatus.Disapproved;
 
-		return "pending";
+		return ApprovalStatus.Pending;
 	}
-	return "timeout";
+	return ApprovalStatus.Timeout;
 }
 
 export function getApproval(
@@ -227,7 +234,10 @@ export function getApproval(
 ): Approval | null {
 	const approval = server.approvalList.get(messageId);
 	if (approval) {
-		if (checkApprovalStatus(approval) !== "pending" && !forceReturn)
+		if (
+			checkApprovalStatus(approval) !== ApprovalStatus.Pending &&
+			!forceReturn
+		)
 			return null;
 		return approval;
 	}
@@ -237,7 +247,10 @@ export function getApproval(
 			approval.message.id === messageId ||
 			approval.originalMessageId === messageId
 		) {
-			if (checkApprovalStatus(approval) !== "pending" && !forceReturn)
+			if (
+				checkApprovalStatus(approval) !== ApprovalStatus.Pending &&
+				!forceReturn
+			)
 				return null;
 			return approval;
 		}
@@ -361,10 +374,13 @@ export async function updateApprovalMessage(
 		userPerm,
 		PermissionFlags.superApprove,
 	);
-	const canRepeatApprove = comparePermission(
-		userPerm,
-		PermissionFlags.repeatApproval,
-	);
+	const canRepeatApprove = approval.options.canRepeatApprove
+		? await resolve(approval.options.canRepeatApprove, [
+				reaction.user,
+				approval,
+				server,
+			])
+		: comparePermission(userPerm, PermissionFlags.repeatApproval);
 	if (
 		!compareAnyPermissions(userPerm, [
 			PermissionFlags.approve,
@@ -599,34 +615,35 @@ export async function updateApprovalMessage(
 	});
 	setTimeout(() => followUp.delete().catch(() => {}), DELETE_AFTER_MS);
 
-	if (status === "pending") return;
+	if (status === ApprovalStatus.Pending) return;
 
 	// Finalization
 	await reaction.message.edit({ components: [] });
 	await removeApproval(approval);
 
-	if (status === "approved") {
-		return await approval.options.onSuccess(approval, reaction.message);
-	}
-	if (status === "disapproved") {
-		await approval.options.onFailure?.(approval, reaction.message);
-		return await reaction
-			.followUp({
-				content: `The poll \`${approval.content}\` has been disapproved.`,
-			})
-			.catch(() => {});
-	}
-	if (status === "timeout") {
-		await approval.options.onTimeout?.(approval, reaction.message);
-		return await reaction.message
-			.edit({
-				content: `The poll \`${approval.content}\` has timed out.`,
-				components: [],
-			})
-			.catch(() => {});
+	switch (status) {
+		case ApprovalStatus.Approved:
+			return await approval.options.onSuccess(approval, reaction.message);
+		case ApprovalStatus.Disapproved: {
+			await approval.options.onFailure?.(approval, reaction.message);
+			return await reaction
+				.followUp({
+					content: `The poll \`${approval.content}\` has been disapproved.`,
+				})
+				.catch(() => {});
+		}
+		case ApprovalStatus.Timeout: {
+			await approval.options.onTimeout?.(approval, reaction.message);
+			return await reaction.message
+				.edit({
+					content: `The poll \`${approval.content}\` has timed out.`,
+					components: [],
+				})
+				.catch(() => {});
+		}
 	}
 	await reaction.message.edit({
-		content: "Unknown error occurred",
+		content: "Unknown error occurred while editing approval message",
 		embeds: [],
 		components: [],
 	});

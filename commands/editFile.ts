@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from "discord.js";
+import { SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import { PermissionFlags } from "../lib/permission";
 import { initEditSubcommand, editHandler } from "./editFile/edit";
