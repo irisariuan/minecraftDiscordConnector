@@ -36,63 +36,88 @@ export default {
 			content: "Enter the OTP (valid in 5 minutes)",
 			components: [createOtpButtonRow()],
 		});
-		const res = await reply
-			.awaitMessageComponent({
-				componentType: ComponentType.Button,
-				filter: (i) =>
-					i.user.id === interaction.user.id &&
-					i.customId === OTPAction.OTP_SHOW_MODAL_BUTTON,
-				time: 1000 * 60 * 5,
-			})
-			.catch(() => null);
-		if (!res)
-			return await interaction.editReply({
-				content: "OTP expired!",
-				components: [],
-			});
-		await res.showModal(createOtpInputModal(), {
-			withResponse: true,
+		const collector = reply.createMessageComponentCollector({
+			componentType: ComponentType.Button,
+			filter: (i) =>
+				i.user.id === interaction.user.id &&
+				i.customId === OTPAction.OTP_SHOW_MODAL_BUTTON,
+			time: 1000 * 60 * 5,
 		});
-		const submission = await res
-			.awaitModalSubmit({
-				time: 1000 * 60 * 5,
-				filter: (i) =>
-					i.user.id === interaction.user.id &&
-					i.customId === OTPAction.OTP_MODAL,
-			})
-			.catch(() => null);
-		if (!submission)
-			return await interaction.editReply({
-				content: "OTP expired!",
-				components: [],
-			});
-		const inputOtp = submission.fields.getTextInputValue(
-			OTPAction.OTP_TEXT_INPUT,
-		);
-		if (inputOtp !== otp) {
-			return await submission.reply({
-				content: "Invalid OTP!",
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-		await createPlayer({
-			data: {
-				playername: playerName,
-				uuid,
-				discordId: interaction.user.id,
-			},
+
+		collector.on("collect", async (buttonInteraction) => {
+			await buttonInteraction.showModal(createOtpInputModal());
+
+			const submission = await buttonInteraction
+				.awaitModalSubmit({
+					time: 1000 * 60 * 5,
+					filter: (i) =>
+						i.user.id === interaction.user.id &&
+						i.customId === OTPAction.OTP_MODAL,
+				})
+				.catch(() => null);
+
+			if (!submission) {
+				return;
+			}
+
+			const inputOtp = submission.fields.getTextInputValue(
+				OTPAction.OTP_TEXT_INPUT,
+			);
+
+			if (inputOtp !== otp) {
+				return await submission.reply({
+					content: "Invalid OTP! Please try again!",
+					flags: MessageFlags.Ephemeral,
+				});
+			}
+
+			collector.stop("success");
+
+			const result = await createPlayer({
+				data: {
+					playername: playerName,
+					uuid,
+					discordId: interaction.user.id,
+				},
+			}).catch(() => null);
+			if (!result) {
+				return await submission.reply({
+					content:
+						"Failed to link your account! Please try again later!",
+					flags: MessageFlags.Ephemeral,
+				});
+			}
+
+			if (await server.registered(uuid)) {
+				await submission.reply({
+					content: "Successfully linked your account!",
+					flags: MessageFlags.Ephemeral,
+				});
+				await interaction.editReply({
+					content: "Account successfully linked!",
+					components: [],
+				});
+			} else {
+				await submission.reply({
+					content:
+						"Failed to link your account! Please try again later!",
+					flags: MessageFlags.Ephemeral,
+				});
+				await interaction.editReply({
+					content: "Failed to link your account!",
+					components: [],
+				});
+			}
 		});
-		if (await server.registered(uuid)) {
-			await submission.reply({
-				content: "Successfully linked your account!",
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await submission.reply({
-				content: "Failed to link your account! Please try again later!",
-				flags: MessageFlags.Ephemeral,
-			});
-		}
+
+		collector.on("end", async (collected, reason) => {
+			if (reason === "time") {
+				await interaction.editReply({
+					content: "OTP expired!",
+					components: [],
+				});
+			}
+		});
 	},
 	ephemeral: true,
 	features: {

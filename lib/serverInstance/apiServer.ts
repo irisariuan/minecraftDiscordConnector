@@ -61,7 +61,7 @@ export function initApiServer(
 			// online time is accumulative
 			Math.floor(Number(parsed.data.onlineTime) / 1000 / 60) % 20 !== 0
 		) {
-			return;
+			return res.send(JSON.stringify({ kick: false }));
 		}
 		await changeCredit({
 			change: -server.creditSettings.playFee,

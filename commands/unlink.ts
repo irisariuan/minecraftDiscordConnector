@@ -18,7 +18,7 @@ export default {
 		const player = players[0];
 		if (!player) {
 			return await interaction.editReply(
-				"Player not found! Please check if your player name is correct!\nIf you have changed your player name recently, please relogin to the server to update your player name in the database!",
+				"Player not found! Please check if your player name is correct!\n\nIf you have changed your player name recently, please relogin to the server to update your player name in the database!",
 			);
 		}
 		if (players.length > 1) {
