@@ -3,6 +3,8 @@ import { readFile } from "fs/promises";
 import type { UploadServer } from "../../uploadServer";
 import { safeJoin } from "../../../utils";
 import { TokenType } from "../utils";
+import { parseNBT } from "../../../sharedLibrary";
+import { stringify } from "json-bigint";
 
 export function setupViewEndpoint(uploadServer: UploadServer) {
 	return async (req: Request, res: Response) => {
@@ -14,17 +16,28 @@ export function setupViewEndpoint(uploadServer: UploadServer) {
 		) {
 			return res.status(401).send("Invalid or expired token");
 		}
-
+		const url = new URL(req.url);
+		const parseNbt = url.searchParams.get("parseNbt") === "true";
+		const isBedrock = url.searchParams.get("isBedrock") === "true";
 		const file = uploadServer.token.getEditToken(req.params.id);
 		if (!file) {
 			return res.status(404).send("File not found");
 		}
 
 		try {
-			const filePath = safeJoin(
-				file.containingFolderPath,
-				file.filename,
-			);
+			const filePath = safeJoin(file.containingFolderPath, file.filename);
+			if (parseNbt) {
+				const rawContent = await readFile(filePath);
+				const parsedNbtData = parseNBT(rawContent, isBedrock);
+				return res.status(200).send(
+					stringify({
+						content: parsedNbtData,
+						raw: rawContent.toString("hex"),
+						readonly: true,
+						filename: file.filename,
+					}),
+				);
+			}
 			const content = await readFile(filePath, "utf-8");
 
 			// Return file content as JSON with metadata

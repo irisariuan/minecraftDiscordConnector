@@ -22,7 +22,7 @@ import {
 } from "./lib/permission";
 import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
 import { createServerManager } from "./lib/server";
-import { serverConfig } from "./lib/server/plugin/types";
+import { serverConfig } from "./lib/serverInstance/plugin/types";
 import {
 	changeCreditSettings,
 	loadCreditSettings,
@@ -48,7 +48,6 @@ if (!(await hasAnyServer())) {
 	console.log("Default server created.");
 }
 
-const serverManager = await createServerManager();
 const client = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
@@ -63,6 +62,7 @@ const client = new Client({
 		GatewayIntentBits.DirectMessageReactions,
 	],
 });
+const serverManager = await createServerManager(client);
 
 if (!enablePlugins) {
 	console.log("Running plugin scripts...");

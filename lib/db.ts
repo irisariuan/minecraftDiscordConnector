@@ -258,3 +258,26 @@ export async function deleteRawTicketTypeById(id: string) {
 export async function deleteRawUserTicket(data: Prisma.UserTicketDeleteArgs) {
 	return await prisma.userTicket.delete(data);
 }
+
+export async function createPlayer(data: Prisma.PlayerCreateArgs) {
+	return await prisma.player.create(data);
+}
+export async function hasPlayer(uuid: string) {
+	const count = await prisma.player.count({ where: { uuid } });
+	return count > 0;
+}
+export async function getPlayerByUuid(uuid: string) {
+	return await prisma.player.findUnique({ where: { uuid } });
+}
+export async function updatePlayerName(uuid: string, name: string) {
+	return await prisma.player.update({
+		where: { uuid },
+		data: { playername: name },
+	});
+}
+export async function getPlayerByName(name: string) {
+	return await prisma.player.findMany({ where: { playername: name } });
+}
+export async function deletePlayerByUuid(uuid: string) {
+	return await prisma.player.delete({ where: { uuid } });
+}

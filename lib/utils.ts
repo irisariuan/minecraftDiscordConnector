@@ -44,13 +44,19 @@ export function createDecodeWritableStream(
 	});
 }
 
+export function getRandomOtp(): string {
+	return Math.floor(Math.random() * 999999)
+		.toString()
+		.padStart(6, "0");
+}
+
 export async function safeFetch(
 	url: string | URL,
 	options?: RequestInit,
 	logError = true,
 	timeout: null | number = null,
 	cache = false,
-) {
+): Promise<Response | null> {
 	if (timeout) {
 		const { signal, cancel } = newTimeoutSignal(timeout);
 		const opts: RequestInit = {
@@ -62,7 +68,8 @@ export async function safeFetch(
 			try {
 				return await fetch(url, opts);
 			} finally {
-				return cancel();
+				cancel();
+				return null;
 			}
 		} catch (err) {
 			if (logError) console.error(`Fetch error (${url}): ${err}`);

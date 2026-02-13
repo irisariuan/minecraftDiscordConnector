@@ -31,6 +31,7 @@ export interface ServerCreditSettings {
 	lsFilesFee: number;
 	deleteFileFee: number;
 	viewFileFee: number;
+	playFee: number;
 }
 
 export interface CreditSettings extends ServerCreditSettings {

@@ -16,8 +16,8 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { downloadPluginFile, listPluginVersions } from "../lib/server/plugin";
-import type { PluginListVersionItem } from "../lib/server/plugin/types";
+import { downloadPluginFile, listPluginVersions } from "../lib/serverInstance/plugin";
+import type { PluginListVersionItem } from "../lib/serverInstance/plugin/types";
 
 export default {
 	command: new SlashCommandBuilder()

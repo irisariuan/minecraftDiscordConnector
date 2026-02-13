@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import { fetchOnlinePlayers, type Player } from "../lib/server/request";
+import { fetchOnlinePlayers, type Player } from "../lib/serverInstance/request";
 import { sendPaginationMessage } from "../lib/pagination";
 import { CacheItem } from "../lib/cache";
 

@@ -7,8 +7,10 @@ import type { Approval } from "./approval";
 import { CacheItem } from "./cache";
 import { changeCredit, sendCreditNotification } from "./credit";
 import { getAllServers } from "./db";
-import { type ServerConfig } from "./server/plugin/types";
-import { type LogLine } from "./server/request";
+import { type ServerConfig } from "./serverInstance/plugin/types";
+import { type LogLine } from "./serverInstance/request";
+import express, { type Express } from "express";
+import { Server as HTTPServer } from "http";
 import {
 	loadServerApprovalSetting,
 	loadServerCreditSetting,
@@ -17,6 +19,7 @@ import {
 } from "./settings";
 import { SuspendingEventEmitter } from "./suspend";
 import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
+import { initApiServer } from "./serverInstance/apiServer";
 
 if (
 	!process.env.SERVER_DIR ||
@@ -141,7 +144,7 @@ export class Server {
 		});
 	}
 
-	async start() {
+	async start(serverManager: ServerManager) {
 		if (this.instance || (await this.isOnline.getData(true))) return null;
 		this.instance = spawn(["sh", this.startupScript ?? "./start.sh"], {
 			cwd: this.config.serverDir,
@@ -158,6 +161,7 @@ export class Server {
 			},
 		});
 		this.isOnline.setData(true);
+		serverManager.checkServerStatus();
 
 		this.instance.stdout.pipeTo(
 			createDecodeWritableStream((chunk) => {
@@ -180,6 +184,9 @@ export class Server {
 				});
 			}),
 		);
+		this.instance.exited.then(() => {
+			serverManager.checkServerStatus();
+		});
 		return this.instance.pid;
 	}
 
@@ -309,6 +316,41 @@ export class Server {
 		return success;
 	}
 
+	async register(playerName: string, otp: string) {
+		if (
+			this.config.apiPort === null ||
+			!(await this.isOnline.getData(true))
+		)
+			return null;
+		const response = await safeFetch(
+			`http://localhost:${this.config.apiPort}/register`,
+			{
+				method: "POST",
+				body: JSON.stringify({ playerName, otp }),
+			},
+		);
+		if (!response?.ok) return null;
+		const jsonObject = await response.json().catch(() => null);
+		if (!jsonObject) return null;
+		const { uuid }: { uuid: string } = jsonObject;
+		return uuid;
+	}
+	async registered(uuid: string) {
+		if (
+			this.config.apiPort === null ||
+			!(await this.isOnline.getData(true))
+		)
+			return false;
+		const response = await safeFetch(
+			`http://localhost:${this.config.apiPort}/registered`,
+			{
+				method: "POST",
+				body: JSON.stringify({ uuid }),
+			},
+		);
+		return response?.ok ?? false;
+	}
+
 	cleanup() {
 		console.log("Cleaning up server process");
 		this.instance = null;
@@ -318,8 +360,8 @@ export class Server {
 	}
 }
 
-export async function createServerManager() {
-	const manager = new ServerManager();
+export async function createServerManager(client: Client) {
+	const manager = new ServerManager(client);
 	await manager.loadServers();
 	return manager;
 }
@@ -329,9 +371,13 @@ export async function createServerManager() {
  */
 export class ServerManager {
 	private servers: Map<number, Server>;
+	private apiServerConnection: HTTPServer | null = null;
+	private apiServer: Express;
 
-	constructor() {
+	constructor(client: Client) {
 		this.servers = new Map();
+		this.apiServer = express();
+		initApiServer(this.apiServer, this, client);
 	}
 	async loadServers() {
 		this.servers.clear();
@@ -395,6 +441,35 @@ export class ServerManager {
 	async exitAllServers(client: Client) {
 		for (const server of this.servers.values()) {
 			await exitServer(client, server);
+		}
+	}
+
+	async getActiveServerFromPort(port: number) {
+		for (const server of this.servers.values()) {
+			if (
+				server.config.port.includes(port) &&
+				(await server.isOnline.getData())
+			) {
+				return server;
+			}
+		}
+		return null;
+	}
+
+	async checkServerStatus() {
+		let anyOnline = false;
+		for (const server of this.servers.values()) {
+			if (
+				(await server.isOnline.getData(true)) &&
+				!this.apiServerConnection
+			) {
+				anyOnline = true;
+				this.apiServerConnection = this.apiServer.listen(4002);
+			}
+		}
+		if (!anyOnline && this.apiServerConnection) {
+			this.apiServerConnection.close();
+			this.apiServerConnection = null;
 		}
 	}
 }

@@ -131,3 +131,10 @@ model TicketHistory {
 
     @@index([ticketId])
 }
+
+model Player {
+    // playername may change
+    playername String
+    uuid       String @id
+    discordId  String
+}

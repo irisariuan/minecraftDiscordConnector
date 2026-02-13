@@ -15,7 +15,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { removePluginByFileName } from "../lib/server/plugin";
+import { removePluginByFileName } from "../lib/serverInstance/plugin";
 
 export default {
 	command: new SlashCommandBuilder()

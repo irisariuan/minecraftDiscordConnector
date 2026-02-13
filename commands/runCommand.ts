@@ -13,7 +13,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { parseCommandOutput, runCommandOnServer } from "../lib/server/request";
+import { parseCommandOutput, runCommandOnServer } from "../lib/serverInstance/request";
 import { sendMessagesToUsersById } from "../lib/utils";
 import { spendCredit } from "../lib/credit";
 

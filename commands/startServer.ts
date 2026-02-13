@@ -58,7 +58,7 @@ export default {
 				PermissionFlags.startServer,
 			)
 		) {
-			const pid = await server.start();
+			const pid = await server.start(serverManager);
 			if (!pid) {
 				return await interaction.editReply({
 					content: "Server is already online",
@@ -92,7 +92,7 @@ export default {
 				callerId: interaction.user.id,
 				description: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
-					const pid = await server.start();
+					const pid = await server.start(serverManager);
 					if (!pid) {
 						await message.reply({
 							content: "Server is already online",

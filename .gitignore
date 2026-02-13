@@ -39,7 +39,7 @@ data/permissions.json
 data/credit.json
 data/settings.json
 data/plugins.json
-
+lib/compiled
 test/**/*
 !test/**/*.test.*
 /generated/prisma
