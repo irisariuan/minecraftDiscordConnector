@@ -55,6 +55,14 @@ export function initApiServer(
 		) {
 			return res.send(JSON.stringify({ kick: true }));
 		}
+		if (
+			!parsed.data.disconnect &&
+			// Only charge every 20 minutes to prevent too frequent charging and reduce the number of transactions
+			// online time is accumulative
+			Math.floor(Number(parsed.data.onlineTime) / 1000 / 60) % 20 !== 0
+		) {
+			return;
+		}
 		await changeCredit({
 			change: -server.creditSettings.playFee,
 			reason: `Play on server ${server.config.tag ?? `Server #${server.id}`}`,
