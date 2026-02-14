@@ -57,9 +57,7 @@ export function initApiServer(
 		}
 		if (
 			!parsed.data.disconnect &&
-			// Only charge every 20 minutes to prevent too frequent charging and reduce the number of transactions
-			// online time is accumulative
-			Math.floor(Number(parsed.data.onlineTime) / 1000 / 60) % 20 !== 0
+			server.paymentManager.hasPaid(player.uuid)
 		) {
 			return res.send(JSON.stringify({ kick: false }));
 		}
@@ -69,6 +67,7 @@ export function initApiServer(
 			userId: player.discordId,
 			serverId: server.id,
 		});
+		server.paymentManager.markPaid(player.uuid);
 		const user = await client.users
 			.fetch(player.discordId)
 			.catch(() => null);

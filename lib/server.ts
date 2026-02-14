@@ -75,6 +75,7 @@ export class Server {
 	approvalSettings: ApprovalSettings;
 	gameType: ServerGameType;
 	startupScript?: string;
+	paymentManager: PaymentManager;
 	readonly config: ServerConfig;
 	readonly id: number;
 
@@ -101,6 +102,7 @@ export class Server {
 		this.approvalSettings = approvalSettings;
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
+		this.paymentManager = new PaymentManager(1000 * 60 * 20);
 		this.isOnline = new CacheItem<boolean>(false, {
 			interval: 1000 * 5,
 			ttl: 1000 * 5,
@@ -162,6 +164,7 @@ export class Server {
 		});
 		this.isOnline.setData(true);
 		serverManager.checkServerStatus();
+		this.paymentManager.setActive(true);
 
 		this.instance.stdout.pipeTo(
 			createDecodeWritableStream((chunk) => {
@@ -186,6 +189,7 @@ export class Server {
 		);
 		this.instance.exited.then(() => {
 			serverManager.checkServerStatus();
+			this.paymentManager.setActive(false);
 		});
 		return this.instance.pid;
 	}
@@ -471,6 +475,47 @@ export class ServerManager {
 			this.apiServerConnection.close();
 			this.apiServerConnection = null;
 		}
+	}
+}
+
+class PaymentManager {
+	payment: Set<string>;
+	isActive: boolean;
+	timeouts: Set<NodeJS.Timeout>;
+	paymentInterval: number;
+	constructor(paymentInterval: number) {
+		this.payment = new Set();
+		this.isActive = false;
+		this.timeouts = new Set();
+		this.paymentInterval = paymentInterval;
+	}
+	setActive(active: boolean) {
+		if ((active && !this.isActive) || (!active && this.isActive)) {
+			this.reset();
+		}
+		this.isActive = active;
+	}
+
+	reset() {
+		if (this.timeouts.size > 0) {
+			for (const interval of this.timeouts) {
+				clearInterval(interval);
+			}
+			this.timeouts.clear();
+		}
+		this.payment.clear();
+	}
+	markPaid(uuid: string) {
+		this.setActive(true)
+		this.payment.add(uuid);
+		const timeout = setTimeout(() => {
+			this.payment.delete(uuid);
+			this.timeouts.delete(timeout);
+		}, this.paymentInterval);
+		this.timeouts.add(timeout);
+	}
+	hasPaid(uuid: string) {
+		return this.payment.has(uuid);
 	}
 }
 
