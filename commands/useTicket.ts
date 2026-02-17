@@ -158,7 +158,11 @@ async function handleReply(
 		return false;
 	}
 	await useUserTicket(ticket.ticketId, "Used via /useticket command");
-	const usage = ticketEffectManager.use(ticket.ticketId, ticket.effect);
+	const usage = ticketEffectManager.use(
+		interaction.user.id,
+		ticket.ticketId,
+		ticket.effect,
+	);
 	if (usage)
 		await response.update({
 			content: `You have used the ticket **${ticket.name}**!`,

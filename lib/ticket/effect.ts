@@ -1,6 +1,10 @@
 import { TicketEffectType, type TicketEffect } from "../ticket";
 import type { DetailTimeout } from "../utils";
 
+interface EffectTimeout extends DetailTimeout {
+	effect: TicketEffect;
+}
+
 export class TicketEffectManager {
 	// This class is used to manage persistent ticket effects
 
@@ -11,9 +15,37 @@ export class TicketEffectManager {
 	 *
 	 * <ticketId, timeout>
 	 */
-	private usageMap: Map<string, DetailTimeout> = new Map();
+	private usageMap: Map<string, EffectTimeout> = new Map();
+	private userUsageMap: Map<string, string[]> = new Map(); // <userId, ticketIds>
 	constructor() {}
+
+	private addToUserUsage(userId: string, ticketId: string) {
+		const tickets = this.userUsageMap.get(userId) ?? [];
+		tickets.push(ticketId);
+		if (!this.userUsageMap.has(userId)) {
+			this.userUsageMap.set(userId, tickets);
+		}
+	}
+	private removeFromUserUsage(userId: string, ticketId: string) {
+		const tickets = this.userUsageMap.get(userId);
+		if (!tickets) return;
+		const index = tickets.indexOf(ticketId);
+		if (index !== -1) {
+			tickets.splice(index, 1);
+		}
+		if (tickets.length === 0) {
+			this.userUsageMap.delete(userId);
+		}
+	}
+	getUserActiveEffects(userId: string) {
+		const ticketIds = this.userUsageMap.get(userId) ?? [];
+		return ticketIds
+			.map((ticketId) => this.usageMap.get(ticketId))
+			.filter((effect): effect is EffectTimeout => effect !== undefined);
+	}
+
 	use(
+		userId: string,
 		ticketId: string,
 		effect: TicketEffect,
 		onExpire?: () => unknown,
@@ -23,6 +55,7 @@ export class TicketEffectManager {
 		if (duration === null) return false;
 		const timeout = setTimeout(() => {
 			this.usageMap.delete(ticketId);
+			this.removeFromUserUsage(userId, ticketId);
 			onExpire?.();
 		}, duration);
 
@@ -30,7 +63,9 @@ export class TicketEffectManager {
 			timeout,
 			expireTime: new Date(Date.now() + duration),
 			startTime: new Date(),
+			effect,
 		});
+		this.addToUserUsage(userId, ticketId);
 		return true;
 	}
 	inUse(ticketId: string) {

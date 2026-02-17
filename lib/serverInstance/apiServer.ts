@@ -9,6 +9,8 @@ import {
 	changeCredit,
 	sendCreditNotification,
 } from "../credit";
+import { ticketEffectManager } from "../ticket/effect";
+import { TicketEffectType } from "../ticket";
 
 const verifySchema = z.object({
 	serverPort: z.number(),
@@ -56,9 +58,16 @@ export function initApiServer(
 		) {
 			return res.send(JSON.stringify({ kick: true }));
 		}
+		const effects = ticketEffectManager.getUserActiveEffects(
+			player.discordId,
+		);
+
 		if (
-			!parsed.data.disconnect &&
-			server.paymentManager.hasPaid(player.uuid)
+			(!parsed.data.disconnect &&
+				server.paymentManager.hasPaid(player.uuid)) ||
+			effects.some(
+				({ effect }) => effect.effect === TicketEffectType.FreePlay,
+			)
 		) {
 			return res.send(JSON.stringify({ kick: false }));
 		}
