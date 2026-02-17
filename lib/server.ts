@@ -420,6 +420,9 @@ export class ServerManager {
 	getAllServerEntries() {
 		return Array.from(this.servers.entries());
 	}
+	getAllServers() {
+		return Array.from(this.servers.values());
+	}
 
 	getAllTagPairs() {
 		const result: TagPair[] = [];

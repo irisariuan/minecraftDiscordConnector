@@ -224,7 +224,7 @@ if (process.argv.includes("-C")) {
 				},
 			}),
 		),
-	});
+	}, serverManager);
 }
 if (
 	!compareArrays(

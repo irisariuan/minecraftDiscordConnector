@@ -8,7 +8,7 @@ import {
 	SettingType,
 	upsertSetting,
 } from "./db";
-import type { Server } from "./server";
+import type { Server, ServerManager } from "./server";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
 const APPROVAL_SETTINGS = `${process.cwd()}/data/approvalSettings.json`;
@@ -32,6 +32,7 @@ export interface ServerCreditSettings {
 	deleteFileFee: number;
 	viewFileFee: number;
 	playFee: number;
+	cancelShutdownFee: number;
 }
 
 export interface CreditSettings extends ServerCreditSettings {
@@ -69,8 +70,18 @@ export interface ApprovalSettings {
 export let settings: CreditSettings = defaultCreditSettings;
 export let approvalSettings: ApprovalSettings = defaultApprovalSettings;
 
-export function setApprovalSettings(changes: Partial<ApprovalSettings>) {
+export function setApprovalSettings(
+	changes: Partial<ApprovalSettings>,
+	serverManager: ServerManager,
+) {
 	approvalSettings = { ...approvalSettings, ...changes };
+	for (const server of serverManager.getAllServers()) {
+		for (const [k, v] of Object.entries(changes)) {
+			if (defaultApprovalSettings[k as keyof ApprovalSettings] !== v)
+				continue;
+			server.approvalSettings[k as keyof ApprovalSettings] = v;
+		}
+	}
 }
 
 function saveApprovalSettings(settings: Partial<ApprovalSettings>) {
@@ -80,8 +91,9 @@ function saveApprovalSettings(settings: Partial<ApprovalSettings>) {
 }
 export async function changeApprovalSettings(
 	changes: Partial<ApprovalSettings>,
+	serverManager: ServerManager,
 ) {
-	setApprovalSettings(changes);
+	setApprovalSettings(changes, serverManager);
 	return await saveApprovalSettings(changes);
 }
 
@@ -94,8 +106,22 @@ export async function loadApprovalSettings(): Promise<
 	return data;
 }
 
-export function setCreditSettings(changes: Partial<CreditSettings>) {
+export function setCreditSettings(
+	changes: Partial<CreditSettings>,
+	serverManager: ServerManager,
+) {
 	settings = { ...settings, ...changes };
+
+	for (const server of serverManager.getAllServers()) {
+		for (const [k, v] of Object.entries(changes)) {
+			if (
+				!Object.keys(server.creditSettings).includes(k) ||
+				defaultCreditSettings[k as keyof CreditSettings] !== v
+			)
+				continue;
+			server.creditSettings[k as keyof ServerCreditSettings] = v;
+		}
+	}
 }
 
 async function saveCreditSettings(settings: Partial<CreditSettings>) {
@@ -104,8 +130,11 @@ async function saveCreditSettings(settings: Partial<CreditSettings>) {
 	return await Bun.write(SETTINGS, JSON.stringify(newSettings, null, 4));
 }
 
-export async function changeCreditSettings(changes: Partial<CreditSettings>) {
-	setCreditSettings(changes);
+export async function changeCreditSettings(
+	changes: Partial<CreditSettings>,
+	serverManager: ServerManager,
+) {
+	setCreditSettings(changes, serverManager);
 	await saveCreditSettings(changes);
 }
 
@@ -121,7 +150,7 @@ export async function loadServerCreditSetting(
 ): Promise<ServerCreditSettings> {
 	const serverSettings = await getServerCreditSettings(id);
 	if (!serverSettings) {
-		return defaultCreditSettings;
+		return settings;
 	}
 
 	// Filter out null values and only include defined server settings
@@ -130,7 +159,7 @@ export async function loadServerCreditSetting(
 		filteredServerSettings[setting.name as keyof ServerCreditSettings] =
 			setting.value;
 	}
-	return { ...defaultCreditSettings, ...filteredServerSettings };
+	return { ...settings, ...filteredServerSettings };
 }
 
 export async function loadServerApprovalSetting(
@@ -174,5 +203,16 @@ export async function editSetting(
 				},
 			},
 		});
+	}
+	if (type === SettingType.Approval) {
+		server.approvalSettings = {
+			...server.approvalSettings,
+			...changes,
+		};
+	} else {
+		server.creditSettings = {
+			...server.creditSettings,
+			...changes,
+		};
 	}
 }

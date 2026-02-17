@@ -1,5 +1,4 @@
 import {
-	ComponentType,
 	italic,
 	MessageFlags,
 	SlashCommandBuilder,
@@ -120,7 +119,7 @@ export default {
 						}`,
 					});
 				}
-				changeApprovalSettings({ [setting]: value });
+				changeApprovalSettings({ [setting]: value }, serverManager);
 				return await interaction.editReply({
 					content: `Approval setting ${setting} changed to ${value}`,
 				});
@@ -139,7 +138,7 @@ export default {
 					content: `Setting ${setting} changed to ${value} for server ${server.config.tag ?? `Server #${server.id}`}`,
 				});
 			}
-			changeCreditSettings({ [setting]: value });
+			changeCreditSettings({ [setting]: value }, serverManager);
 			return await interaction.editReply({
 				content: `Setting ${setting} changed to ${value}`,
 			});
