@@ -302,8 +302,12 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 		customComponentRows,
 	} = props;
 	const data = await result.getData();
-	if (!interaction.deferred && !interaction.replied)
+	if (!interaction.deferred && !interaction.replied) {
+		console.warn(
+			"Interaction is not deferred or replied when editing pagination message. Deferring now.",
+		);
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	}
 
 	if (!data || data.length <= 0) {
 		return await interaction.editReply({

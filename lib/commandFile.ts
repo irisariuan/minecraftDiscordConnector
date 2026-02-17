@@ -61,7 +61,7 @@ export interface CommandFile<RequireServer extends boolean> {
 	executeReaction?: (params: ExecuteReactionParams) => unknown;
 	autoComplete?: (params: ExecuteParams<AutocompleteInteraction>) => unknown;
 	permissions?: Permission;
-	ephemeral?: boolean;
+	ephemeral?: RequireServer extends true ? boolean : never;
 }
 
 export async function loadCommands(loadPlugins = true) {

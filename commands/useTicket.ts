@@ -32,7 +32,6 @@ export default {
 	features: {
 		unsuspendable: true,
 	},
-	ephemeral: true,
 	async execute({ interaction }) {
 		await sendPaginationMessage({
 			interaction,
