@@ -207,11 +207,22 @@ export async function deletePluginByPath(path: string) {
 	return await prisma.plugin.deleteMany({ where: { filePath: path } });
 }
 
-export async function getUserTickets(userId: string, ticketTypeIds?: string[]) {
+export async function getUserTickets(
+	userId: string,
+	ticketTypeIds?: string[],
+	ticketEffectTypes?: string[],
+) {
 	return await prisma.userTicket.findMany({
 		where: {
 			userId,
 			...(ticketTypeIds ? { ticket: { id: { in: ticketTypeIds } } } : {}),
+			...(ticketEffectTypes
+				? {
+						OR: ticketEffectTypes.map((effect) => ({
+							ticket: { effect: { equals: effect } },
+						})),
+					}
+				: {}),
 		},
 		include: { ticket: true, history: true },
 	});

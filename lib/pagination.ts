@@ -301,6 +301,9 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 		customComponentRows,
 	} = props;
 	const data = await result.getData();
+	if (!interaction.deferred && !interaction.replied)
+		await interaction.deferReply();
+
 	if (!data || data.length <= 0) {
 		return await interaction.editReply({
 			content: options?.notFoundMessage ?? "No results",

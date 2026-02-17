@@ -52,11 +52,13 @@ export enum TicketEffectType {
 	Multiplier = "multiplier",
 	FixedCredit = "fixed_credit",
 	FreeUnderCost = "free_under_cost",
+	FreePlay = "free_play",
 }
 export const TicketEffectTypeNames: Record<TicketEffectType, string> = {
 	[TicketEffectType.Multiplier]: "Multiplier",
 	[TicketEffectType.FixedCredit]: "Fixed Credit",
 	[TicketEffectType.FreeUnderCost]: "Free Under Cost",
+	[TicketEffectType.FreePlay]: "Free Play For Certain Hours",
 };
 
 export interface TicketHistory {
@@ -94,7 +96,7 @@ export function isTicketAvailable(ticket: Ticket) {
 	return true;
 }
 
-export function calculateTicketEffect(
+export function calculatePaymentTicketEffect(
 	ticket: TicketEffect,
 	originalCost: number,
 ): number {
@@ -107,18 +109,36 @@ export function calculateTicketEffect(
 			if (originalCost <= ticket.value) return 0;
 			return originalCost;
 		default: {
-			console.error("Unknown ticket effect type:", ticket.effect);
+			console.error("Unknown payment ticket effect type:", ticket.effect);
 			return originalCost;
 		}
 	}
 }
 
-export async function getUserTicketsByUserId(
-	userId: string,
-	ticketTypeIds?: string[],
+export const paymentTicketEffects = [
+	TicketEffectType.FixedCredit,
+	TicketEffectType.Multiplier,
+	TicketEffectType.FreeUnderCost,
+];
+
+export const userUsableTicketEffects = [TicketEffectType.FreePlay];
+
+export async function getUserTicketsByUserId({
+	userId,
+	ticketTypeIds,
+	ticketEffectTypes,
 	usableOnly = true,
-): Promise<Ticket[] | null> {
-	const rawTickets = await getUserTickets(userId, ticketTypeIds);
+}: {
+	userId: string;
+	ticketEffectTypes?: TicketEffectType[];
+	ticketTypeIds?: string[];
+	usableOnly?: boolean;
+}): Promise<Ticket[] | null> {
+	const rawTickets = await getUserTickets(
+		userId,
+		ticketTypeIds,
+		ticketEffectTypes,
+	);
 	if (rawTickets.length <= 0) return null;
 	const tickets: Ticket[] = [];
 	for (const ticket of rawTickets) {

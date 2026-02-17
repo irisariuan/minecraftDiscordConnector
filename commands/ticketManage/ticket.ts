@@ -219,11 +219,10 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 			await sendPaginationMessage({
 				interaction,
 				getResult: async () => {
-					const tickets = await getUserTicketsByUserId(
-						user.id,
-						undefined,
-						false,
-					);
+					const tickets = await getUserTicketsByUserId({
+						userId: user.id,
+						usableOnly: false,
+					});
 					return (
 						tickets?.toSorted((a, b) => {
 							// sort by availability, then by expiration date (soonest first), then by use count

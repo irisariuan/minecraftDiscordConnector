@@ -19,10 +19,11 @@ import {
 	readPermission,
 } from "./permission";
 import {
-	calculateTicketEffect,
+	calculatePaymentTicketEffect,
 	getUserSelectedTicket,
 	getUserSelectTicketChannel,
 	getUserTicketsByUserId,
+	paymentTicketEffects,
 	TicketEffectType,
 	useUserTicket,
 	type Ticket,
@@ -240,10 +241,11 @@ export async function spendCredit(
 	params: SpendCreditParams,
 ): Promise<PartialTransaction | null> {
 	const { cost, reason, userId, serverId } = params;
-	const tickets = await getUserTicketsByUserId(
+	const tickets = await getUserTicketsByUserId({
 		userId,
-		params.acceptedTicketTypeIds,
-	);
+		ticketTypeIds: params.acceptedTicketTypeIds,
+		ticketEffectTypes: paymentTicketEffects,
+	});
 	const credit = await getCredit(userId);
 	if (!credit) return null;
 	if (
@@ -265,7 +267,7 @@ export async function spendCredit(
 		useTicket,
 	} = await getUserSelectedTicket(message, userId, tickets, {
 		confirmationMessage: (ticket) => {
-			const finalCost = calculateTicketEffect(ticket.effect, cost);
+			const finalCost = calculatePaymentTicketEffect(ticket.effect, cost);
 			return `After using this ticket, you will have to pay \`${finalCost}\` credits`;
 		},
 		insideThread: createdChannel,
@@ -277,7 +279,7 @@ export async function spendCredit(
 		return null;
 	}
 	if (selectedTicket && useTicket) {
-		const finalCost = calculateTicketEffect(selectedTicket.effect, cost);
+		const finalCost = calculatePaymentTicketEffect(selectedTicket.effect, cost);
 		if (!(await canSpendCredit(userId, finalCost))) {
 			return null;
 		}
