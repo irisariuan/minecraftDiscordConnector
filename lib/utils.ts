@@ -1,6 +1,8 @@
 import {
 	ActivityType,
+	GuildMember,
 	MessagePayload,
+	User,
 	type Client,
 	type MessageCreateOptions,
 } from "discord.js";
@@ -330,7 +332,7 @@ export function formatFileSize(bytes: number): string {
 	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-interface Time {
+export interface Time {
 	hour: number;
 	minute: number;
 }
@@ -500,4 +502,30 @@ export async function resolve<T, P>(
 		return await (value as (param: P) => T | PromiseLike<T>)(param);
 	}
 	return await value;
+}
+
+/*
+ * Null if end - timeBefore is in the past
+ */
+export function calculateTimeDiffToNow(
+	end: Date,
+	timeBefore?: Time,
+): number | null {
+	const now = Date.now();
+	const result =
+		end.getTime() -
+		(timeBefore !== undefined
+			? timeBefore.hour * 60 * 60 * 1000 - timeBefore.minute * 60 * 1000
+			: 0);
+	if (result <= now) return null;
+	return result - now;
+}
+
+export function extractUser(user: GuildMember | User) {
+	return user instanceof GuildMember ? user.user : user;
+}
+export interface DetailTimeout {
+	timeout: NodeJS.Timeout;
+	expireTime: Date;
+	startTime: Date;
 }

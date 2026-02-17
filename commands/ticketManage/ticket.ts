@@ -10,15 +10,11 @@ import {
 	User,
 	userMention,
 } from "discord.js";
-import type { UserTicketUpdateInput } from "../../generated/prisma/models";
 import { spendCredit } from "../../lib/credit";
 import {
-	createRawUserTicket,
-	deleteRawUserTicket,
 	getAllRawTicketTypes,
 	getRawTicketTypeById,
-	getRawUserTicket,
-	updateRawUserTicket,
+	getRawUserTicketByTicketId,
 } from "../../lib/db";
 import {
 	createTicketEmbed,
@@ -32,12 +28,19 @@ import {
 } from "../../lib/permission";
 import { settings } from "../../lib/settings";
 import {
+	addTicketToUser,
 	getUserTicketsByUserId,
 	isTicketAvailable,
+	removeTicketFromUser,
 	type Ticket,
 	TicketEffectTypeNames,
+	updateUserTicket,
 } from "../../lib/ticket";
-import { parseTimeString, trimTextWithSuffix } from "../../lib/utils";
+import {
+	extractUser,
+	parseTimeString,
+	trimTextWithSuffix,
+} from "../../lib/utils";
 
 export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 	return group
@@ -91,6 +94,14 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 							"Expiration time (DD:HH:MM:SS, HH:MM:SS, MM:SS, or Ns)",
 						)
 						.setRequired(false),
+				)
+				.addBooleanOption((option) =>
+					option
+						.setName("silent")
+						.setDescription(
+							"Whether to update the ticket silently without sending user(s) a notification",
+						)
+						.setRequired(false),
 				),
 		)
 		.addSubcommand((subcommand) =>
@@ -108,6 +119,14 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setName("ticketid")
 						.setDescription("ID of the ticket to remove")
 						.setRequired(true),
+				)
+				.addBooleanOption((option) =>
+					option
+						.setName("silent")
+						.setDescription(
+							"Whether to update the ticket silently without sending user(s) a notification",
+						)
+						.setRequired(false),
 				),
 		)
 		.addSubcommand((subcommand) =>
@@ -142,6 +161,14 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setName("reason")
 						.setDescription(
 							"New reason for the ticket (empty to clear)",
+						)
+						.setRequired(false),
+				)
+				.addBooleanOption((option) =>
+					option
+						.setName("silent")
+						.setDescription(
+							"Whether to update the ticket silently without sending user(s) a notification",
 						)
 						.setRequired(false),
 				),
@@ -323,6 +350,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 		}
 		case "add": {
 			const users = interaction.options.getMentionable("user", true);
+			const silent = interaction.options.getBoolean("silent") ?? false;
 			const ticketTypeId = interaction.options.getString(
 				"tickettype",
 				true,
@@ -352,22 +380,16 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				});
 			}
 
-			const addTicketToUser = async (userId: string) => {
-				for (let i = 0; i < quantity; i++) {
-					await createRawUserTicket({
-						data: {
-							userId,
-							ticketId: ticketType.id,
-							maxUse,
-							expiresAt,
-							reason: `Added by ${interaction.user.username}`,
-						},
-					});
-				}
-			};
-
 			if (users instanceof User || users instanceof GuildMember) {
-				await addTicketToUser(users.id);
+				await addTicketToUser({
+					user: extractUser(users),
+					ticketTypeId: ticketType.id,
+					quantity,
+					reason: `Added by ${interaction.user.username}`,
+					maxUse,
+					expiresAt,
+					silent
+				});
 				let expireText = "";
 				if (expireInput) {
 					expireText = ` (expires at ${expiresAt ? time(expiresAt) : "unknown time"})`;
@@ -380,7 +402,15 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 			if (users instanceof Role) {
 				let userCount = 0;
 				for (const [_, member] of users.members) {
-					await addTicketToUser(member.user.id);
+					await addTicketToUser({
+						user: member.user,
+						ticketTypeId: ticketType.id,
+						quantity,
+						reason: `Added by ${interaction.user.username} to role ${users.name}`,
+						maxUse,
+						expiresAt,
+						silent
+					});
 					userCount++;
 				}
 				let expireText = "";
@@ -399,29 +429,13 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 		case "remove": {
 			const users = interaction.options.getMentionable("user", true);
 			const ticketId = interaction.options.getString("ticketid", true);
-
-			const removeTicketFromUser = async (userId: string) => {
-				const ticket = await getRawUserTicket({
-					where: { id: ticketId, userId },
-				});
-
-				if (!ticket) {
-					return false;
-				}
-
-				try {
-					await deleteRawUserTicket({
-						where: { id: ticketId },
-					});
-					return true;
-				} catch (error) {
-					console.error("Error deleting ticket:", error);
-					return false;
-				}
-			};
+			const silent = interaction.options.getBoolean("silent") ?? false;
 
 			if (users instanceof User || users instanceof GuildMember) {
-				const removed = await removeTicketFromUser(users.id);
+				const removed = await removeTicketFromUser({
+					ticketId,
+					user: extractUser(users),
+				});
 				if (!removed) {
 					return await interaction.editReply({
 						content: `Ticket \`${ticketId}\` not found for user ${userMention(users.id)}.`,
@@ -435,7 +449,11 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 			if (users instanceof Role) {
 				let removedCount = 0;
 				for (const [_, member] of users.members) {
-					const removed = await removeTicketFromUser(member.user.id);
+					const removed = await removeTicketFromUser({
+						ticketId,
+						user: member.user,
+						silent
+					});
 					if (removed) removedCount++;
 				}
 				return await interaction.editReply({
@@ -452,20 +470,10 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 			const newMaxUse = interaction.options.getInteger("maxuse");
 			const expireInput = interaction.options.getString("expire");
 			const newReason = interaction.options.getString("reason");
-
-			// Check if ticket exists
-			const existingTicket = await getRawUserTicket({
-				where: { id: ticketId },
-			});
-
-			if (!existingTicket) {
-				return await interaction.editReply({
-					content: `Ticket \`${ticketId}\` not found.`,
-				});
-			}
+			const silent = interaction.options.getBoolean("silent") ?? false;
 
 			// Parse expire input
-			let newExpiresAt: Date | null = existingTicket.expiresAt;
+			let newExpiresAt: Date | null | undefined = undefined;
 			if (expireInput) {
 				if (expireInput.toLowerCase() === "remove") {
 					newExpiresAt = null;
@@ -481,63 +489,68 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				}
 			}
 
-			// Prepare update data
-			const updateData: UserTicketUpdateInput = {};
-			if (newMaxUse !== null) {
-				updateData.maxUse = newMaxUse;
-			}
-			if (expireInput) {
-				updateData.expiresAt = newExpiresAt;
-			}
-			if (newReason !== null) {
-				updateData.reason = newReason.length > 0 ? newReason : null;
-			}
-
 			// Check if there's anything to update
-			if (Object.keys(updateData).length === 0) {
+			if (newMaxUse === null && !expireInput && newReason === null) {
 				return await interaction.editReply({
 					content:
 						"No updates specified. Please provide at least one field to update.",
 				});
 			}
 
-			try {
-				await updateRawUserTicket({
-					where: { id: ticketId },
-					data: updateData,
-				});
-
-				// Build update summary
-				const updates: string[] = [];
-				if (newMaxUse !== null) {
-					updates.push(`Max uses: ${newMaxUse}`);
-				}
-				if (expireInput) {
-					if (newExpiresAt) {
-						updates.push(`Expires: ${time(newExpiresAt)}`);
-					} else {
-						updates.push("Expiration: removed");
-					}
-				}
-				if (newReason !== null) {
-					updates.push(`Reason: ${newReason}`);
-				}
-
+			const rawTicket = await getRawUserTicketByTicketId(ticketId);
+			if (!rawTicket) {
 				return await interaction.editReply({
-					embeds: [
-						createTicketUpdateEmbed(
-							"Ticket Updated",
-							ticketId,
-							updates,
-						),
-					],
-				});
-			} catch (error) {
-				console.error("Error updating ticket:", error);
-				return await interaction.editReply({
-					content: `Failed to update ticket: ${error}`,
+					content: `Ticket \`${ticketId}\` not found.`,
 				});
 			}
+
+			const success = await updateUserTicket({
+				ticketId,
+				maxUse: newMaxUse,
+				expiresAt: newExpiresAt,
+				reason:
+					newReason !== null && newReason.length > 0
+						? newReason
+						: newReason === null
+							? null
+							: undefined,
+				user: await interaction.client.users
+					.fetch(rawTicket.userId)
+					.catch(() => null),
+				silent
+			});
+
+			if (!success) {
+				return await interaction.editReply({
+					content: `Ticket \`${ticketId}\` not found or no changes were made.`,
+				});
+			}
+
+			// Build update summary
+			const updates: string[] = [];
+			if (newMaxUse !== null) {
+				updates.push(`Max uses: ${newMaxUse}`);
+			}
+			if (expireInput) {
+				if (newExpiresAt) {
+					updates.push(`Expires: ${time(newExpiresAt)}`);
+				} else {
+					updates.push("Expiration: removed");
+				}
+			}
+			if (newReason !== null) {
+				updates.push(`Reason: ${newReason}`);
+			}
+
+			return await interaction.editReply({
+				embeds: [
+					createTicketUpdateEmbed(
+						"Ticket Updated",
+						ticketId,
+						updates,
+					),
+				],
+			});
 		}
 	}
 	return await interaction.editReply({

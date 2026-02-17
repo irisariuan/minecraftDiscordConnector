@@ -3,6 +3,12 @@ import {
 	getUserTickets,
 	createTicketHistory,
 	countTicketHistories,
+	getAllRawActiveTickets,
+	createRawUserTicket,
+	deleteRawUserTicket,
+	updateRawUserTicket,
+	createRawUserTicketWithTicketType,
+	getRawUserTicketByTicketId,
 } from "./db";
 import type {
 	UserTicket as DbUserTicket,
@@ -10,11 +16,14 @@ import type {
 } from "../generated/prisma/client";
 import {
 	type Message,
+	type PartialUser,
 	type SendableChannels,
 	channelMention,
 	ChannelType,
 	ComponentType,
+	GuildMember,
 	MessageFlags,
+	time,
 	User,
 	userMention,
 } from "discord.js";
@@ -27,6 +36,7 @@ import {
 	createRequestComponent,
 	RequestComponentId,
 } from "./component/request";
+import { calculateTimeDiffToNow, getNextTimestamp, type Time } from "./utils";
 export { type DbUserTicket, type DbTicketType };
 export enum TicketAction {
 	Use = "use",
@@ -42,6 +52,10 @@ export interface Ticket {
 	maxUse: number | null;
 	expiresAt?: Date | null;
 	histories?: TicketHistory[];
+}
+
+export interface UserTicket extends Ticket {
+	userId: string;
 }
 
 export interface TicketEffect {
@@ -171,6 +185,30 @@ export async function getUserTicketsByUserId({
 	return tickets;
 }
 
+export async function getAllTickets(): Promise<UserTicket[]> {
+	const rawTickets = await getAllRawActiveTickets();
+	return rawTickets.map((ticket) => ({
+		ticketId: ticket.id,
+		maxUse: ticket.maxUse ?? null,
+		name: ticket.ticket.name,
+		description: ticket.ticket.description,
+		reason: ticket.reason,
+		ticketTypeId: ticket.ticket.id,
+		expiresAt: ticket.expiresAt,
+		effect: {
+			effect: ticket.ticket.effect as TicketEffectType,
+			value: ticket.ticket.value,
+		},
+		histories: ticket.history.map((h) => ({
+			action: h.action,
+			reason: h.reason,
+			ticketId: h.ticketId,
+			timestamp: h.timestamp,
+			ticketHistoryId: h.id,
+		})),
+		userId: ticket.userId,
+	}));
+}
 export async function useUserTicket(ticketId: string, reason?: string) {
 	const ticket = await getRawUserTicket({
 		where: { id: ticketId },
@@ -417,4 +455,342 @@ export async function getUserSelectedTicket(
 				buttonCollector.stop();
 			}),
 	]);
+}
+
+interface SendTicketNotificationToUserParams {
+	user: User | PartialUser | GuildMember;
+	ticket: Ticket;
+	reason?: string;
+	serverId?: number;
+	silent?: boolean;
+}
+
+function getExpiringStatus(time: Date) {
+	const now = new Date();
+	const diff = time.getTime() - now.getTime();
+	if (diff <= 0) return "expired";
+	if (diff <= 1000 * 60 * 60 * 24) return "expiring within 24 hours";
+	if (diff <= 1000 * 60 * 60 * 24 * 3) return "expiring within 3 days";
+	return "expiring soon";
+}
+
+const reminderTimeBefores: Time[] = [
+	{
+		hour: 24 * 3,
+		minute: 0,
+	},
+	{
+		hour: 24,
+		minute: 0,
+	},
+];
+
+class TicketNotificationManager {
+	private timeouts: Map<string, NodeJS.Timeout[]> = new Map();
+
+	private getExpiringStatus(time: Date) {
+		return getExpiringStatus(time);
+	}
+
+	private async sendNotification(
+		user: User | PartialUser | GuildMember,
+		content: string,
+		silent?: boolean,
+	) {
+		try {
+			return await user.send({
+				content,
+				flags: silent ? MessageFlags.SuppressNotifications : [],
+			});
+		} catch {
+			return null;
+		}
+	}
+
+	private async sendNewNotification(
+		user: User,
+		ticket: Ticket,
+		reason?: string,
+		serverId?: number,
+		silent?: boolean,
+	) {
+		const content = `You have received a new ticket **${ticket.name}**!${reason ? `\nReason: ${reason}` : ""}${serverId ? `\nServer ID: ${serverId}` : ""}`;
+		return await this.sendNotification(user, content, silent);
+	}
+
+	private async sendExpiringNotification(
+		user: User,
+		ticket: Ticket,
+		reason?: string,
+		serverId?: number,
+		silent?: boolean,
+	) {
+		if (!ticket.expiresAt) return null;
+		const content = `Your ticket **${ticket.name}** is ${this.getExpiringStatus(ticket.expiresAt)} (at ${time(ticket.expiresAt)})!${reason ? `\nReason: ${reason}` : ""}${serverId ? `\nServer ID: ${serverId}` : ""}`;
+		return await this.sendNotification(user, content, silent);
+	}
+
+	private async sendExpiredNotification(
+		user: User,
+		ticket: Ticket,
+		reason?: string,
+		serverId?: number,
+		silent?: boolean,
+	) {
+		if (!ticket.expiresAt) return null;
+		const content = `Your ticket **${ticket.name}** is ${this.getExpiringStatus(ticket.expiresAt)} (at ${time(ticket.expiresAt)})!${reason ? `\nReason: ${reason}` : ""}${serverId ? `\nServer ID: ${serverId}` : ""}`;
+		return await this.sendNotification(user, content, silent);
+	}
+
+	private async sendDeletedNotification(
+		user: User,
+		ticketId: string,
+		reason?: string,
+		serverId?: number,
+		silent?: boolean,
+	) {
+		const ticket = await getRawUserTicketByTicketId(ticketId);
+		if (!ticket) {
+			return null;
+		}
+		const content = `Your ticket **${ticket.ticket.name}** has been removed!${reason ? `\nReason: ${reason}` : ""}${serverId ? `\nServer ID: ${serverId}` : ""}`;
+		return await this.sendNotification(user, content, silent);
+	}
+
+	async sendUsedNotification(
+		user: User | PartialUser | GuildMember,
+		ticket: Ticket,
+		reason?: string,
+		serverId?: number,
+		silent?: boolean,
+	) {
+		const content = `You have used a ticket **${ticket.name}**!${reason ? `\nReason: ${reason}` : ""}${serverId ? `\nServer ID: ${serverId}` : ""}`;
+		return await this.sendNotification(user, content, silent);
+	}
+
+	newTicket(user: User, ticket: Ticket, reason?: string) {
+		this.sendNewNotification(user, ticket, reason);
+		this.addTicket(user, ticket);
+	}
+
+	addTicket(user: User, ticket: Ticket) {
+		if (!ticket.expiresAt) return;
+		const timeouts = [];
+		for (const reminderTimeBefore of reminderTimeBefores) {
+			const reminderTime = calculateTimeDiffToNow(
+				ticket.expiresAt,
+				reminderTimeBefore,
+			);
+			if (!reminderTime) continue;
+
+			timeouts.push(
+				setTimeout(() => {
+					if (!ticket.expiresAt) return;
+					const reason = `Ticket expiring soon (${this.getExpiringStatus(ticket.expiresAt)})`;
+					this.sendExpiringNotification(user, ticket, reason);
+				}, reminderTime),
+			);
+		}
+		// also create a timeout for the expiration notification
+		const expireTime = calculateTimeDiffToNow(ticket.expiresAt);
+		if (expireTime) {
+			timeouts.push(
+				setTimeout(() => {
+					if (!ticket.expiresAt) return;
+					this.sendExpiredNotification(
+						user,
+						ticket,
+						"Ticket expired",
+					);
+				}, expireTime),
+			);
+		}
+		this.timeouts.set(ticket.ticketId, timeouts);
+	}
+
+	updateTicket(user: User, ticket: Ticket, reason?: string) {
+		this.deleteTicketTimeouts(ticket.ticketId);
+		this.newTicket(user, ticket, reason);
+	}
+
+	private deleteTicketTimeouts(ticketId: string) {
+		const timeouts = this.timeouts.get(ticketId);
+		if (timeouts) {
+			for (const timeout of timeouts) {
+				clearTimeout(timeout);
+			}
+			this.timeouts.delete(ticketId);
+		}
+	}
+
+	deleteTicket(user: User, ticketId: string, reason?: string) {
+		this.sendDeletedNotification(
+			user,
+			ticketId,
+			reason ?? "Ticket removed",
+		);
+		this.deleteTicketTimeouts(ticketId);
+	}
+}
+
+export const ticketNotificationManager = new TicketNotificationManager();
+
+interface AddTicketToUserParams {
+	user: User;
+	quantity: number;
+	ticketTypeId: string;
+	maxUse?: number | null;
+	expiresAt?: Date | null;
+	reason?: string | null;
+	silent?: boolean;
+}
+
+export async function addTicketToUser({
+	user,
+	quantity,
+	ticketTypeId,
+	maxUse,
+	expiresAt,
+	reason,
+	silent,
+}: AddTicketToUserParams) {
+	for (let i = 0; i < quantity; i++) {
+		const rawTicket = await createRawUserTicketWithTicketType({
+			data: {
+				userId: user.id,
+				ticketId: ticketTypeId,
+				maxUse,
+				expiresAt,
+				reason,
+			},
+			include: {
+				ticket: true,
+			},
+		});
+		if (!silent)
+			ticketNotificationManager.newTicket(
+				user,
+				{
+					ticketId: rawTicket.id,
+					ticketTypeId,
+					name: rawTicket.ticket.name,
+					description: rawTicket.ticket.description,
+					effect: {
+						effect: rawTicket.ticket.effect as TicketEffectType,
+						value: rawTicket.ticket.value,
+					},
+					maxUse: rawTicket.maxUse ?? null,
+					expiresAt: rawTicket.expiresAt,
+					reason: rawTicket.reason,
+				},
+				reason ?? undefined,
+			);
+	}
+}
+
+interface RemoveTicketFromUserParams {
+	ticketId: string;
+	user: User;
+	silent?: boolean;
+}
+
+export async function removeTicketFromUser({
+	ticketId,
+	user,
+	silent,
+}: RemoveTicketFromUserParams): Promise<boolean> {
+	const ticket = await getRawUserTicket({
+		where: { id: ticketId, userId: user.id },
+	});
+
+	if (!ticket) {
+		return false;
+	}
+	try {
+		await deleteRawUserTicket({
+			where: { id: ticketId },
+		});
+		if (silent) return true;
+		ticketNotificationManager.deleteTicket(user, ticketId);
+		return true;
+	} catch (error) {
+		console.error("Error deleting ticket:", error);
+		return false;
+	}
+}
+
+interface UpdateUserTicketParams {
+	ticketId: string;
+	maxUse?: number | null;
+	expiresAt?: Date | null;
+	reason?: string | null;
+	user: User | null;
+	silent?: boolean;
+}
+
+export async function updateUserTicket({
+	ticketId,
+	maxUse,
+	expiresAt,
+	reason,
+	user,
+	silent,
+}: UpdateUserTicketParams): Promise<boolean> {
+	// Check if ticket exists
+	const existingTicket = await getRawUserTicket({
+		where: { id: ticketId },
+	});
+
+	if (!existingTicket) {
+		return false;
+	}
+
+	// Prepare update data
+	const updateData: any = {};
+	if (maxUse !== undefined && maxUse !== null) {
+		updateData.maxUse = maxUse;
+	}
+	if (expiresAt !== undefined) {
+		updateData.expiresAt = expiresAt;
+	}
+	if (reason !== undefined) {
+		updateData.reason = reason;
+	}
+
+	// Check if there's anything to update
+	if (Object.keys(updateData).length === 0) {
+		return false;
+	}
+
+	try {
+		const rawTicket = await updateRawUserTicket({
+			where: { id: ticketId },
+			data: updateData,
+		});
+		if (user && !silent)
+			ticketNotificationManager.updateTicket(user, {
+				ticketId: rawTicket.id,
+				ticketTypeId: rawTicket.ticketId,
+				name: rawTicket.ticket.name,
+				description: rawTicket.ticket.description,
+				effect: {
+					effect: rawTicket.ticket.effect as TicketEffectType,
+					value: rawTicket.ticket.value,
+				},
+				maxUse: rawTicket.maxUse ?? null,
+				expiresAt: rawTicket.expiresAt,
+				reason: rawTicket.reason,
+				histories: rawTicket.history.map((h) => ({
+					action: h.action,
+					reason: h.reason,
+					ticketId: h.ticketId,
+					timestamp: h.timestamp,
+					ticketHistoryId: h.id,
+				})),
+			});
+		return true;
+	} catch (error) {
+		console.error("Error updating ticket:", error);
+		return false;
+	}
 }

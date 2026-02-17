@@ -29,6 +29,7 @@ import {
 	settings,
 } from "./lib/settings";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
+import { getAllTickets, ticketNotificationManager } from "./lib/ticket";
 
 let enablePlugins = !process.argv.includes("--no-plugins");
 let commands = await loadCommands(enablePlugins);
@@ -63,6 +64,14 @@ const client = new Client({
 	],
 });
 const serverManager = await createServerManager(client);
+
+getAllTickets().then(async (tickets) => {
+	for (const ticket of tickets) {
+		const user = await client.users.fetch(ticket.userId).catch(() => null);
+		if (!user) continue;
+		ticketNotificationManager.addTicket(user, ticket);
+	}
+});
 
 if (!enablePlugins) {
 	console.log("Running plugin scripts...");

@@ -227,6 +227,14 @@ export async function getUserTickets(
 		include: { ticket: true, history: true },
 	});
 }
+
+export async function getAllRawActiveTickets() {
+	return await prisma.userTicket.findMany({
+		where: { OR: [{ expiresAt: { gt: new Date() } }, { expiresAt: null }] },
+		include: { ticket: true, history: true },
+	});
+}
+
 export async function getRawUserTicket(data: Prisma.UserTicketFindUniqueArgs) {
 	return await prisma.userTicket.findUnique(data);
 }
@@ -234,8 +242,21 @@ export async function getRawUserTicket(data: Prisma.UserTicketFindUniqueArgs) {
 export async function createRawUserTicket(data: Prisma.UserTicketCreateArgs) {
 	return await prisma.userTicket.create(data);
 }
+
+export async function createRawUserTicketWithTicketType(
+	data: Prisma.UserTicketCreateArgs,
+) {
+	return await prisma.userTicket.create({
+		...data,
+		include: { ticket: true },
+	});
+}
+
 export async function updateRawUserTicket(data: Prisma.UserTicketUpdateArgs) {
-	return await prisma.userTicket.update(data);
+	return await prisma.userTicket.update({
+		...data,
+		include: { ticket: true, history: true },
+	});
 }
 export async function createTicketHistory(
 	data: Prisma.TicketHistoryCreateArgs,
@@ -256,6 +277,13 @@ export async function getRawTicketTypeById(id: string) {
 
 export async function getAllRawTicketTypes() {
 	return await prisma.ticket.findMany();
+}
+
+export async function getRawUserTicketByTicketId(ticketId: string) {
+	return await prisma.userTicket.findUnique({
+		where: { id: ticketId },
+		include: { ticket: true, history: true },
+	});
 }
 
 export async function updateRawTicketType(data: Prisma.TicketUpdateArgs) {

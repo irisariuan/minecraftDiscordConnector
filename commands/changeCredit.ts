@@ -37,6 +37,11 @@ export default {
 						.setDescription(
 							"Whether send credit notification to user(s) or not",
 						),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("reason")
+						.setDescription("The reason for setting the credit"),
 				),
 		)
 		.addSubcommand((command) =>
@@ -61,6 +66,11 @@ export default {
 						.setDescription(
 							"Whether send credit notification to user(s) or not",
 						),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("reason")
+						.setDescription("The reason for setting the credit"),
 				),
 		),
 	requireServer: false,
@@ -72,6 +82,7 @@ export default {
 		const user = interaction.options.getMentionable("user", true);
 		const amount = interaction.options.getNumber("amount", true);
 		const silent = interaction.options.getBoolean("silent") === true;
+		const reason = interaction.options.getString("reason");
 		const users =
 			user instanceof Role
 				? Array.from(user.members).map((member) => member[1])
@@ -89,7 +100,7 @@ export default {
 				const original = await setCredit({
 					userId: user.id,
 					credit: amount,
-					reason: "Set by admin",
+					reason: reason ?? "Set by admin",
 				});
 				if (original === null) continue;
 				console.log(`Set ${user.displayName} credit to ${amount}`);
@@ -98,7 +109,7 @@ export default {
 						sendCreditNotification({
 							user,
 							creditChanged: amount - original,
-							reason: "Set by admin",
+							reason: reason ?? "Set by admin",
 							silent: true,
 						}),
 					);
@@ -113,7 +124,7 @@ export default {
 				const result = await changeCredit({
 					userId: user.id,
 					change: amount,
-					reason: "Changed by admin",
+					reason: reason ?? "Changed by admin",
 				});
 				if (result === null) continue;
 				console.log(`Changed ${user.displayName} credit by ${amount}`);
@@ -122,11 +133,14 @@ export default {
 						sendCreditNotification({
 							user,
 							creditChanged: amount,
-							reason: "Changed by admin",
+							reason: reason ?? "Changed by admin",
 							silent: true,
 						}),
 					);
 			}
+			await interaction.editReply({
+				content: `Changed credit of ${user instanceof Role ? roleMention(user.id) : userMention(users[0].id)} by ${amount} (sending notifications...)`,
+			});
 			await Promise.all(promises);
 			await interaction.editReply({
 				content: `Changed credit of ${user instanceof Role ? roleMention(user.id) : userMention(users[0].id)} by ${amount}`,

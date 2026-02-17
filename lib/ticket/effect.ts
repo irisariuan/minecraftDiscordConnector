@@ -1,10 +1,5 @@
 import { TicketEffectType, type TicketEffect } from "../ticket";
-
-interface TicketEffectUsage {
-	timeout: NodeJS.Timeout;
-	expireTime: Date;
-	startTime: Date;
-}
+import type { DetailTimeout } from "../utils";
 
 export class TicketEffectManager {
 	// This class is used to manage persistent ticket effects
@@ -16,7 +11,7 @@ export class TicketEffectManager {
 	 *
 	 * <ticketId, timeout>
 	 */
-	private usageMap: Map<string, TicketEffectUsage> = new Map();
+	private usageMap: Map<string, DetailTimeout> = new Map();
 	constructor() {}
 	use(
 		ticketId: string,

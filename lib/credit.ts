@@ -382,7 +382,7 @@ export async function sendCreditNotification({
 					? `\n*You can cancel this transaction (refunding ${refund} credits to sender) by clicking the button below before ${time(new Date(expire))}.*`
 					: ""
 			}`,
-			flags: silent ? [MessageFlags.SuppressNotifications] : [],
+			flags: silent ? MessageFlags.SuppressNotifications : [],
 			components: cancellable
 				? [
 						new ActionRowBuilder<ButtonBuilder>().addComponents(
