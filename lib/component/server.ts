@@ -48,7 +48,7 @@ export async function getUserSelectedServer(
 		}
 		await interaction.reply({
 			content: "No servers available",
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		return null;
 	}
@@ -66,13 +66,13 @@ export async function getUserSelectedServer(
 			}
 			await interaction.reply({
 				content: "No servers available",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 			return null;
 		}
 		if (!interaction.deferred)
 			await interaction.deferReply({
-				flags: ephemeral ? [MessageFlags.Ephemeral] : [],
+				flags: ephemeral ? MessageFlags.Ephemeral : [],
 			});
 		return servers[0][1];
 	} else {
@@ -84,7 +84,7 @@ export async function getUserSelectedServer(
 		};
 		const contentWithFlags: InteractionReplyOptions = {
 			...content,
-			flags: ephemeral ? [MessageFlags.Ephemeral] : [],
+			flags: ephemeral ? MessageFlags.Ephemeral : [],
 		};
 		const reply = interaction.replied
 			? await interaction.followUp(contentWithFlags)
@@ -119,7 +119,7 @@ export async function getUserSelectedServer(
 			});
 			const followUp = await selection.followUp({
 				content: `Selected ${selectedServer.config.tag || `*Server #${selectedServer.id}*`}`,
-				flags: ephemeral ? [MessageFlags.Ephemeral] : [],
+				flags: ephemeral ? MessageFlags.Ephemeral : [],
 			});
 			setTimeout(() => {
 				followUp.delete().catch(() => {});

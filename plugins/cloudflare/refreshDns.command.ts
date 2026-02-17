@@ -12,7 +12,7 @@ export default {
 		),
 	requireServer: false,
 	async execute({ interaction }) {
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		await spendCredit(interaction, {
 			userId: interaction.user.id,
 			cost: settings.refreshDnsFee,

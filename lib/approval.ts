@@ -403,7 +403,7 @@ export async function updateApprovalMessage(
 					showReject: rejectVote,
 				}),
 			],
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		const res = await answer
 			.awaitMessageComponent({
@@ -416,7 +416,7 @@ export async function updateApprovalMessage(
 		if (!res || res.customId === ApprovalMessageComponentId.Revoke) {
 			const followUp = await reaction.followUp({
 				content: "Timeout or cancelled, no action taken",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 			return setTimeout(
 				() => followUp.delete().catch(console.error),
@@ -445,7 +445,7 @@ export async function updateApprovalMessage(
 		const followUp = reaction.followUp({
 			content:
 				"The server is currently suspended, you do not have permission to approve or disapprove",
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		return setTimeout(
 			() => followUp.then((msg) => msg.delete().catch(console.error)),
@@ -468,7 +468,7 @@ export async function updateApprovalMessage(
 		) {
 			const followUp = await reaction.followUp({
 				content: `${userMention(reaction.user.id)}\nYou have not approved or disapproved this poll`,
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 			return setTimeout(
 				() => followUp.delete().catch(console.error),
@@ -505,7 +505,7 @@ export async function updateApprovalMessage(
 		}
 		const followUp = await reaction.followUp({
 			content: `Cancelled by ${userMention(reaction.user.id)}`,
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		return setTimeout(
 			() => followUp.delete().catch(console.error),
@@ -521,7 +521,7 @@ export async function updateApprovalMessage(
 	) {
 		const followUp = await reaction.followUp({
 			content: "You have already approved this poll",
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		return setTimeout(
 			() => followUp.delete().catch(console.error),
@@ -536,7 +536,7 @@ export async function updateApprovalMessage(
 	) {
 		const followUp = await reaction.followUp({
 			content: "You have already disapproved this poll",
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		return setTimeout(
 			() => followUp.delete().catch(console.error),
@@ -574,7 +574,7 @@ export async function updateApprovalMessage(
 		if (!transaction) {
 			const followUp = await reaction.followUp({
 				content: `You do not have enough credit to approve this poll`,
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 			return setTimeout(
 				() => followUp.delete().catch(console.error),

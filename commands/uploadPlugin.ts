@@ -48,7 +48,7 @@ export default {
 			return await interaction.followUp({
 				content:
 					"This command can only be used in a guild text channel",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		const payment = await spendCredit(interaction, {

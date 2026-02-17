@@ -300,7 +300,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				}),
 				onItemSelected: async (menuInteraction, result) => {
 					await menuInteraction.deferReply({
-						flags: [MessageFlags.Ephemeral],
+						flags: MessageFlags.Ephemeral,
 					});
 					const tickets = await result.getData();
 					const ticket = tickets?.find(

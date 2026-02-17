@@ -45,20 +45,20 @@ export default {
 		if (!fromUserCredit) {
 			return await interaction.reply({
 				content: "You do not have an account",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		if (!toUserCredit) {
 			return await interaction.reply({
 				content:
 					"The user you are transferring to does not have an account",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		if (user.id === interaction.user.id) {
 			return await interaction.reply({
 				content: "You cannot transfer credit to yourself",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -87,7 +87,7 @@ export default {
 			content: `Transferring ${amount} credit to ${userMention(user.id)} will cost a total fee of ${totalTransferringFee} credit. You will be charged a total of ${amount + totalTransferringFee} credit. Do you want to proceed? (React before ${time(
 				new Date(Date.now() + 1000 * 60 * 5),
 			)})`,
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 			components: [
 				new ActionRowBuilder<ButtonBuilder>().addComponents(
 					createApproveButton(),

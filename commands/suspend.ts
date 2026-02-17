@@ -19,7 +19,7 @@ export default {
 		);
 		return await interaction.reply({
 			content: "Server is suspending",
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 	},
 	permissions: PermissionFlags.suspend,

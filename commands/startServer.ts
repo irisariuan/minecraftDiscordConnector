@@ -32,7 +32,7 @@ export default {
 		if (!interaction.guild) {
 			return await interaction.followUp({
 				content: "This command can only be used in a server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -40,14 +40,14 @@ export default {
 		if (await server.isOnline.getData(true))
 			return await interaction.followUp({
 				content: "Server is already online",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		const allUsingPorts = await serverManager.getAllUsingPorts();
 		for (const port of allUsingPorts) {
 			if (server.config.port.includes(port)) {
 				return await interaction.followUp({
 					content: `Cannot start server because port \`${port}\` is already in use by another server`,
-					flags: [MessageFlags.Ephemeral],
+					flags: MessageFlags.Ephemeral,
 				});
 			}
 		}
@@ -81,7 +81,7 @@ export default {
 		) {
 			return await interaction.followUp({
 				content: "Failed to start the server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 

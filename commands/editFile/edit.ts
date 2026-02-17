@@ -60,7 +60,7 @@ export async function editHandler(
 	if (interaction.channel?.type !== ChannelType.GuildText) {
 		return await interaction.followUp({
 			content: "This command can only be used in a guild text channel",
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 	}
 

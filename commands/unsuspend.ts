@@ -18,7 +18,7 @@ export default {
 		);
 		return await interaction.reply({
 			content: "Server is resumed",
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 	},
 	permissions: PermissionFlags.suspend,

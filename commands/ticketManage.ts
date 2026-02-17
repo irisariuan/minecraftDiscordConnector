@@ -34,7 +34,7 @@ export default {
 	async execute({ interaction }) {
 		const group = interaction.options.getSubcommandGroup(true);
 
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		switch (group) {
 			case "ticket": {

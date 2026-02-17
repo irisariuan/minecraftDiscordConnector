@@ -13,7 +13,10 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { parseCommandOutput, runCommandOnServer } from "../lib/serverInstance/request";
+import {
+	parseCommandOutput,
+	runCommandOnServer,
+} from "../lib/serverInstance/request";
 import { sendMessagesToUsersById } from "../lib/utils";
 import { spendCredit } from "../lib/credit";
 
@@ -54,13 +57,13 @@ export default {
 		if (!interaction.guild) {
 			return await interaction.followUp({
 				content: "This command can only be used in a server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		if (server.config.apiPort === null) {
 			return await interaction.followUp({
 				content: "Running commands is not supported on this server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -94,7 +97,7 @@ export default {
 		) {
 			return await interaction.followUp({
 				content: "Failed to run this command",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		return await sendApprovalPoll(buildInteractionFetcher(interaction), {

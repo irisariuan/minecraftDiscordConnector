@@ -66,7 +66,7 @@ export default {
 	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		const subCommand = interaction.options.getSubcommand(true);
 		const user = interaction.options.getMentionable("user", true);

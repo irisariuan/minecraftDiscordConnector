@@ -14,7 +14,7 @@ export default {
 		if (apiPort === null) {
 			return await interaction.followUp({
 				content: "Server API is not enabled on this server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		const onlinePlayers = new CacheItem<Player[]>(null, {

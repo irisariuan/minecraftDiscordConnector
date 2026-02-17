@@ -1,8 +1,4 @@
-import {
-	italic,
-	MessageFlags,
-	SlashCommandBuilder,
-} from "discord.js";
+import { italic, MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
 	approvalSettings,
@@ -81,7 +77,7 @@ export default {
 	async execute({ interaction, serverManager }) {
 		const subcommand = interaction.options.getSubcommand(true);
 		const local = interaction.options.getBoolean("local") ?? false;
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		const server: Server | null = local
 			? await getUserSelectedServer(serverManager, interaction, true)
 			: null;

@@ -38,7 +38,7 @@ export default {
 		if (!interaction.guild) {
 			return await interaction.followUp({
 				content: "This command can only be used in a server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -47,7 +47,7 @@ export default {
 		if (!(await server.isOnline.getData(true)))
 			return await interaction.followUp({
 				content: "Server is already offline",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 
 		if (
@@ -58,7 +58,7 @@ export default {
 			return await interaction.followUp({
 				content:
 					"Server is already scheduled to shutdown, please cancel it first",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -104,7 +104,7 @@ export default {
 		) {
 			return await interaction.reply({
 				content: "Failed to stop the server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		sendApprovalPoll(buildInteractionFetcher(interaction), {

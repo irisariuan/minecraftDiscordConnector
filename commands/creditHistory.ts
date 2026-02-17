@@ -25,7 +25,7 @@ export default {
 	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({
-			flags: [MessageFlags.Ephemeral],
+			flags: MessageFlags.Ephemeral,
 		});
 		const user = interaction.options.getUser("user") ?? interaction.user;
 		if (

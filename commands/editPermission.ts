@@ -1,30 +1,28 @@
 import {
-    ComponentType,
-    GuildMember,
-    MessageFlags,
-    Role,
-    roleMention,
-    SlashCommandBuilder,
-    StringSelectMenuInteraction,
-    User,
-    userMention,
+	ComponentType,
+	GuildMember,
+	MessageFlags,
+	Role,
+	roleMention,
+	SlashCommandBuilder,
+	StringSelectMenuInteraction,
+	User,
+	userMention,
 } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
 import {
-    createPermissionResetButton,
-    createPermissionSelectionMenu,
-    PermissionSelectionMenu,
+	createPermissionResetButton,
+	createPermissionSelectionMenu,
+	PermissionSelectionMenu,
 } from "../lib/component/permission";
-import {
-    getUserSelectedServer
-} from "../lib/component/server";
+import { getUserSelectedServer } from "../lib/component/server";
 import { updateUserPermission } from "../lib/db";
 import {
-    allPermission,
-    appendPermission,
-    parsePermission,
-    PermissionFlags,
-    removePermission,
+	allPermission,
+	appendPermission,
+	parsePermission,
+	PermissionFlags,
+	removePermission,
 } from "../lib/permission";
 import { clamp } from "../lib/utils";
 
@@ -150,7 +148,7 @@ export default {
 		const users = interaction.options.getMentionable("users", true);
 		const force = interaction.options.getBoolean("force") ?? false;
 		const local = interaction.options.getBoolean("local") ?? false;
-		await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		const serverId = local
 			? (await getUserSelectedServer(serverManager, interaction, true))
 					?.id

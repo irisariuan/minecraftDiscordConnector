@@ -103,7 +103,7 @@ export default {
 			options: {
 				title: `Tickets for ${interaction.user.username}`,
 				mainColor: "Blue",
-				notFoundMessage: "You have no tickets.",
+				notFoundMessage: "You have no usable tickets.",
 			},
 			interactionFilter: (i) => i.user.id === interaction.user.id,
 			selectMenuTransform: (ticket: Ticket, index: number) => ({
@@ -115,7 +115,7 @@ export default {
 			}),
 			onItemSelected: async (menuInteraction, result) => {
 				await menuInteraction.deferReply({
-					flags: [MessageFlags.Ephemeral],
+					flags: MessageFlags.Ephemeral,
 				});
 				const tickets = await result.getData();
 				const ticket = tickets?.find(

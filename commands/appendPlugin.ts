@@ -16,7 +16,10 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../lib/permission";
-import { downloadPluginFile, listPluginVersions } from "../lib/serverInstance/plugin";
+import {
+	downloadPluginFile,
+	listPluginVersions,
+} from "../lib/serverInstance/plugin";
 import type { PluginListVersionItem } from "../lib/serverInstance/plugin/types";
 
 export default {
@@ -154,7 +157,7 @@ export default {
 				) {
 					await menuInteraction.followUp({
 						content: `Note: This plugin has dependencies: ${filteredDependencies.map((d) => `\`${d.file_name}\` (Version \`${d.version_id}\`)`).join(", ")}. You may need to download and append them as well.`,
-						flags: [MessageFlags.Ephemeral],
+						flags: MessageFlags.Ephemeral,
 					});
 				}
 				return true;

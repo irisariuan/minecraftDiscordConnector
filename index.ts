@@ -198,33 +198,37 @@ const giveCredits = process.argv.includes("-C")
 const currentSettings = await loadCreditSettings();
 console.log("Loaded custom settings");
 if (process.argv.includes("-C")) {
-	changeCreditSettings({
-		dailyGift: Number.parseInt(
-			await input({
-				message: "Daily gift amount?",
-				required: true,
-				default: (currentSettings.dailyGift ?? 5).toString(),
-				validate: (value) => {
-					const num = Number.parseInt(value);
-					if (isNaN(num) || num < 0)
-						return "Please enter a valid number bigger or equals to 0";
-					return true;
-				},
-			}),
-		),
-		giftMax: Number.parseInt(
-			await input({
-				message: "Gift users below this amount? (negative to disable)",
-				required: true,
-				default: (currentSettings.giftMax ?? 100).toString(),
-				validate: (value) => {
-					const num = Number.parseInt(value);
-					if (isNaN(num)) return "Please enter a valid number";
-					return true;
-				},
-			}),
-		),
-	}, serverManager);
+	changeCreditSettings(
+		{
+			dailyGift: Number.parseInt(
+				await input({
+					message: "Daily gift amount?",
+					required: true,
+					default: (currentSettings.dailyGift ?? 5).toString(),
+					validate: (value) => {
+						const num = Number.parseInt(value);
+						if (isNaN(num) || num < 0)
+							return "Please enter a valid number bigger or equals to 0";
+						return true;
+					},
+				}),
+			),
+			giftMax: Number.parseInt(
+				await input({
+					message:
+						"Gift users below this amount? (negative to disable)",
+					required: true,
+					default: (currentSettings.giftMax ?? 100).toString(),
+					validate: (value) => {
+						const num = Number.parseInt(value);
+						if (isNaN(num)) return "Please enter a valid number";
+						return true;
+					},
+				}),
+			),
+		},
+		serverManager,
+	);
 }
 if (
 	!compareArrays(
@@ -273,7 +277,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		) {
 			return interaction.reply({
 				content: "You do not have permission to use this command",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		const { commandName } = interaction;
@@ -283,7 +287,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		if (!command)
 			return interaction.reply({
 				content: "Command not found",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		if (
 			command.permissions &&
@@ -294,14 +298,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		) {
 			return interaction.reply({
 				content: "You do not have permission to use this command",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
 		if (!interaction.channel?.isSendable()) {
 			return interaction.reply({
 				content: "Cannot send messages in this channel",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		const errorHandler = (err: Error) => {
@@ -309,7 +313,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			interaction
 				.reply({
 					content: "An error occurred while executing the command",
-					flags: [MessageFlags.Ephemeral],
+					flags: MessageFlags.Ephemeral,
 				})
 				.catch(() => {
 					interaction
@@ -354,7 +358,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			return await interaction.reply({
 				content:
 					"Server is suspending, you do not have permission to use this command",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		if (
@@ -369,7 +373,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			}
 			return await interaction.reply({
 				content: `This command is not supported on \`${server.gameType}\` servers`,
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		if (
@@ -383,7 +387,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			}
 			return await interaction.reply({
 				content: "Server is not online",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		} else if (
 			command.features?.requireStoppedServer &&
@@ -396,7 +400,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			}
 			return await interaction.reply({
 				content: "Server is not stopped",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 

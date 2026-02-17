@@ -17,20 +17,20 @@ export default {
 		if (!interaction.guild) {
 			return await interaction.followUp({
 				content: "This command can only be used in a server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
 		if (!(await server.isOnline.getData(true)))
 			return await interaction.followUp({
 				content: "Server is offline",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		if (server.config.apiPort === null) {
 			return await interaction.followUp({
 				content:
 					"Server-side scheduled shutdown is not supported on this server",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		if (
@@ -39,7 +39,7 @@ export default {
 		)
 			return await interaction.followUp({
 				content: "No scheduled shutdown found",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		if (
 			compareAnyPermissions(
@@ -58,11 +58,11 @@ export default {
 			if (!success)
 				return await interaction.followUp({
 					content: "Failed to cancel scheduled shutdown",
-					flags: [MessageFlags.Ephemeral],
+					flags: MessageFlags.Ephemeral,
 				});
 			return await interaction.followUp({
 				content: "Cancelled scheduled shutdown",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		if (
@@ -75,7 +75,7 @@ export default {
 		) {
 			return await interaction.followUp({
 				content: "Failed to cancel the server shutdown",
-				flags: [MessageFlags.Ephemeral],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 

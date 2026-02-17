@@ -2,6 +2,7 @@ import {
 	ActionRowBuilder,
 	ComponentType,
 	MessageComponentInteraction,
+	MessageFlags,
 	StringSelectMenuInteraction,
 	type ChatInputCommandInteraction,
 	type ColorResolvable,
@@ -302,7 +303,7 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 	} = props;
 	const data = await result.getData();
 	if (!interaction.deferred && !interaction.replied)
-		await interaction.deferReply();
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 	if (!data || data.length <= 0) {
 		return await interaction.editReply({

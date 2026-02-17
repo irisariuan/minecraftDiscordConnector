@@ -279,7 +279,10 @@ export async function spendCredit(
 		return null;
 	}
 	if (selectedTicket && useTicket) {
-		const finalCost = calculatePaymentTicketEffect(selectedTicket.effect, cost);
+		const finalCost = calculatePaymentTicketEffect(
+			selectedTicket.effect,
+			cost,
+		);
 		if (!(await canSpendCredit(userId, finalCost))) {
 			return null;
 		}
