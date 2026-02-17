@@ -65,12 +65,22 @@ const client = new Client({
 });
 const serverManager = await createServerManager(client);
 
+console.log("Loading tickets...");
 getAllTickets().then(async (tickets) => {
+	console.log(
+		`Loaded ${tickets.length} tickets, adding to notification manager...`,
+	);
 	for (const ticket of tickets) {
 		const user = await client.users.fetch(ticket.userId).catch(() => null);
-		if (!user) continue;
+		if (!user) {
+			console.warn(
+				`User with ID ${ticket.userId} not found for ticket ${ticket.ticketId}, skipping...`,
+			);
+			continue;
+		}
 		ticketNotificationManager.addTicket(user, ticket);
 	}
+	console.log("All tickets added to notification manager");
 });
 
 if (!enablePlugins) {
