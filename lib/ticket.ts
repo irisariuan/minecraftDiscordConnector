@@ -37,6 +37,7 @@ import {
 	RequestComponentId,
 } from "./component/request";
 import { calculateTimeDiffToNow, getNextTimestamp, type Time } from "./utils";
+import { ticketEffectManager } from "./ticket/effect";
 export { type DbUserTicket, type DbTicketType };
 export enum TicketAction {
 	Use = "use",
@@ -107,6 +108,11 @@ export function isTicketAvailable(ticket: Ticket) {
 	if (ticket.maxUse !== null && ticket.maxUse > 0) {
 		return (ticket.histories?.length ?? 0) < ticket.maxUse;
 	}
+	if (
+		userUsableTicketEffects.includes(ticket.effect.effect) &&
+		ticketEffectManager.inUse(ticket.ticketId)
+	)
+		return false;
 	return true;
 }
 
