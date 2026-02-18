@@ -40,8 +40,14 @@ export class TicketEffectManager {
 	getUserActiveEffects(userId: string) {
 		const ticketIds = this.userUsageMap.get(userId) ?? [];
 		return ticketIds
-			.map((ticketId) => this.usageMap.get(ticketId))
-			.filter((effect): effect is EffectTimeout => effect !== undefined);
+			.map((ticketId) => ({
+				ticket: this.usageMap.get(ticketId),
+				ticketId,
+			}))
+			.filter(
+				(entry): entry is { ticket: EffectTimeout; ticketId: string } =>
+					entry.ticket !== undefined,
+			);
 	}
 
 	use(

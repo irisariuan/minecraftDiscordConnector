@@ -27,12 +27,46 @@ import { ticketEffectManager } from "../lib/ticket/effect";
 export default {
 	command: new SlashCommandBuilder()
 		.setName("useticket")
-		.setDescription("Use a ticket"),
+		.setDescription("Use a ticket")
+		.addSubcommand((subcommand) =>
+			subcommand
+				.setName("use")
+				.setDescription("Select one ticket to use"),
+		)
+		.addSubcommand((subcommand) =>
+			subcommand
+				.setName("check")
+				.setDescription("Check your active tickets"),
+		),
 	requireServer: false,
 	features: {
 		unsuspendable: true,
 	},
 	async execute({ interaction }) {
+		const subcommand = interaction.options.getSubcommand();
+		if (subcommand === "check") {
+			const activeEffects = ticketEffectManager.getUserActiveEffects(
+				interaction.user.id,
+			);
+			if (activeEffects.length === 0) {
+				await interaction.reply({
+					content: "You have no active ticket effects.",
+					ephemeral: true,
+				});
+				return;
+			}
+			const effectDescriptions = activeEffects
+				.map(({ ticket, ticketId }) => {
+					const expireDate = new Date(ticket.expireTime);
+					return `Effect: ${TicketEffectTypeNames[ticket.effect.effect] ?? "Unknown effect"} (${ticket.effect.value}), expires at ${time(expireDate)} (Ticket ID: \`${ticketId}\`)`;
+				})
+				.join("\n");
+			await interaction.reply({
+				content: `Your active ticket effects:\n${effectDescriptions}`,
+				ephemeral: true,
+			});
+			return;
+		}
 		await sendPaginationMessage({
 			interaction,
 			getResult: async () => {
@@ -162,6 +196,13 @@ async function handleReply(
 		interaction.user.id,
 		ticket.ticketId,
 		ticket.effect,
+		() => {
+			interaction.user
+				.send(
+					`Your ticket **${ticket.name}** effect (${ticket.effect.effect}: ${ticket.effect.value}) has passed.`,
+				)
+				.catch(() => null);
+		},
 	);
 	if (usage)
 		await response.update({

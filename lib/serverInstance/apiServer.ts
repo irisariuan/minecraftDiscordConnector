@@ -66,7 +66,8 @@ export function initApiServer(
 			(!parsed.data.disconnect &&
 				server.paymentManager.hasPaid(player.uuid)) ||
 			effects.some(
-				({ effect }) => effect.effect === TicketEffectType.FreePlay,
+				({ ticket: { effect } }) =>
+					effect.effect === TicketEffectType.FreePlay,
 			)
 		) {
 			return res.send(JSON.stringify({ kick: false }));
