@@ -19,7 +19,7 @@ export function createTicketEmbed(
 	const maxUseText =
 		ticket.maxUse !== null && ticket.maxUse > 0
 			? ` ${useCount}/${ticket.maxUse} uses`
-			: ` Used ${useCount} times (Infinite uses)`;
+			: ` Used ${useCount} times (Unlimited uses)`;
 	let isExpired = false;
 	let expireText = "No expiration date";
 	if (ticket.expiresAt) {

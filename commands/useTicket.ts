@@ -51,7 +51,7 @@ export default {
 			if (activeEffects.length === 0) {
 				await interaction.reply({
 					content: "You have no active ticket effects.",
-					ephemeral: true,
+					flags: MessageFlags.Ephemeral,
 				});
 				return;
 			}
@@ -63,7 +63,7 @@ export default {
 				.join("\n");
 			await interaction.reply({
 				content: `Your active ticket effects:\n${effectDescriptions}`,
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -76,25 +76,27 @@ export default {
 					ticketEffectTypes: userUsableTicketEffects,
 				});
 				return (
-					tickets?.toSorted((a, b) => {
-						// sort by availability, then by expiration date (soonest first), then by use count
-						return (
-							Number(isTicketAvailable(b)) -
-								Number(isTicketAvailable(a)) ||
-							(a.expiresAt?.getTime() ?? Infinity) -
-								(b.expiresAt?.getTime() ?? Infinity) ||
-							(a.histories?.length ?? 0) -
-								(b.histories?.length ?? 0)
-						);
-					}) ?? []
+					tickets
+						?.filter((ticket) => isTicketAvailable(ticket))
+						?.toSorted((a, b) => {
+							// sort by availability, then by expiration date (soonest first), then by use count
+							return (
+								Number(isTicketAvailable(b)) -
+									Number(isTicketAvailable(a)) ||
+								(a.expiresAt?.getTime() ?? Infinity) -
+									(b.expiresAt?.getTime() ?? Infinity) ||
+								(a.histories?.length ?? 0) -
+									(b.histories?.length ?? 0)
+							);
+						}) ?? []
 				);
 			},
 			formatter: (ticket: Ticket) => {
 				const useCount = ticket.histories?.length ?? 0;
 				const maxUseText =
 					ticket.maxUse !== null && ticket.maxUse > 0
-						? ` (${useCount}/${ticket.maxUse} uses)`
-						: ` (Used ${useCount} times)`;
+						? ` ${useCount}/${ticket.maxUse} uses`
+						: ` Used ${useCount} times (Unlimited uses)`;
 
 				// Add expiration info if ticket has an expiration date
 				let expireText = "No expiration date";
@@ -115,11 +117,7 @@ export default {
 						"Unknown effect"
 					} (${ticket.effect.value})\n${
 						ticket.description || "No description"
-					}\n${expireText}\nAvailability: ${
-						isTicketAvailable(ticket)
-							? "✅ Usable"
-							: "❌ Not usable"
-					}${maxUseText}`,
+					}\n${expireText}\n${maxUseText}`,
 				};
 			},
 			filterFunc: (filter?: string) => (ticket: Ticket) => {
