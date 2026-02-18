@@ -67,6 +67,7 @@ export default {
 			});
 			return;
 		}
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		await sendPaginationMessage({
 			interaction,
 			getResult: async () => {
