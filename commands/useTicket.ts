@@ -198,7 +198,7 @@ async function handleReply(
 		() => {
 			interaction.user
 				.send(
-					`Your ticket **${ticket.name}** effect (${ticket.effect.effect}: ${ticket.effect.value}) has passed.`,
+					`Your ticket **${ticket.name}** effect (${TicketEffectTypeNames[ticket.effect.effect]}: ${ticket.effect.value}) has passed.`,
 				)
 				.catch(() => null);
 		},
