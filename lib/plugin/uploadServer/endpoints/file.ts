@@ -3,7 +3,7 @@ import { existsSync } from "fs";
 import { readFile, rename, writeFile } from "fs/promises";
 import type { UploadServer } from "../../uploadServer";
 import { safeJoin } from "../../../utils";
-import { TokenType, UploadRequestSchema } from "../utils";
+import { isNbtExtension, TokenType, UploadRequestSchema } from "../utils";
 import { parseNBT, serializeNBT } from "../../../sharedLibrary";
 import { stringify, parse } from "json-bigint";
 import { TreeTagContainerType, type TreeTag } from "../../../treeView/types";
@@ -37,10 +37,15 @@ export function setupFileGetEndpoint(uploadServer: UploadServer) {
 				TokenType.ViewToken,
 			])
 		) {
-			const parseNbt = req.query.parseNbt === "true";
-			const isBedrock = req.query.isBedrock === "true";
 			const file = uploadServer.token.getEditToken(req.params.id);
 			if (!file) return res.status(404).send("File not found");
+			const isBedrock = req.query.isBedrock === "true";
+			const raw = req.query.raw === "true";
+			const extension = file.filename.substring(
+				file.filename.lastIndexOf("."),
+			);
+			const parseNbt =
+				isNbtExtension(extension) || req.query.parseNbt === "true";
 
 			try {
 				const filePath = safeJoin(
@@ -48,15 +53,18 @@ export function setupFileGetEndpoint(uploadServer: UploadServer) {
 					file.filename,
 				);
 
+				if (raw) {
+					return res.status(200).sendFile(filePath);
+				}
+
 				if (parseNbt) {
 					const rawContent = await readFile(filePath);
 					const parsedNbtData = parseNBT(rawContent, isBedrock);
 					return res.status(200).send(
 						stringify({
 							content: parsedNbtData,
-							raw: rawContent.toString("hex"),
-							readonly: true,
 							filename: file.filename,
+							isNbt: true,
 						}),
 					);
 				}
@@ -65,7 +73,7 @@ export function setupFileGetEndpoint(uploadServer: UploadServer) {
 				return res.status(200).json({
 					filename: file.filename,
 					content,
-					readonly: true,
+					isNbt: false,
 				});
 			} catch (err) {
 				console.error("Error reading file:", err);
@@ -127,7 +135,7 @@ export function setupFilePostEndpoint(uploadServer: UploadServer) {
 					isForce:
 						uploadServer.token.getTokenType(req.params.id) ===
 						TokenType.EditForceToken,
-					isNBT: extension === ".dat",
+					isNBT: isNbtExtension(extension),
 				});
 			}
 
@@ -274,7 +282,11 @@ export function setupFilePostEndpoint(uploadServer: UploadServer) {
 								parsedNbtTag,
 								parsed.data.compressionMethod,
 							);
-							if (!finalBuffer) {
+
+							if (
+								!finalBuffer ||
+								Buffer.isBuffer(finalBuffer.buffer)
+							) {
 								return res
 									.status(400)
 									.send("Failed to serialize NBT content");

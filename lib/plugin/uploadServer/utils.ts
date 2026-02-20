@@ -1,5 +1,6 @@
 import { randomUUIDv7 } from "bun";
 import z from "zod";
+import { removePrefix } from "../../utils";
 
 export interface FileBuffer {
 	buffer: Buffer;
@@ -64,3 +65,7 @@ export const UploadRequestSchema = z.discriminatedUnion("action", [
 		action: z.literal("metadata"),
 	}),
 ]);
+export function isNbtExtension(extension: string): boolean {
+	const nbtExtensions = ["dat", "nbt", "schematic", "schem", "dat_old"];
+	return nbtExtensions.includes(removePrefix(extension.toLowerCase(), "."));
+}

@@ -87,7 +87,7 @@ export default {
 			],
 		});
 		const promises: Promise<
-			Collection<Snowflake, Message> | ButtonInteraction | FileBuffer
+			Collection<Snowflake, Message> | ButtonInteraction | FileBuffer | null
 		>[] = [
 			cancelMessage.awaitMessageComponent({
 				filter: (i) => i.user.id === interaction.user.id,
@@ -101,7 +101,7 @@ export default {
 				time: 1000 * 60 * 30, // 30 minutes
 				max: 1,
 				errors: ["time"],
-			}),
+			}).catch(() => null),
 		];
 		let token: string | null = null;
 		if (UPLOAD_URL) {
@@ -118,8 +118,9 @@ export default {
 			interaction.deleteReply().catch(() => {});
 		};
 		const messages = await Promise.race(promises);
-		if (messages instanceof ButtonInteraction) {
-			await messages.reply("Upload cancelled.");
+		if (messages instanceof ButtonInteraction || messages === null) {
+			if (messages) await messages.reply("Upload cancelled.")
+			else await thread.send("Upload cancelled due to timeout.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
 			if (token) uploadServer.token.disposeToken(token);

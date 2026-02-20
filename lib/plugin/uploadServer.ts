@@ -16,6 +16,8 @@ import { setupUploadEndpoint } from "./uploadServer/endpoints/upload";
 import { setupDeleteTokenEndpoint } from "./uploadServer/endpoints/deleteToken";
 import { TokenManager } from "./uploadServer/tokenManager";
 
+const origins = CORS_ORIGIN?.split(",");
+
 function createUploadServer(uploadServer: UploadServer) {
 	const app = express();
 	const upload = multer({
@@ -25,7 +27,22 @@ function createUploadServer(uploadServer: UploadServer) {
 	});
 	const jsonParser = bodyParser.json();
 
-	app.use(cors({ origin: CORS_ORIGIN ?? "*" }));
+	app.use(
+		cors({
+			origin: (_, callback) => {
+				if (!origins) return callback(null, true);
+				return callback(
+					null,
+					origins.map((v) => {
+						if (v.startsWith("#regex:")) {
+							return new RegExp(v.slice(7));
+						}
+						return v;
+					}),
+				);
+			},
+		}),
+	);
 	app.use(
 		"/",
 		express.static(safeJoin(process.cwd(), "webUi", "dist", "client")),
