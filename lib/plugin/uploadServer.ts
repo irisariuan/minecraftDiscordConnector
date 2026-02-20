@@ -8,10 +8,11 @@ import { handler as ssrHandler } from "../../webUi/dist/server/entry.mjs";
 import { CORS_ORIGIN } from "../env";
 import { safeJoin } from "../utils";
 import { setupVerifyEndpoint } from "./uploadServer/endpoints/verify";
-import { setupFileEndpoint } from "./uploadServer/endpoints/file";
+import {
+	setupFileGetEndpoint,
+	setupFilePostEndpoint,
+} from "./uploadServer/endpoints/file";
 import { setupUploadEndpoint } from "./uploadServer/endpoints/upload";
-import { setupEditEndpoint } from "./uploadServer/endpoints/edit";
-import { setupViewEndpoint } from "./uploadServer/endpoints/view";
 import { setupDeleteTokenEndpoint } from "./uploadServer/endpoints/deleteToken";
 import { TokenManager } from "./uploadServer/tokenManager";
 
@@ -33,14 +34,13 @@ function createUploadServer(uploadServer: UploadServer) {
 
 	// Setup endpoints
 	app.get("/api/verify/:id", setupVerifyEndpoint(uploadServer));
-	app.get("/api/file/:id", setupFileEndpoint(uploadServer));
+	app.get("/api/file/:id", setupFileGetEndpoint(uploadServer));
+	app.post("/api/file/:id", jsonParser, setupFilePostEndpoint(uploadServer));
 	app.post(
 		"/api/upload/:id",
 		upload.single("upload"),
 		setupUploadEndpoint(uploadServer),
 	);
-	app.post("/api/edit/:id", jsonParser, setupEditEndpoint(uploadServer));
-	app.get("/api/view/:id", setupViewEndpoint(uploadServer));
 	app.delete(
 		"/api/token/:id",
 		jsonParser,
