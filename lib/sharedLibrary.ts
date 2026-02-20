@@ -57,20 +57,28 @@ export function serializeNBT(
 	return serializeNBTFromString(jsonString, compressionMethod);
 }
 
-function serializeNBTFromString(
+export function serializeNBTFromString(
 	json: string,
 	compressionMethod: "gzip" | "zlib" | "" = "",
-): { buffer: ArrayBuffer; size: number } {
-	const jsonBuffer = Buffer.from(json);
-	const compressionBuffer = Buffer.from(compressionMethod);
-	const outLength = Buffer.alloc(4);
-	const result = symbols.SerializeNBT(
-		jsonBuffer,
-		compressionBuffer,
-		outLength,
-	);
-	const outSize = outLength.readInt32LE(0);
-	const outBuffer = toArrayBuffer(result.ptr, 0, outSize);
-	symbols.FreeMemory(result.ptr);
-	return { buffer: outBuffer, size: outSize };
+): { buffer: ArrayBuffer; size: number } | null {
+	try {
+		const jsonBuffer = Buffer.from(json);
+		const compressionBuffer = Buffer.from(compressionMethod);
+		const outLength = Buffer.alloc(4);
+		const result = symbols.SerializeNBT(
+			jsonBuffer,
+			compressionBuffer,
+			outLength,
+		);
+		const outSize = outLength.readInt32LE(0);
+		if (outSize <= 0) return null;
+		// slice to create copy
+		const outBuffer = toArrayBuffer(result.ptr, 0, outSize).slice(0);
+		// Free the memory allocated by the shared library function
+		symbols.FreeMemory(result.ptr);
+		return { buffer: outBuffer, size: outSize };
+	} catch (e) {
+		console.error("Error in serializeNBTFromString:", e);
+		return null;
+	}
 }

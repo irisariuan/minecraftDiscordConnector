@@ -480,8 +480,7 @@ export function resolveSync<T, P extends void>(value: ResolvableSync<T, P>): T;
 export function resolveSync<T, P>(value: ResolvableSync<T, P>, param: P): T;
 export function resolveSync<T, P>(value: ResolvableSync<T, P>, param?: P): T {
 	if (typeof value === "function") {
-		if (!param) throw new Error("Cannot resolve value");
-		return (value as (param: P) => T)(param);
+		return (value as (param: P) => T)(param as P);
 	}
 	return value;
 }
@@ -498,8 +497,7 @@ export async function resolve<T, P>(
 	param?: P,
 ): Promise<T> {
 	if (typeof value === "function") {
-		if (!param) throw new Error("Cannot resolve async value");
-		return await (value as (param: P) => T | PromiseLike<T>)(param);
+		return await (value as (param: P) => T | PromiseLike<T>)(param as P);
 	}
 	return await value;
 }
