@@ -9,11 +9,7 @@ import {
 	PermissionFlags,
 	readPermission,
 } from "../../lib/permission";
-import {
-	changeCredit,
-	sendCreditNotification,
-	spendCredit,
-} from "../../lib/credit";
+import { refundCredit, spendCredit } from "../../lib/credit";
 import type { Server } from "../../lib/server";
 import { safeJoin, safeJoinWithoutError } from "../../lib/utils";
 import { existsSync } from "fs";
@@ -105,17 +101,11 @@ export async function deleteHandler(
 
 		// Check if file exists
 		if (!filepath || !existsSync(filepath)) {
-			await changeCredit({
-				userId: interaction.user.id,
-				change: -payment.changed,
-				serverId: server.id,
-				reason: "Delete File Request Failed Refund",
-			});
-			await sendCreditNotification({
+			await refundCredit({
 				user: interaction.user,
 				creditChanged: -payment.changed,
-				reason: "Delete File Request Failed Refund",
 				serverId: server.id,
+				reason: "Delete File Request Failed Refund",
 			});
 			return await interaction.editReply({
 				content: `File \`${filename}\` does not exist or is out of boundary.`,

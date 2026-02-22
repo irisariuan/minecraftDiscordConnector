@@ -16,8 +16,7 @@ import {
 } from "./component/approval";
 import {
 	spendCredit,
-	changeCredit,
-	sendCreditNotification,
+	refundCredit,
 	type Transaction,
 	type PartialTransaction,
 } from "./credit";
@@ -487,12 +486,7 @@ export async function updateApprovalMessage(
 			const amount = approval.transactions
 				.filter((c) => c.userId === reaction.user.id)
 				.reduce((a, b) => a + b.changed, 0);
-			await changeCredit({
-				userId: reaction.user.id,
-				change: -amount,
-				reason: "Approval Reaction Refund",
-			});
-			await sendCreditNotification({
+			await refundCredit({
 				user: reaction.user,
 				creditChanged: -amount,
 				reason: "Approval Reaction Refund",

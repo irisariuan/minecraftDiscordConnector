@@ -22,11 +22,7 @@ import {
 	createRequestComponent,
 	RequestComponentId,
 } from "../../lib/component/request";
-import {
-	changeCredit,
-	sendCreditNotification,
-	spendCredit,
-} from "../../lib/credit";
+import { refundCredit, spendCredit } from "../../lib/credit";
 import type { Server } from "../../lib/server";
 
 export function initEditSubcommand(subcommand: SlashCommandSubcommandBuilder) {
@@ -97,17 +93,11 @@ export async function editHandler(
 	});
 
 	if (!result) {
-		await changeCredit({
-			userId: interaction.user.id,
-			change: -payment.changed,
-			serverId: server.id,
-			reason: "Edit File Request Failed Refund",
-		});
-		await sendCreditNotification({
+		await refundCredit({
 			user: interaction.user,
 			creditChanged: -payment.changed,
-			reason: "Edit File Request Failed Refund",
 			serverId: server.id,
+			reason: "Edit File Request Failed Refund",
 		});
 		return await interaction.followUp({
 			content: `Failed to create edit session for file \`${filename}\`. It may not exist or is out of boundary.`,

@@ -50,13 +50,6 @@ export const UploadRequestSchema = z.discriminatedUnion("action", [
 		compressionMethod: z.enum(["gzip", "zlib"]).optional(),
 	}),
 	z.object({
-		action: z.literal("rename"),
-		newFilename: z.string(),
-	}),
-	z.object({
-		action: z.literal("delete"),
-	}),
-	z.object({
 		action: z.literal("fetch"),
 		parseNbt: z.boolean().optional(),
 		isBedrock: z.boolean().optional().default(false),

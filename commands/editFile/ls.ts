@@ -8,11 +8,10 @@ import {
 	type ChatInputCommandInteraction,
 	type MessageActionRowComponentBuilder,
 } from "discord.js";
-import {
-	changeCredit,
-	sendCreditNotification,
-	spendCredit,
-} from "../../lib/credit";
+import { existsSync } from "fs";
+import { CacheItem } from "../../lib/cache";
+import { refundCredit, spendCredit } from "../../lib/credit";
+import { sendPaginationMessage } from "../../lib/pagination";
 import type { Server } from "../../lib/server";
 import {
 	formatFileSize,
@@ -21,9 +20,6 @@ import {
 	validateAndReadDir,
 	type FileInfo,
 } from "../../lib/utils";
-import { existsSync, statSync } from "fs";
-import { sendPaginationMessage } from "../../lib/pagination";
-import { CacheItem } from "../../lib/cache";
 
 enum LsNavigationAction {
 	BackButton = "ls_back_button",
@@ -83,18 +79,14 @@ export async function lsHandler(
 		);
 		const isEmpty = !existsSync(dirpath);
 		if (isEmpty) {
-			await changeCredit({
-				userId: interaction.user.id,
-				change: -payment.changed,
-				serverId: server.id,
-				reason: "List Files Request Failed Refund",
-			});
-			await sendCreditNotification({
-				user: interaction.user,
-				creditChanged: -payment.changed,
-				reason: "List Files Request Failed Refund",
-				serverId: server.id,
-			});
+			if (payment.changed > 0) {
+				await refundCredit({
+					user: interaction.user,
+					creditChanged: -payment.changed,
+					serverId: server.id,
+					reason: "List Files Request Failed Refund",
+				});
+			}
 			return await interaction.editReply({
 				content: `Directory \`${currentPath || "(root)"}\` does not exist or is out of boundary.`,
 			});

@@ -4,13 +4,9 @@ import {
 	createRequestComponent,
 	RequestComponentId,
 } from "../lib/component/request";
+import { refundCredit, spendCredit } from "../lib/credit";
 import {
-	changeCredit,
-	sendCreditNotification,
-	spendCredit,
-} from "../lib/credit";
-import {
-	anyPerm,
+	orPerm,
 	comparePermission,
 	PermissionFlags,
 	readPermission,
@@ -84,17 +80,11 @@ export default {
 			});
 		}
 		if (reply.customId === RequestComponentId.Deny) {
-			await changeCredit({
-				userId: interaction.user.id,
-				change: -payment.changed,
-				serverId: server.id,
-				reason: "Delete Plugin Request Denied Refund",
-			});
-			await sendCreditNotification({
+			await refundCredit({
 				user: interaction.user,
 				creditChanged: -payment.changed,
-				reason: "Delete Plugin Request Denied Refund",
 				serverId: server.id,
+				reason: "Delete Plugin Request Denied Refund",
 			});
 			return await interaction.editReply({
 				content: "Request denied.",
@@ -107,7 +97,7 @@ export default {
 		});
 		return await deleteFunc();
 	},
-	permissions: anyPerm(
+	permissions: orPerm(
 		PermissionFlags.deletePlugin,
 		PermissionFlags.voteDeletePlugin,
 	),

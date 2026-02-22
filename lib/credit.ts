@@ -14,6 +14,7 @@ import {
 } from "discord.js";
 import { getUserById, newTransaction, setUserCredits } from "./db";
 import {
+	orPerm,
 	comparePermission,
 	PermissionFlags,
 	readPermission,
@@ -48,19 +49,24 @@ export interface Transaction {
 	serverTag: string | null;
 	historyId: string | null;
 }
-export type PartialTransaction = Omit<Transaction, "trackingId" | "historyId">;
+export type PartialTransaction = Omit<
+	Transaction,
+	"trackingId" | "historyId" | "serverTag"
+>;
+
+export interface SetCreditParams {
+	userId: string;
+	credit: number;
+	serverId?: number;
+	reason: string;
+}
 
 export async function setCredit({
 	userId,
 	credit,
 	serverId,
 	reason,
-}: {
-	userId: string;
-	credit: number;
-	serverId?: number;
-	reason: string;
-}) {
+}: SetCreditParams) {
 	const userCreditFetched = await getCredit(userId);
 	if (!userCreditFetched) return null;
 	await newTransaction({
@@ -84,19 +90,21 @@ export async function setCredit({
 	return userCreditFetched.currentCredit;
 }
 
+export interface ChangeCreditParams {
+	userId: string;
+	change: number;
+	serverId?: number;
+	reason: string;
+	ticketId?: string;
+}
+
 export async function changeCredit({
 	userId,
 	change,
 	serverId,
 	reason,
 	ticketId,
-}: {
-	userId: string;
-	change: number;
-	serverId?: number;
-	reason: string;
-	ticketId?: string;
-}) {
+}: ChangeCreditParams) {
 	const userCreditFetched = await getCredit(userId);
 	if (!userCreditFetched) return null;
 
@@ -188,11 +196,19 @@ export async function canSpendCredit(userId: string, cost: number) {
 	const permission = await readPermission(userId);
 	return (
 		credit.currentCredit >= cost ||
-		comparePermission(permission, PermissionFlags.creditFree)
+		comparePermission(
+			permission,
+			orPerm(PermissionFlags.noCreditCheck, PermissionFlags.skipPayment),
+		)
 	);
 }
 
-export async function spendCreditWithoutTicket(
+/**
+ * Helper function to spend credit without ticket selection, should not be called outside.
+ *
+ * Provide a empty acceptedTicketTypeIds to spendCredit instead
+ */
+async function spendCreditWithoutTicket(
 	user: User | PartialUser | GuildMember,
 	userCredit: UserCredit,
 	{ userId, cost, reason, serverId }: SpendCreditParams,
@@ -220,7 +236,6 @@ export async function spendCreditWithoutTicket(
 		creditAfter: userCredit.currentCredit - cost,
 		timestamp: Date.now(),
 		reason,
-		serverTag: null,
 		ticketUsed: null,
 	};
 }
@@ -236,6 +251,20 @@ export interface SpendCreditParams {
 	acceptedTicketTypeIds?: string[];
 }
 
+/**
+ * Spend credit for a user, if the user has enough credit, it will directly spend the credit.
+ *
+ * If the user has tickets that can be used for payment, it will ask the user to select a ticket or pay full price.
+ *
+ * If the user does not have enough credit and does not have any ticket, it will return null.
+ *
+ * After payment, it will send a notification to the user about the credit change.
+ *
+ * *Special case*: if the user has permission `skipPayment` (`1<<23`),
+ * it will not spend credit and directly return a mock successful transaction **without** creating any transaction history.
+ *
+ * This is useful for staff or other special users who should not be charged for their actions.
+ */
 export async function spendCredit(
 	interaction: Interaction,
 	params: SpendCreditParams,
@@ -248,6 +277,20 @@ export async function spendCredit(
 	});
 	const credit = await getCredit(userId);
 	if (!credit) return null;
+
+	const permission = await readPermission(userId, serverId);
+	if (comparePermission(permission, PermissionFlags.skipPayment)) {
+		return {
+			userId,
+			changed: 0,
+			originalAmount: 0,
+			creditBefore: credit.currentCredit,
+			creditAfter: credit.currentCredit,
+			timestamp: Date.now(),
+			reason: `${reason} (Payment skipped due to permissions)`,
+			ticketUsed: null,
+		};
+	}
 	if (
 		!tickets ||
 		params.acceptedTicketTypeIds?.length === 0 ||
@@ -309,7 +352,6 @@ export async function spendCredit(
 				creditAfter: credit.currentCredit - finalCost,
 				timestamp: Date.now(),
 				reason: reasonString,
-				serverTag: null,
 				ticketUsed: selectedTicket,
 			};
 		}
@@ -338,9 +380,30 @@ export async function spendCredit(
 		creditAfter: credit.currentCredit - cost,
 		timestamp: Date.now(),
 		reason,
-		serverTag: null,
 		ticketUsed: null,
 	};
+}
+
+/**
+ * Refund credit to user and send notification.
+ *
+ * This is usually used when an action failed after spending credit,
+ * so we need to refund the credit back to user.
+ */
+export async function refundCredit(
+	params: Omit<
+		SendCreditNotificationParams,
+		"cancellable" | "maxRefund" | "onRefund"
+	>,
+) {
+	const { user, creditChanged, serverId, reason } = params;
+	await changeCredit({
+		userId: user.id,
+		change: creditChanged,
+		serverId,
+		reason,
+	});
+	await sendCreditNotification(params);
 }
 
 interface SendCreditNotificationParams {
@@ -386,7 +449,7 @@ export async function sendCreditNotification({
 			components: cancellable
 				? [
 						new ActionRowBuilder<ButtonBuilder>().addComponents(
-							createCancelButton(),
+							createCancelTransactionButton(),
 						),
 					]
 				: [],
@@ -430,14 +493,16 @@ export enum CreditNotificationButtonId {
 	ApproveButton = "APPROVE_TRANSACTION",
 }
 
-export function createCancelButton() {
+// For other uses, use createRequestComponents
+
+export function createCancelTransactionButton() {
 	return new ButtonBuilder()
 		.setCustomId(CreditNotificationButtonId.CancelButton)
 		.setLabel("Cancel Transaction")
 		.setStyle(ButtonStyle.Danger);
 }
 
-export function createApproveButton() {
+export function createApproveTransactionButton() {
 	return new ButtonBuilder()
 		.setCustomId(CreditNotificationButtonId.ApproveButton)
 		.setLabel("Approve Transaction")

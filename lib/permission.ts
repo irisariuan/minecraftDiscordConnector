@@ -25,7 +25,7 @@ export const PermissionFlags = {
 	editPerm: 1 << 11,
 	repeatApproval: 1 << 12,
 
-	creditFree: 1 << 13,
+	noCreditCheck: 1 << 13,
 	creditEdit: 1 << 14,
 
 	gift: 1 << 15,
@@ -37,6 +37,7 @@ export const PermissionFlags = {
 	editFiles: 1 << 20,
 	editTicket: 1 << 21,
 	approveEditFiles: 1 << 22,
+	skipPayment: 1 << 23,
 } as const;
 
 export const allPermission = Object.values(PermissionFlags).reduce(
@@ -48,7 +49,7 @@ export const PERMISSION = `${process.cwd()}/data/permissions.json`;
 
 export type Permission = number | PermissionComparsion;
 
-export type PermissionCompareType = "any" | "all";
+export type PermissionCompareType = "any" | "all" | "not";
 export interface PermissionComparsion {
 	type: PermissionCompareType;
 	value: Permission[];
@@ -58,6 +59,8 @@ function compareNumberPermission(a: number, b: Permission): boolean {
 	if (typeof b === "number") return (a & b) === b;
 	if (b.type === "any")
 		return b.value.some((v) => compareNumberPermission(a, v));
+	if (b.type === "not")
+		return b.value.every((v) => !compareNumberPermission(a, v));
 	return b.value.every((v) => compareNumberPermission(a, v));
 }
 
@@ -163,15 +166,21 @@ export async function removePermission(
 }
 
 // Wrapper functions for PermissionComparsion
-export function anyPerm(...permissions: Permission[]): PermissionComparsion {
+export function orPerm(...permissions: Permission[]): PermissionComparsion {
 	return {
 		type: "any",
 		value: permissions,
 	};
 }
-export function allPerm(...permissions: Permission[]): PermissionComparsion {
+export function andPerm(...permissions: Permission[]): PermissionComparsion {
 	return {
 		type: "all",
+		value: permissions,
+	};
+}
+export function notPerm(...permissions: Permission[]): PermissionComparsion {
+	return {
+		type: "not",
 		value: permissions,
 	};
 }

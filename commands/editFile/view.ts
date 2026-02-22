@@ -41,15 +41,14 @@ export async function viewHandler(
 		interaction.options.getInteger("expiration") ?? 15;
 	const expirationTime = expirationMinutes * 60 * 1000; // Convert to milliseconds
 
-	// Charge credit for viewing file
-	const payment = await spendCredit(interaction, {
-		userId: interaction.user.id,
-		cost: server.creditSettings.viewFileFee,
-		reason: `View File ${filename}`,
-		serverId: server.id,
-	});
-
-	if (!payment) {
+	if (
+		!(await spendCredit(interaction, {
+			userId: interaction.user.id,
+			cost: server.creditSettings.viewFileFee,
+			reason: `View File ${filename}`,
+			serverId: server.id,
+		}))
+	) {
 		return await interaction.editReply({
 			content:
 				"You do not have enough credit to view files on this server.",

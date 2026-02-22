@@ -18,13 +18,9 @@ import {
 	createRequestComponent,
 	RequestComponentId,
 } from "../lib/component/request";
+import { spendCredit, refundCredit } from "../lib/credit";
 import {
-	spendCredit,
-	changeCredit,
-	sendCreditNotification,
-} from "../lib/credit";
-import {
-	anyPerm,
+	orPerm,
 	comparePermission,
 	getUsersWithMatchedPermission,
 	PermissionFlags,
@@ -87,21 +83,26 @@ export default {
 			],
 		});
 		const promises: Promise<
-			Collection<Snowflake, Message> | ButtonInteraction | FileBuffer | null
+			| Collection<Snowflake, Message>
+			| ButtonInteraction
+			| FileBuffer
+			| null
 		>[] = [
 			cancelMessage.awaitMessageComponent({
 				filter: (i) => i.user.id === interaction.user.id,
 				time: 1000 * 60 * 30, // 30 minutes
 				componentType: ComponentType.Button,
 			}),
-			thread.awaitMessages({
-				filter: (message) =>
-					message.attachments.size === 1 &&
-					message.author.id === interaction.user.id,
-				time: 1000 * 60 * 30, // 30 minutes
-				max: 1,
-				errors: ["time"],
-			}).catch(() => null),
+			thread
+				.awaitMessages({
+					filter: (message) =>
+						message.attachments.size === 1 &&
+						message.author.id === interaction.user.id,
+					time: 1000 * 60 * 30, // 30 minutes
+					max: 1,
+					errors: ["time"],
+				})
+				.catch(() => null),
 		];
 		let token: string | null = null;
 		if (UPLOAD_URL) {
@@ -119,22 +120,16 @@ export default {
 		};
 		const messages = await Promise.race(promises);
 		if (messages instanceof ButtonInteraction || messages === null) {
-			if (messages) await messages.reply("Upload cancelled.")
+			if (messages) await messages.reply("Upload cancelled.");
 			else await thread.send("Upload cancelled due to timeout.");
 			await thread.setLocked(true);
 			await thread.setArchived(true);
 			if (token) uploadServer.token.disposeToken(token);
-			changeCredit({
-				userId: interaction.user.id,
-				change: -payment.changed,
-				reason: "Refund for cancelled Upload Custom Mod to Server",
-				serverId: server.id,
-			});
-			sendCreditNotification({
+			refundCredit({
 				user: interaction.user,
 				creditChanged: -payment.changed,
-				reason: "Refund for cancelled Upload Custom Mod to Server",
 				serverId: server.id,
+				reason: "Refund for cancelled Upload Custom Mod to Server",
 			});
 			setTimeout(cleanUp, 1000 * 10);
 			return;
@@ -155,15 +150,10 @@ export default {
 				);
 				await thread.setLocked(true);
 				await thread.setArchived(true);
-				changeCredit({
-					userId: interaction.user.id,
-					change: -payment.changed,
-					serverId: server.id,
-					reason: "Refund for cancelled Upload Custom Mod to Server",
-				});
-				sendCreditNotification({
+				refundCredit({
 					user: interaction.user,
 					creditChanged: -payment.changed,
+					serverId: server.id,
 					reason: "Refund for cancelled Upload Custom Mod to Server",
 				});
 				setTimeout(cleanUp, 1000 * 10);
@@ -201,13 +191,7 @@ export default {
 				await thread.send(
 					`Failed to download the file, please check the URL or attachment.`,
 				);
-				changeCredit({
-					userId: interaction.user.id,
-					change: -payment.changed,
-					serverId: server.id,
-					reason: "Refund for failed to add uploaded Custom Mod to Server",
-				});
-				sendCreditNotification({
+				refundCredit({
 					user: interaction.user,
 					creditChanged: -payment.changed,
 					serverId: server.id,
@@ -279,13 +263,7 @@ export default {
 						await interaction.user.send(
 							`Failed to add your uploaded file (${filename ?? downloadingUrl}) to the server, please check the URL or attachment.`,
 						);
-						changeCredit({
-							userId: interaction.user.id,
-							change: -payment.changed,
-							serverId: server.id,
-							reason: "Refund for failed to add uploaded Custom Mod to Server",
-						});
-						sendCreditNotification({
+						refundCredit({
 							user: interaction.user,
 							creditChanged: -payment.changed,
 							serverId: server.id,
@@ -310,7 +288,7 @@ export default {
 			});
 		setTimeout(cleanUp, 1000 * 60 * 10);
 	},
-	permissions: anyPerm(
+	permissions: orPerm(
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 		PermissionFlags.upload,

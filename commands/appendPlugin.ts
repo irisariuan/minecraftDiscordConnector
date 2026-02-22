@@ -11,7 +11,7 @@ import {
 } from "../lib/component/request";
 import { sendPaginationMessage } from "../lib/pagination";
 import {
-	anyPerm,
+	orPerm,
 	comparePermission,
 	PermissionFlags,
 	readPermission,
@@ -164,7 +164,7 @@ export default {
 			},
 		});
 	},
-	permissions: anyPerm(
+	permissions: orPerm(
 		PermissionFlags.downloadPlugin,
 		PermissionFlags.voteDownloadPlugin,
 	),

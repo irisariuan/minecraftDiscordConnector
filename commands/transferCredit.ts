@@ -11,8 +11,8 @@ import type { CommandFile } from "../lib/commandFile";
 import {
 	spendCredit,
 	changeCredit,
-	createApproveButton,
-	createCancelButton,
+	createApproveTransactionButton,
+	createCancelTransactionButton,
 	CreditNotificationButtonId,
 	getCredit,
 	sendCreditNotification,
@@ -90,8 +90,8 @@ export default {
 			flags: MessageFlags.Ephemeral,
 			components: [
 				new ActionRowBuilder<ButtonBuilder>().addComponents(
-					createApproveButton(),
-					createCancelButton(),
+					createApproveTransactionButton(),
+					createCancelTransactionButton(),
 				),
 			],
 		});
@@ -140,6 +140,7 @@ export default {
 			cancellable: true,
 			maxRefund: amount,
 			onRefund: async (refundAmount) => {
+				if (refundAmount <= 0 || payment.changed <= 0) return;
 				await changeCredit({
 					userId: interaction.user.id,
 					change: -Math.min(refundAmount, payment.changed),

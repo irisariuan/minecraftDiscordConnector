@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { existsSync } from "fs";
-import { readFile, rename, writeFile } from "fs/promises";
+import { readFile, writeFile } from "fs/promises";
 import type { UploadServer } from "../../uploadServer";
 import { safeJoin } from "../../../utils";
 import { isNbtExtension, TokenType, UploadRequestSchema } from "../utils";
@@ -144,10 +144,6 @@ export function setupFilePostEndpoint(uploadServer: UploadServer) {
 					file.containingFolderPath,
 					file.filename,
 				);
-				if (!existsSync(filepath))
-					return res
-						.status(500)
-						.send("File not found or not readable");
 
 				// Diff token: must be checked first so the diff+NBT branch is reachable
 				if (
@@ -161,19 +157,14 @@ export function setupFilePostEndpoint(uploadServer: UploadServer) {
 						const rawContent = await readFile(filepath).catch(
 							() => null,
 						);
-						if (!rawContent)
-							return res
-								.status(500)
-								.send("File not found or not readable");
-						const parsedNbtData = parseNBT(
-							rawContent,
-							parsed.data.isBedrock,
-						);
+						const parsedNbtData = rawContent
+							? parseNBT(rawContent, parsed.data.isBedrock)
+							: null;
 						return res.status(200).send(
 							stringify({
 								edited: parse(diff.content),
 								raw: parsedNbtData,
-								rawBinary: rawContent.toString("hex"),
+								rawBinary: rawContent?.toString("hex"),
 							}),
 						);
 					}
@@ -183,9 +174,9 @@ export function setupFilePostEndpoint(uploadServer: UploadServer) {
 						const rawContent = await readFile(
 							filepath,
 							"utf-8",
-						).catch(() => "");
+						).catch(() => null);
 						return res.status(200).send(
-							JSON.stringify({
+							stringify({
 								edited: diff.content,
 								raw: rawContent,
 							}),
@@ -202,23 +193,22 @@ export function setupFilePostEndpoint(uploadServer: UploadServer) {
 					const rawContent = await readFile(filepath).catch(
 						() => null,
 					);
-					if (!rawContent)
-						return res
-							.status(500)
-							.send("File not found or not readable");
-					const parsedNbtData = parseNBT(
+					const parsedNbtData = rawContent ? parseNBT(
 						rawContent,
 						parsed.data.isBedrock,
-					);
+					) : null
 					return res.status(200).send(
 						stringify({
 							parsed: parsedNbtData,
-							raw: rawContent.toString("hex"),
+							raw: rawContent?.toString("hex"),
 						}),
 					);
 				}
 
 				// Non-diff, plain file
+				if (!existsSync(filepath)) {
+					return res.send("")
+				}
 				return res.sendFile(filepath);
 			}
 
@@ -356,21 +346,6 @@ export function setupFilePostEndpoint(uploadServer: UploadServer) {
 					default:
 						return res.status(400).send("Invalid edit token type");
 				}
-			}
-
-			case "rename": {
-				const { newFilename } = parsed.data;
-				const finalPath = safeJoin(
-					file.containingFolderPath,
-					newFilename,
-				);
-				await rename(file.filename, finalPath);
-				return res.status(200).send("File renamed successfully");
-			}
-
-			case "delete": {
-				await rename(file.filename, `${file}.deleted`);
-				return res.status(200).send("File deleted successfully");
 			}
 
 			default:
