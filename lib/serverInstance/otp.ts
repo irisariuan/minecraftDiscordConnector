@@ -39,5 +39,20 @@ export function createOtpInputModal() {
 		.setCustomId(OTPAction.OTP_MODAL)
 		.setTitle("OTP")
 		.addLabelComponents(label);
-	return modal
+	return modal;
+}
+
+/**
+ * Lookup Minecraft player profile by UUID or Player name using Minecraft Services API
+ * @param identifier UUID or Player name
+ */
+export async function lookupPlayerByIdentifier(identifier: string) {
+	const res = await fetch(
+		"https://api.minecraftservices.com/minecraft/profile/lookup/" +
+			identifier,
+	);
+	if (!res.ok) return null;
+	const data = await res.json().catch(() => null);
+	if (!data || !data.id || !data.name) return null;
+	return data as { id: string; name: string };
 }
