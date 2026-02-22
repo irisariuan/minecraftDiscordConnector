@@ -63,15 +63,21 @@ export interface CommandFile<RequireServer extends boolean> {
 	permissions?: Permission;
 	ephemeral?: RequireServer extends true ? boolean : never;
 }
+export interface LoadedCommandFile<
+	RequireServer extends boolean,
+> extends CommandFile<RequireServer> {
+	isPlugin: boolean;
+}
 
 export async function loadCommands(loadPlugins = true) {
 	const glob = new Bun.Glob("commands/*.ts");
 	const paths = Array.from(glob.scanSync(process.cwd()));
+	const pluginPaths: string[] = [];
 	if (loadPlugins) {
 		const pluginGlob = new Bun.Glob("plugins/**/*.command.ts");
-		paths.push(...Array.from(pluginGlob.scanSync(process.cwd())));
+		pluginPaths.push(...Array.from(pluginGlob.scanSync(process.cwd())));
 	}
-	const commands: CommandFile<boolean>[] = [];
+	const commands: LoadedCommandFile<boolean>[] = [];
 
 	for (const path of paths) {
 		const commandFile = (
@@ -83,7 +89,20 @@ export async function loadCommands(loadPlugins = true) {
 			).catch(() => null)
 		)?.default;
 		if (!commandFile) continue;
-		commands.push(commandFile);
+		commands.push({ ...commandFile, isPlugin: false });
+	}
+
+	for (const path of pluginPaths) {
+		const commandFile = (
+			await Promise.try(
+				() =>
+					import(safeJoin(process.cwd(), path)) as Promise<{
+						default: CommandFile<boolean>;
+					}>,
+			).catch(() => null)
+		)?.default;
+		if (!commandFile) continue;
+		commands.push({ ...commandFile, isPlugin: true });
 	}
 
 	return commands;

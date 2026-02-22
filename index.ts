@@ -65,7 +65,7 @@ const client = new Client({
 });
 const serverManager = await createServerManager(client);
 
-if (!enablePlugins) {
+if (enablePlugins) {
 	console.log("Running plugin scripts...");
 	const stime = performance.now();
 	const scriptPaths = getAllPluginScriptPaths();
@@ -197,7 +197,7 @@ const giveCredits = process.argv.includes("-C")
 	: 0;
 
 const currentSettings = await loadCreditSettings();
-console.log("Loaded custom settings");
+console.log("Loaded custom credit settings");
 if (process.argv.includes("-C")) {
 	changeCreditSettings(
 		{
@@ -241,7 +241,9 @@ if (
 	await registerCommands(commands);
 	console.log(
 		"Registered commands",
-		commands.map((v) => v.command.name).join(", "),
+		commands
+			.map((v) => `${v.command.name}${v.isPlugin ? " (Plugin)" : ""}`)
+			.join(", "),
 	);
 }
 
