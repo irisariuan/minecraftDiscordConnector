@@ -4,23 +4,20 @@ import {
 	SlashCommandBuilder,
 	time,
 } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
+import type { CommandFile } from "../../../lib/commandFile";
 import {
 	createRequestComponent,
 	RequestComponentId,
-} from "../lib/component/request";
-import { sendPaginationMessage } from "../lib/pagination";
+} from "../../../lib/component/request";
+import { sendPaginationMessage } from "../../../lib/pagination";
 import {
 	orPerm,
 	comparePermission,
 	PermissionFlags,
 	readPermission,
-} from "../lib/permission";
-import {
-	downloadPluginFile,
-	listPluginVersions,
-} from "../lib/serverInstance/plugin";
-import type { PluginListVersionItem } from "../lib/serverInstance/plugin/types";
+} from "../../../lib/permission";
+import { downloadPluginFile, listPluginVersions } from "../lib";
+import type { PluginListVersionItem } from "../types";
 
 export default {
 	command: new SlashCommandBuilder()

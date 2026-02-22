@@ -1,12 +1,12 @@
 import { SlashCommandBuilder, time } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
-import { sendPaginationMessage } from "../lib/pagination";
-import { listPluginVersions, searchPlugins } from "../lib/serverInstance/plugin";
+import type { CommandFile } from "../../../lib/commandFile";
+import { sendPaginationMessage } from "../../../lib/pagination";
+import { listPluginVersions, searchPlugins } from "../lib";
 import {
 	type PluginListVersionItem,
 	type PluginSearchQueryItem,
-} from "../lib/serverInstance/plugin/types";
-import { trimTextWithSuffix } from "../lib/utils";
+} from "../types";
+import { trimTextWithSuffix } from "../../../lib/utils";
 
 export default {
 	command: new SlashCommandBuilder()
