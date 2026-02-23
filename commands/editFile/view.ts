@@ -51,8 +51,7 @@ export async function viewHandler(
 		}))
 	) {
 		return await interaction.editReply({
-			content:
-				"You do not have enough credit to view files on this server.",
+			content: "Failed to view files on this server.",
 		});
 	}
 

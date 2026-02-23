@@ -57,8 +57,7 @@ export async function deleteHandler(
 
 	if (!payment) {
 		return await interaction.editReply({
-			content:
-				"You do not have enough credit to delete files on this server.",
+			content: "Failed to delete files on this server.",
 		});
 	}
 

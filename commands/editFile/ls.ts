@@ -60,8 +60,7 @@ export async function lsHandler(
 
 	if (!payment) {
 		return await interaction.editReply({
-			content:
-				"You do not have enough credit to list files on this server.",
+			content: "Failed to list files on this server.",
 		});
 	}
 

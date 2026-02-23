@@ -71,8 +71,7 @@ export async function editHandler(
 
 	if (!payment) {
 		return await interaction.followUp({
-			content:
-				"You do not have enough credit to edit files on this server.",
+			content: "Failed to edit files on this server.",
 		});
 	}
 

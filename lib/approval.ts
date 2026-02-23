@@ -535,7 +535,7 @@ export async function updateApprovalMessage(
 			});
 			if (!transaction) {
 				const followUp = await reaction.followUp({
-					content: `You do not have enough credit to approve this poll`,
+					content: "Failed to approve this poll",
 					flags: MessageFlags.Ephemeral,
 				});
 				return setTimeout(
