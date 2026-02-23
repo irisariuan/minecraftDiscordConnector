@@ -17,21 +17,21 @@ model User {
 }
 
 model Transaction {
-    id                     String         @id @default(uuid())
+    id                     String          @id @default(uuid())
     amount                 Int
     finalAmount            Int?
-    ticketId               String?
-    ticket                 UserTicket?    @relation(fields: [ticketId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+    ticketId               String[]
+    ticket                 UserTicket[]
     beforeAmount           Int
     afterAmount            Int
     reason                 String?
-    timestamp              DateTime       @default(now())
+    timestamp              DateTime        @default(now())
     userId                 String
+    user                   User            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
     serverId               Int?
-    server                 Server?        @relation(fields: [serverId], references: [id], onDelete: SetNull, onUpdate: SetNull)
-    user                   User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-    relatedTicketHistoryId String?
-    relatedTicketHistory   TicketHistory? @relation(fields: [relatedTicketHistoryId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+    server                 Server?         @relation(fields: [serverId], references: [id], onDelete: SetNull, onUpdate: SetNull)
+    relatedTicketHistoryId String[]
+    relatedTicketHistory   TicketHistory[]
 
     @@index([userId])
 }
@@ -96,7 +96,7 @@ model Ticket {
     description String?
     name        String
     effect      String
-    value       Float
+    value       Float?
     userTickets UserTicket[]
 }
 

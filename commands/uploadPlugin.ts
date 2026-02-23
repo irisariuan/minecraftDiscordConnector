@@ -47,8 +47,8 @@ export default {
 				flags: MessageFlags.Ephemeral,
 			});
 		}
-		const payment = await spendCredit(interaction, {
-			userId: interaction.user.id,
+		const payment = await spendCredit(interaction.channel, {
+			user: interaction.user,
 			cost: server.creditSettings.uploadFileFee,
 			reason: "Upload Custom Mod to Server",
 			serverId: server.id,

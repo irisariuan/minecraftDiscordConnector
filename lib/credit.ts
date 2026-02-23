@@ -7,6 +7,7 @@ import {
 	MessageFlags,
 	time,
 	userMention,
+	type Channel,
 	type GuildMember,
 	type Interaction,
 	type PartialUser,
@@ -20,8 +21,8 @@ import {
 	readPermission,
 } from "./permission";
 import {
-	calculatePaymentTicketEffect,
-	getUserSelectedTicket,
+	calculatePaymentTicketEffects,
+	getUserSelectedTickets,
 	getUserSelectTicketChannel,
 	getUserTicketsByUserId,
 	paymentTicketEffects,
@@ -29,6 +30,8 @@ import {
 	useUserTicket,
 	type Ticket,
 } from "./ticket";
+import { formatTicketNames } from "./utils/ticket";
+import { resolve, type Resolvable } from "./utils";
 
 export interface UserCredit {
 	userId: string;
@@ -42,12 +45,12 @@ export interface Transaction {
 	creditBefore: number;
 	changed: number;
 	originalAmount: number;
-	ticketUsed: Ticket | null;
+	ticketUsed: Ticket[] | null;
 	timestamp: number;
 	reason?: string;
 	trackingId: string;
 	serverTag: string | null;
-	historyId: string | null;
+	historyId: string[] | null;
 }
 export type PartialTransaction = Omit<
 	Transaction,
@@ -95,7 +98,7 @@ export interface ChangeCreditParams {
 	change: number;
 	serverId?: number;
 	reason: string;
-	ticketId?: string;
+	ticketId?: string[];
 }
 
 export async function changeCredit({
@@ -123,11 +126,7 @@ export async function changeCredit({
 		beforeAmount: userCreditFetched.currentCredit,
 		amount: change,
 		ticket: {
-			connect: ticketId
-				? {
-						id: ticketId,
-					}
-				: undefined,
+			connect: ticketId?.map((id) => ({ id })),
 		},
 		reason,
 		timestamp: new Date(),
@@ -168,21 +167,19 @@ export async function getCredit(userId: string): Promise<UserCredit | null> {
 					reason: v.reason || undefined,
 					trackingId: v.id.toString(),
 					serverTag: v.server?.tag ?? null,
-					ticketUsed: v.ticket
-						? {
-								ticketId: v.ticket.id,
-								maxUse: v.ticket.maxUse ?? null,
-								name: v.ticket.ticket.name,
-								description: v.ticket.ticket.description,
-								reason: v.ticket.reason,
-								ticketTypeId: v.ticket.ticket.id,
-								effect: {
-									effect: v.ticket.ticket
-										.effect as TicketEffectType,
-									value: v.ticket.ticket.value,
-								},
-							}
-						: null,
+					ticketUsed:
+						v.ticket.map((t) => ({
+							ticketId: t.id,
+							maxUse: t.maxUse ?? null,
+							name: t.ticket.name,
+							description: t.ticket.description,
+							reason: t.reason,
+							ticketTypeId: t.ticket.id,
+							effect: {
+								effect: t.ticket.effect as TicketEffectType,
+								value: t.ticket.value,
+							},
+						})) ?? null,
 					historyId: v.relatedTicketHistoryId,
 				}),
 			)
@@ -211,13 +208,13 @@ export async function canSpendCredit(userId: string, cost: number) {
 async function spendCreditWithoutTicket(
 	user: User | PartialUser | GuildMember,
 	userCredit: UserCredit,
-	{ userId, cost, reason, serverId }: SpendCreditParams,
+	{ cost, reason, serverId }: Omit<SpendCreditParams, "user">,
 ): Promise<PartialTransaction | null> {
-	if (!(await canSpendCredit(userId, cost))) {
+	if (!(await canSpendCredit(user.id, cost))) {
 		return null;
 	}
 	await changeCredit({
-		userId,
+		userId: user.id,
 		change: -cost,
 		reason,
 		serverId,
@@ -229,7 +226,7 @@ async function spendCreditWithoutTicket(
 		serverId,
 	});
 	return {
-		userId,
+		userId: user.id,
 		changed: -cost,
 		originalAmount: -cost,
 		creditBefore: userCredit.currentCredit,
@@ -240,7 +237,7 @@ async function spendCreditWithoutTicket(
 	};
 }
 export interface SpendCreditParams {
-	userId: string;
+	user: User | GuildMember;
 	cost: number;
 	serverId?: number;
 	reason: string;
@@ -249,6 +246,17 @@ export interface SpendCreditParams {
 	 * Undefined represent allowing all tickets
 	 */
 	acceptedTicketTypeIds?: string[];
+	mustUseTickets?: boolean;
+	skipPayment?: Resolvable<boolean>;
+	/**
+	 * When this param is provided, the default canSpendCredit check will be skipped, and the function will directly call this callback to check if the credit can be spent.
+	 */
+	onBeforeSpend?: (params: {
+		user: User | GuildMember;
+		finalCost: number;
+		originalCost: number;
+		tickets?: Ticket[];
+	}) => Resolvable<boolean>;
 }
 
 /**
@@ -266,22 +274,31 @@ export interface SpendCreditParams {
  * This is useful for staff or other special users who should not be charged for their actions.
  */
 export async function spendCredit(
-	interaction: Interaction,
+	channel: Channel | null,
 	params: SpendCreditParams,
 ): Promise<PartialTransaction | null> {
-	const { cost, reason, userId, serverId } = params;
+	const {
+		cost,
+		reason,
+		user,
+		serverId,
+		mustUseTickets,
+		skipPayment,
+		onBeforeSpend,
+	} = params;
 	const tickets = await getUserTicketsByUserId({
-		userId,
+		userId: user.id,
 		ticketTypeIds: params.acceptedTicketTypeIds,
 		ticketEffectTypes: paymentTicketEffects,
 	});
-	const credit = await getCredit(userId);
+	if (mustUseTickets && tickets?.length === 0) return null;
+	const credit = await getCredit(user.id);
 	if (!credit) return null;
 
-	const permission = await readPermission(userId, serverId);
+	const permission = await readPermission(user.id, serverId);
 	if (comparePermission(permission, PermissionFlags.skipPayment)) {
 		return {
-			userId,
+			userId: user.id,
 			changed: 0,
 			originalAmount: 0,
 			creditBefore: credit.currentCredit,
@@ -295,25 +312,32 @@ export async function spendCredit(
 		!tickets ||
 		params.acceptedTicketTypeIds?.length === 0 ||
 		tickets.length === 0 ||
-		!interaction.channel?.isSendable()
+		!channel?.isSendable()
 	) {
-		return spendCreditWithoutTicket(interaction.user, credit, params);
+		return spendCreditWithoutTicket(user, credit, params);
 	}
-	const { channel, cleanUp, createdChannel } =
-		await getUserSelectTicketChannel(interaction.channel, interaction.user);
-	const message = await channel.send({
-		content: `${createdChannel ? "" : `${userMention(interaction.user.id)}\n`}You need to pay \`${cost}\` credits for this action. You have \`${credit.currentCredit}\` credits.\nYou can also use a ticket to reduce the cost.`,
+	const {
+		channel: threadChannel,
+		cleanUp,
+		createdChannel,
+	} = await getUserSelectTicketChannel(channel, user);
+	const message = await threadChannel.send({
+		content: `${createdChannel ? "" : `${userMention(user.id)}\n`}You need to pay \`${cost}\` credits for this action. You have \`${credit.currentCredit}\` credits.\nYou can also use a ticket to reduce the cost.`,
 	});
 	const {
 		cancelled,
-		ticket: selectedTicket,
+		tickets: selectedTickets,
 		useTicket,
-	} = await getUserSelectedTicket(message, userId, tickets, {
+	} = await getUserSelectedTickets(message, user.id, tickets, {
 		confirmationMessage: (ticket) => {
-			const finalCost = calculatePaymentTicketEffect(ticket.effect, cost);
+			const finalCost = calculatePaymentTicketEffects(
+				ticket.map((t) => t.effect),
+				cost,
+			);
 			return `After using this ticket, you will have to pay \`${finalCost}\` credits`;
 		},
 		insideThread: createdChannel,
+		hideUseWithoutTicket: mustUseTickets,
 	});
 	await cleanUp(message);
 
@@ -321,59 +345,74 @@ export async function spendCredit(
 		console.error("No ticket selected, cancelling payment.");
 		return null;
 	}
-	if (selectedTicket && useTicket) {
-		const finalCost = calculatePaymentTicketEffect(
-			selectedTicket.effect,
+	if (selectedTickets && useTicket) {
+		const finalCost = calculatePaymentTicketEffects(
+			selectedTickets.map((t) => t.effect),
 			cost,
 		);
-		if (!(await canSpendCredit(userId, finalCost))) {
-			return null;
-		}
-		if (await useUserTicket(selectedTicket.ticketId, reason)) {
-			const reasonString = `${reason} (Using Ticket: ${selectedTicket.name}, saved ${cost - finalCost} credits)`;
-			await changeCredit({
-				userId,
-				change: -finalCost,
-				reason: reasonString,
-				serverId,
-				ticketId: selectedTicket.ticketId,
-			});
-			await sendCreditNotification({
-				user: interaction.user,
-				creditChanged: -finalCost,
-				reason: reasonString,
-				serverId,
-			});
+		if (onBeforeSpend) {
+			if (
+				(await resolve(
+					onBeforeSpend({
+						user,
+						finalCost,
+						originalCost: cost,
+						tickets: selectedTickets,
+					}),
+				)) === false
+			)
+				return null;
+		} else if (!(await canSpendCredit(user.id, finalCost))) return null;
+		if (
+			await useUserTicket(
+				selectedTickets.map((v) => v.ticketId),
+				reason,
+			)
+		) {
+			const reasonString = `${reason} (Using Ticket(s): ${formatTicketNames(selectedTickets)}, saved ${cost - finalCost} credits)`;
+			if (!(await resolve(skipPayment))) {
+				await chargeCredit({
+					user: user,
+					creditChanged: -finalCost,
+					reason: reasonString,
+					serverId,
+				});
+			}
 			return {
-				userId,
+				userId: user.id,
 				changed: -finalCost,
 				originalAmount: -cost,
 				creditBefore: credit.currentCredit,
 				creditAfter: credit.currentCredit - finalCost,
 				timestamp: Date.now(),
 				reason: reasonString,
-				ticketUsed: selectedTicket,
+				ticketUsed: selectedTickets,
 			};
 		}
 		await message.edit({
 			content: "Failed to use the selected ticket. Paying full price.",
 		});
 	}
-	if (!(await canSpendCredit(userId, cost))) return null;
-	await changeCredit({
-		userId,
-		change: -cost,
-		reason,
-		serverId,
-	});
-	await sendCreditNotification({
-		user: interaction.user,
-		creditChanged: -cost,
-		reason,
-		serverId,
-	});
+	if (onBeforeSpend) {
+		if (
+			(await onBeforeSpend({
+				user,
+				originalCost: cost,
+				finalCost: cost,
+			})) === false
+		)
+			return null;
+	} else if (!(await canSpendCredit(user.id, cost))) return null;
+	if (!(await resolve(skipPayment))) {
+		await chargeCredit({
+			user: user,
+			creditChanged: -cost,
+			reason,
+			serverId,
+		});
+	}
 	return {
-		userId,
+		userId: user.id,
 		changed: -cost,
 		originalAmount: -cost,
 		creditBefore: credit.currentCredit,
@@ -382,6 +421,17 @@ export async function spendCredit(
 		reason,
 		ticketUsed: null,
 	};
+}
+
+export async function chargeCredit(params: SendCreditNotificationParams) {
+	const { user, creditChanged, serverId, reason } = params;
+	await changeCredit({
+		userId: user.id,
+		change: creditChanged,
+		serverId,
+		reason,
+	});
+	await sendCreditNotification(params);
 }
 
 /**
@@ -414,6 +464,9 @@ interface SendCreditNotificationParams {
 	silent?: boolean;
 	cancellable?: boolean;
 	maxRefund?: number;
+	/**
+	 * @param refundAmount Positive
+	 */
 	onRefund?: (refundAmount: number) => unknown;
 }
 

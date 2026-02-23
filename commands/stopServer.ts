@@ -95,8 +95,8 @@ export default {
 				: `Stop Server (${server.config.tag ?? `Server #${server.id}`})`;
 
 		if (
-			!(await spendCredit(interaction, {
-				userId: interaction.user.id,
+			!(await spendCredit(interaction.channel, {
+				user: interaction.user,
 				cost: server.creditSettings.newStopServerPollFee,
 				reason: "New Stop Server Poll",
 				serverId: server.id,

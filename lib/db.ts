@@ -239,6 +239,10 @@ export async function getRawUserTicket(data: Prisma.UserTicketFindUniqueArgs) {
 	return await prisma.userTicket.findUnique(data);
 }
 
+export async function getRawUserTickets(data: Prisma.UserTicketFindManyArgs) {
+	return await prisma.userTicket.findMany(data);
+}
+
 export async function createRawUserTicket(data: Prisma.UserTicketCreateArgs) {
 	return await prisma.userTicket.create(data);
 }
@@ -263,6 +267,13 @@ export async function createTicketHistory(
 ) {
 	return await prisma.ticketHistory.create(data);
 }
+
+export async function createBulkTicketHistories(
+	data: Prisma.TicketHistoryCreateManyInput[],
+) {
+	return await prisma.ticketHistory.createMany({ data });
+}
+
 export async function countTicketHistories(ticketId: string) {
 	return await prisma.ticketHistory.count({ where: { ticketId } });
 }

@@ -13,8 +13,8 @@ export default {
 	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-		await spendCredit(interaction, {
-			userId: interaction.user.id,
+		await spendCredit(interaction.channel, {
+			user: interaction.user,
 			cost: settings.refreshDnsFee,
 			reason: "Refresh DNS Record",
 		});

@@ -14,12 +14,7 @@ import {
 	createApprovalMessageComponent,
 	parseApprovalComponentId,
 } from "./component/approval";
-import {
-	spendCredit,
-	refundCredit,
-	type Transaction,
-	type PartialTransaction,
-} from "./credit";
+import { spendCredit, refundCredit, type PartialTransaction } from "./credit";
 import {
 	compareAnyPermissions,
 	comparePermission,
@@ -72,16 +67,19 @@ export interface ApprovalOptions {
 	onSuccess: (
 		approval: Approval,
 		message: Message | PartialMessage,
-	) => Promise<unknown>;
+	) => unknown;
 	onFailure?: (
 		approval: Approval,
 		message: Message | PartialMessage,
-	) => Promise<unknown>;
+	) => unknown;
 	onTimeout?: (
 		approval: Approval,
 		message: Message | PartialMessage,
-	) => Promise<unknown>;
-	canRepeatApprove?: Resolvable<boolean, [User, Approval, Server]>;
+	) => unknown;
+	canRepeatApprove?: Resolvable<
+		boolean,
+		{ user: User; approval: Approval; server: Server }
+	>;
 }
 
 export const MESSAGE_VALID_TIME = 14 * 60 * 1000; // 14 minutes, since discord message valid time is 15 minutes
@@ -120,7 +118,7 @@ export function newApproval(
 		approvalIds: [],
 		disapprovalIds: [],
 		timeout: setTimeout(
-			() => timeoutCleanUpFunc,
+			timeoutCleanUpFunc,
 			approval.validTill - Date.now(),
 		),
 		superStatus: null,
@@ -373,13 +371,11 @@ export async function updateApprovalMessage(
 		userPerm,
 		PermissionFlags.superApprove,
 	);
-	const canRepeatApprove = approval.options.canRepeatApprove
-		? await resolve(approval.options.canRepeatApprove, [
-				reaction.user,
-				approval,
-				server,
-			])
-		: comparePermission(userPerm, PermissionFlags.repeatApproval);
+	let paymentSkipped = false;
+	let canRepeatApprove = comparePermission(
+		userPerm,
+		PermissionFlags.repeatApproval,
+	);
 	if (
 		!compareAnyPermissions(userPerm, [
 			PermissionFlags.approve,
@@ -482,7 +478,7 @@ export async function updateApprovalMessage(
 				.catch(console.error);
 		}
 		// Refund credit if applicable
-		if (approval.options.credit) {
+		if (approval.options.credit && !paymentSkipped) {
 			const amount = approval.transactions
 				.filter((c) => c.userId === reaction.user.id)
 				.reduce((a, b) => a + b.changed, 0);
@@ -505,8 +501,45 @@ export async function updateApprovalMessage(
 			() => followUp.delete().catch(console.error),
 			DELETE_AFTER_MS,
 		);
+		// Handle credit spending
+	} else if (approval.options.credit && !paymentSkipped) {
+		if (
+			approval.approvalIds.includes(reaction.user.id) ||
+			approval.disapprovalIds.includes(reaction.user.id)
+		) {
+			// approved/disapproved, check options.canRepeatApprove
+			if (approval.options.canRepeatApprove) {
+				canRepeatApprove = await resolve(
+					approval.options.canRepeatApprove,
+					{
+						user: reaction.user,
+						approval,
+						server,
+					},
+				);
+			}
+		} else {
+			// new approval/disapproval, spend credit
+			const transaction = await spendCredit(reaction.channel, {
+				user: reaction.user,
+				cost: approval.options.credit,
+				serverId: approval.server.id,
+				reason: `Approval Poll Reaction: ${approval.content}`,
+			});
+			if (!transaction) {
+				const followUp = await reaction.followUp({
+					content: `You do not have enough credit to approve this poll`,
+					flags: MessageFlags.Ephemeral,
+				});
+				return setTimeout(
+					() => followUp.delete().catch(console.error),
+					DELETE_AFTER_MS,
+				);
+			}
+			approval.transactions.push(transaction);
+		}
 	}
-	// Check if the user has already approved/disapproved
+	// Check if the user has already approved/disapproved (if repeat approval is not allowed)
 	if (
 		!canRepeatApprove &&
 		approving &&
@@ -538,7 +571,7 @@ export async function updateApprovalMessage(
 		);
 	}
 
-	// Check if the user is already in the opposite list and remove them
+	// Check if the user is already in the opposite list and remove them (if repeat approval is not allowed)
 	if (
 		!canRepeatApprove &&
 		disapproving &&
@@ -557,26 +590,8 @@ export async function updateApprovalMessage(
 		approval.disapprovalIds = approval.disapprovalIds.filter(
 			(id) => id !== reaction.user.id,
 		);
-		// Check if need to spend credit for new reaction
-	} else if (approval.options.credit) {
-		const transaction = await spendCredit(reaction, {
-			userId: reaction.user.id,
-			cost: approval.options.credit,
-			serverId: approval.server.id,
-			reason: `Approval Poll Reaction: ${approval.content}`,
-		});
-		if (!transaction) {
-			const followUp = await reaction.followUp({
-				content: `You do not have enough credit to approve this poll`,
-				flags: MessageFlags.Ephemeral,
-			});
-			return setTimeout(
-				() => followUp.delete().catch(console.error),
-				DELETE_AFTER_MS,
-			);
-		}
-		approval.transactions.push(transaction);
 	}
+
 	// Process the approval/disapproval
 	const status = approving
 		? approve(

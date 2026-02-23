@@ -61,8 +61,8 @@ export async function editHandler(
 	}
 
 	const filename = interaction.options.getString("filename", true);
-	const payment = await spendCredit(interaction, {
-		userId: interaction.user.id,
+	const payment = await spendCredit(interaction.channel, {
+		user: interaction.user,
 		cost: server.creditSettings.editFileFee,
 		reason: `Edit File ${filename}`,
 		serverId: server.id,

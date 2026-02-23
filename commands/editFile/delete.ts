@@ -11,7 +11,7 @@ import {
 } from "../../lib/permission";
 import { refundCredit, spendCredit } from "../../lib/credit";
 import type { Server } from "../../lib/server";
-import { safeJoin, safeJoinWithoutError } from "../../lib/utils";
+import { safeJoinWithoutError } from "../../lib/utils";
 import { existsSync } from "fs";
 import { unlink } from "fs/promises";
 import {
@@ -47,8 +47,8 @@ export async function deleteHandler(
 	);
 
 	// Charge credit for file deletion
-	const payment = await spendCredit(interaction, {
-		userId: interaction.user.id,
+	const payment = await spendCredit(interaction.channel, {
+		user: interaction.user,
 		cost: server.creditSettings.editFileFee,
 		reason: `Delete File ${filename}`,
 		serverId: server.id,

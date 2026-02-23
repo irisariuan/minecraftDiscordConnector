@@ -9,6 +9,8 @@ import {
 	updateRawUserTicket,
 	createRawUserTicketWithTicketType,
 	getRawUserTicketByTicketId,
+	getRawUserTickets,
+	createBulkTicketHistories,
 } from "./db";
 import type {
 	UserTicket as DbUserTicket,
@@ -36,8 +38,15 @@ import {
 	createRequestComponent,
 	RequestComponentId,
 } from "./component/request";
-import { calculateTimeDiffToNow, getNextTimestamp, type Time } from "./utils";
+import {
+	calculateTimeDiffToNow,
+	getNextTimestamp,
+	resolve,
+	type Resolvable,
+	type Time,
+} from "./utils";
 import { ticketEffectManager } from "./ticket/effect";
+import { formatTicketNames } from "./utils/ticket";
 export { type DbUserTicket, type DbTicketType };
 export enum TicketAction {
 	Use = "use",
@@ -61,19 +70,29 @@ export interface UserTicket extends Ticket {
 
 export interface TicketEffect {
 	effect: TicketEffectType;
-	value: number;
+	value: number | null;
 }
 export enum TicketEffectType {
 	Multiplier = "multiplier",
 	FixedCredit = "fixed_credit",
 	FreeUnderCost = "free_under_cost",
 	FreePlay = "free_play",
+	/**
+	 * Can be used when starting an approval only
+	 */
+	CustomApprovalCount = "custom_approval_count",
+	/**
+	 * Value: Max. approval count
+	 */
+	RepeatApprove = "repeat_approve",
 }
 export const TicketEffectTypeNames: Record<TicketEffectType, string> = {
 	[TicketEffectType.Multiplier]: "Multiplier",
 	[TicketEffectType.FixedCredit]: "Fixed Credit",
 	[TicketEffectType.FreeUnderCost]: "Free Under Cost",
 	[TicketEffectType.FreePlay]: "Free Play For Certain Hours",
+	[TicketEffectType.CustomApprovalCount]: "Custom Approval Count",
+	[TicketEffectType.RepeatApprove]: "Repeat Approval",
 };
 
 export interface TicketHistory {
@@ -116,30 +135,60 @@ export function isTicketAvailable(ticket: Ticket) {
 	return true;
 }
 
-export function calculatePaymentTicketEffect(
-	ticket: TicketEffect,
+export function calculatePaymentTicketEffects(
+	tickets: TicketEffect[],
 	originalCost: number,
 ): number {
-	switch (ticket.effect) {
-		case TicketEffectType.FixedCredit:
-			return Math.max(0, originalCost - ticket.value);
-		case TicketEffectType.Multiplier:
-			return Math.max(0, Math.floor(originalCost * ticket.value));
-		case TicketEffectType.FreeUnderCost:
-			if (originalCost <= ticket.value) return 0;
-			return originalCost;
-		default: {
-			console.error("Unknown payment ticket effect type:", ticket.effect);
-			return originalCost;
+	let cost = originalCost;
+	for (const ticket of tickets.toSorted(
+		(a, b) =>
+			ticketEffectsCalculateOrder[b.effect] -
+			ticketEffectsCalculateOrder[a.effect],
+	)) {
+		switch (ticket.effect) {
+			case TicketEffectType.FixedCredit: {
+				if (ticket.value === null)
+					throw new Error("Fixed credit ticket must have a value");
+				cost = Math.max(0, cost - ticket.value);
+				break;
+			}
+			case TicketEffectType.Multiplier: {
+				if (ticket.value === null)
+					throw new Error("Multiplier ticket must have a value");
+				cost = Math.max(0, Math.floor(cost * ticket.value));
+				break;
+			}
+			case TicketEffectType.FreeUnderCost: {
+				if (ticket.value === null)
+					throw new Error("Free under cost ticket must have a value");
+				if (cost <= ticket.value) return 0;
+				break;
+			}
 		}
 	}
+	return cost;
 }
 
-export const paymentTicketEffects = [
+export const paymentTicketEffects: TicketEffectType[] = [
 	TicketEffectType.FixedCredit,
 	TicketEffectType.Multiplier,
 	TicketEffectType.FreeUnderCost,
+	TicketEffectType.CustomApprovalCount,
 ];
+
+/**
+ * Bigger index means being calculated first
+ */
+export const ticketEffectsCalculateOrder: Record<TicketEffectType, number> = {
+	// 0 are effects that don't affect the cost and can be calculated in any order after the cost-affecting effects
+	[TicketEffectType.CustomApprovalCount]: 0,
+	[TicketEffectType.FreePlay]: 0,
+	[TicketEffectType.RepeatApprove]: 0,
+
+	[TicketEffectType.FixedCredit]: 1,
+	[TicketEffectType.Multiplier]: 2,
+	[TicketEffectType.FreeUnderCost]: 3,
+};
 
 export const userUsableTicketEffects = [TicketEffectType.FreePlay];
 
@@ -215,10 +264,8 @@ export async function getAllTickets(): Promise<UserTicket[]> {
 		userId: ticket.userId,
 	}));
 }
-export async function useUserTicket(ticketId: string, reason?: string) {
-	const ticket = await getRawUserTicket({
-		where: { id: ticketId },
-	});
+async function useSingleTicket(ticketId: string, reason?: string) {
+	const ticket = await getRawUserTicket({ where: { id: ticketId } });
 	if (!ticket || !(await isDbUserTicketAvailable(ticket))) return false;
 	await createTicketHistory({
 		data: { ticketId, action: TicketAction.Use, reason },
@@ -226,25 +273,57 @@ export async function useUserTicket(ticketId: string, reason?: string) {
 	return true;
 }
 
+export async function useUserTicket(
+	ticketIds: string | string[],
+	reason?: string,
+) {
+	if (typeof ticketIds === "string")
+		return await useSingleTicket(ticketIds, reason);
+	const tickets = await getRawUserTickets({
+		where: { id: { in: ticketIds } },
+	});
+	const availability = await Promise.all(
+		tickets.map(async (ticket) => await isDbUserTicketAvailable(ticket)),
+	);
+	if (
+		!tickets ||
+		tickets.length === 0 ||
+		!availability.every((available) => available)
+	)
+		return false;
+	await createBulkTicketHistories(
+		tickets.map(({ ticketId }) => ({
+			ticketId,
+			action: TicketAction.Use,
+			reason,
+		})),
+	);
+	return true;
+}
+
 interface GetUserSelectedTicketMessageSetting {
-	confirmationMessage: (ticket: Ticket) => Promise<string> | string;
+	confirmationMessage: Resolvable<string, Ticket[]>;
 	insideThread: boolean;
+	maxSelect: number;
+	minSelect: number;
+	hideUseWithoutTicket: boolean;
 }
 
 interface GetUserSelectedTicketReturn<UseTicket extends boolean> {
 	useTicket: UseTicket;
-	ticket: UseTicket extends true ? Ticket : null;
+	tickets: UseTicket extends true ? Ticket[] : null;
 	cancelled: UseTicket extends false ? boolean : false;
 }
 
 export async function getUserSelectTicketChannel(
 	channel: SendableChannels,
-	user: User,
+	member: User | GuildMember,
 ): Promise<{
 	channel: SendableChannels;
 	createdChannel: boolean;
 	cleanUp: (message: Message) => Promise<unknown>;
 }> {
+	const user = member instanceof GuildMember ? member.user : member;
 	if (
 		!("threads" in channel) ||
 		channel.type === ChannelType.GuildAnnouncement
@@ -292,7 +371,7 @@ export async function getUserSelectTicketChannel(
 	};
 }
 
-export async function getUserSelectedTicket(
+export async function getUserSelectedTickets(
 	message: Message,
 	userId: string,
 	tickets: Ticket[],
@@ -304,10 +383,16 @@ export async function getUserSelectedTicket(
 	const updateMessage = async () =>
 		await message.edit({
 			components: [
-				createTicketSelectMenu(tickets, indexPage),
+				createTicketSelectMenu(
+					tickets,
+					indexPage,
+					setting?.minSelect,
+					setting?.maxSelect,
+				),
 				createTicketButtons(
 					indexPage > 0,
 					tickets.length > (indexPage + 1) * 25,
+					setting?.hideUseWithoutTicket,
 				),
 			],
 		});
@@ -349,18 +434,19 @@ export async function getUserSelectedTicket(
 		});
 	});
 	return Promise.race([
-		new Promise<GetUserSelectedTicketReturn<boolean>>((resolve) => {
+		new Promise<GetUserSelectedTicketReturn<boolean>>((r) => {
 			selectCollector.on("collect", async (interaction) => {
-				const value = interaction.values[0];
-				if (!value) {
+				if (!interaction.values || interaction.values.length === 0) {
 					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
 						flags,
 					});
 				}
-				const ticketFound = tickets.find((v) => v.ticketId === value);
-				if (!ticketFound) {
+				const ticketsFound = tickets.filter((v) =>
+					interaction.values.includes(v.ticketId),
+				);
+				if (!ticketsFound) {
 					await updateMessage();
 					return await interaction.reply({
 						content: "No ticket found!",
@@ -368,9 +454,12 @@ export async function getUserSelectedTicket(
 					});
 				}
 				const confirmation = await interaction.reply({
-					content:
-						(await setting?.confirmationMessage?.(ticketFound)) ??
-						`You have selected the ticket \`${ticketFound.name}\`. Do you want to apply this ticket?`,
+					content: setting?.confirmationMessage
+						? await resolve(
+								setting.confirmationMessage,
+								ticketsFound,
+							)
+						: `You have selected ${formatTicketNames(ticketsFound)}. Do you want to apply ${ticketsFound.length === 1 ? "this ticket" : "them"}?`,
 					withResponse: true,
 					components: [
 						createRequestComponent({
@@ -397,10 +486,10 @@ export async function getUserSelectedTicket(
 						content: "Request timed out.",
 						flags,
 					});
-					return resolve({
+					return r({
 						cancelled: true,
 						useTicket: false,
-						ticket: null,
+						tickets: null,
 					});
 				}
 				if (requestStatus.customId !== RequestComponentId.Allow) {
@@ -417,12 +506,12 @@ export async function getUserSelectedTicket(
 					return;
 				}
 				await requestStatus.reply({
-					content: `Ticket \`${ticketFound.name}\` applied.`,
+					content: `Ticket(s) ${formatTicketNames(ticketsFound)} applied.`,
 					flags,
 				});
-				resolve({
+				r({
 					useTicket: true,
-					ticket: ticketFound,
+					tickets: ticketsFound,
 					cancelled: false,
 				});
 				buttonCollector.stop();
@@ -445,14 +534,14 @@ export async function getUserSelectedTicket(
 							interaction.customId ===
 							TicketSelectMenu.TICKET_CANCEL_ID,
 						useTicket: false,
-						ticket: null,
+						tickets: null,
 					}) satisfies GetUserSelectedTicketReturn<false>,
 			)
 			.catch(
 				() =>
 					({
 						useTicket: false,
-						ticket: null,
+						tickets: null,
 						cancelled: true,
 					}) satisfies GetUserSelectedTicketReturn<false>,
 			)
@@ -461,14 +550,6 @@ export async function getUserSelectedTicket(
 				buttonCollector.stop();
 			}),
 	]);
-}
-
-interface SendTicketNotificationToUserParams {
-	user: User | PartialUser | GuildMember;
-	ticket: Ticket;
-	reason?: string;
-	serverId?: number;
-	silent?: boolean;
 }
 
 function getExpiringStatus(time: Date) {

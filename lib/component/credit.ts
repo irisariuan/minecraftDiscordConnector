@@ -11,7 +11,12 @@ export enum TicketSelectMenu {
 	TICKET_CANCEL_ID = "ticket_cancel",
 }
 
-export function createTicketSelectMenu(tickets: Ticket[], page = 0) {
+export function createTicketSelectMenu(
+	tickets: Ticket[],
+	page = 0,
+	minSelect = 0,
+	maxSelect = 1,
+) {
 	const options = tickets
 		.map((v) => ({
 			label: trimTextWithSuffix(v.name, 100),
@@ -24,12 +29,18 @@ export function createTicketSelectMenu(tickets: Ticket[], page = 0) {
 	const selectMenu = new StringSelectMenuBuilder()
 		.setCustomId(TicketSelectMenu.TICKET_SELECT_ID)
 		.setPlaceholder("Select a Ticket to use")
-		.addOptions(options);
+		.addOptions(options)
+		.setMinValues(Math.min(Math.max(minSelect, 0), options.length))
+		.setMaxValues(Math.min(Math.max(maxSelect, 1), options.length));
 	return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 		selectMenu,
 	);
 }
-export function createTicketButtons(showPrev: boolean, showNext: boolean) {
+export function createTicketButtons(
+	showPrev: boolean,
+	showNext: boolean,
+	hideNoUse?: boolean,
+) {
 	const row = new ActionRowBuilder<ButtonBuilder>();
 	const prevButton = new ButtonBuilder()
 		.setCustomId(TicketSelectMenu.TICKET_SELECT_PREV_ID)
@@ -49,6 +60,7 @@ export function createTicketButtons(showPrev: boolean, showNext: boolean) {
 		.setStyle(4);
 	if (showPrev) row.addComponents(prevButton);
 	if (showNext) row.addComponents(nextButton);
-	row.addComponents(noUseButton, cancelButton);
+	if (!hideNoUse) row.addComponents(noUseButton);
+	row.addComponents(cancelButton);
 	return row;
 }

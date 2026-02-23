@@ -50,8 +50,8 @@ export async function lsHandler(
 	const currentPath = interaction.options.getString("path") ?? "";
 
 	// Charge credit once for the initial command
-	const payment = await spendCredit(interaction, {
-		userId: interaction.user.id,
+	const payment = await spendCredit(interaction.channel, {
+		user: interaction.user,
 		cost: server.creditSettings.lsFilesFee,
 		reason: `List Files ${currentPath || "(root)"}`,
 		serverId: server.id,

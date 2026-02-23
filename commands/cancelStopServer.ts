@@ -66,8 +66,8 @@ export default {
 			});
 		}
 		if (
-			!(await spendCredit(interaction, {
-				userId: interaction.user.id,
+			!(await spendCredit(interaction.channel, {
+				user: interaction.user,
 				cost: server.creditSettings.newCancelStopServerPollFee,
 				serverId: server.id,
 				reason: "Cancel Stop Server Poll",

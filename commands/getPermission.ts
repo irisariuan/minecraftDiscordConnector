@@ -1,17 +1,12 @@
-import {
-    SlashCommandBuilder,
-    userMention
-} from "discord.js";
+import { SlashCommandBuilder, userMention } from "discord.js";
 import type { CommandFile } from "../lib/commandFile";
-import {
-    getUserSelectedServer
-} from "../lib/component/server";
+import { getUserSelectedServer } from "../lib/component/server";
 import { spendCredit } from "../lib/credit";
 import { getUserLocalPermission } from "../lib/db";
 import {
-    allPermission,
-    parsePermission,
-    readPermission,
+	allPermission,
+	parsePermission,
+	readPermission,
 } from "../lib/permission";
 import { settings } from "../lib/settings";
 
@@ -47,8 +42,8 @@ export default {
 
 		if (
 			user.id !== interaction.user.id &&
-			!(await spendCredit(interaction, {
-				userId: interaction.user.id,
+			!(await spendCredit(interaction.channel, {
+				user: interaction.user,
 				cost: settings.checkUserPermissionFee,
 				reason: `Check Permission Of User ${user.displayName}`,
 				serverId: serverId,

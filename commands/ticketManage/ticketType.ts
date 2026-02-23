@@ -1,5 +1,4 @@
 import {
-	EmbedBuilder,
 	SlashCommandSubcommandGroupBuilder,
 	type ChatInputCommandInteraction,
 	type AutocompleteInteraction,
@@ -55,8 +54,7 @@ export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 				.addNumberOption((option) =>
 					option
 						.setName("value")
-						.setDescription("Value of the ticket effect")
-						.setRequired(true),
+						.setDescription("Value of the ticket effect, always fill in a value unless specified"),
 				)
 				.addStringOption((option) =>
 					option
@@ -249,7 +247,7 @@ export async function ticketTypeHandler(
 				"effect",
 				true,
 			) as TicketEffectType;
-			const value = interaction.options.getNumber("value", true);
+			const value = interaction.options.getNumber("value");
 			const name = interaction.options.getString("name", true);
 			const description = interaction.options.getString("description");
 

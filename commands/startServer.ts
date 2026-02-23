@@ -16,6 +16,7 @@ import {
 } from "../lib/permission";
 
 import { sendMessagesToUsersById } from "../lib/utils";
+import { TicketEffectType } from "../lib/ticket";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -71,23 +72,72 @@ export default {
 		}
 		await interaction.deleteReply();
 
-		if (
-			!(await spendCredit(interaction, {
-				userId: interaction.user.id,
-				cost: server.creditSettings.newStartServerPollFee,
-				reason: "New Start Server Poll",
-				serverId: server.id,
-			}))
-		) {
+		const transaction = await spendCredit(interaction.channel, {
+			user: interaction.user,
+			cost: server.creditSettings.newStartServerPollFee,
+			reason: "New Start Server Poll",
+			serverId: server.id,
+		});
+		if (!transaction) {
 			return await interaction.followUp({
 				content: "Failed to start the server",
 				flags: MessageFlags.Ephemeral,
+			});
+		}
+		let approvalCount = server.approvalSettings.startServerApproval;
+		const customApprovalTicket = transaction.ticketUsed?.find(
+			(t) => t.effect.effect === TicketEffectType.CustomApprovalCount,
+		);
+		if (
+			customApprovalTicket &&
+			customApprovalTicket.effect?.value !== null &&
+			Number.isInteger(customApprovalTicket?.effect?.value)
+		) {
+			approvalCount = customApprovalTicket.effect.value;
+		}
+		if (approvalCount === 0) {
+			const pid = await server.start(serverManager);
+			if (!pid) {
+				return await interaction.editReply({
+					content: "Server is already online",
+				});
+			}
+			console.log(`Server started with PID ${pid}`);
+			return await interaction.editReply({
+				content: "Server started successfully",
 			});
 		}
 
 		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: `Start Server at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
+				async canRepeatApprove({ user, approval, server }) {
+					if (!approval.options.credit) return false;
+					const approvalCount =
+						approval.approvalIds.filter((id) => id === user.id)
+							.length +
+						approval.disapprovalIds.filter((id) => id === user.id)
+							.length;
+					const transaction = await spendCredit(interaction.channel, {
+						cost: approval.options.credit,
+						reason: "Start Server Vote",
+						user,
+						serverId: server.id,
+						acceptedTicketTypeIds: [TicketEffectType.RepeatApprove],
+						mustUseTickets: true,
+						onBeforeSpend: async ({ tickets }) => {
+							if (!tickets) return false;
+							return !!tickets.find(
+								(t) =>
+									t.effect.effect ===
+										TicketEffectType.RepeatApprove &&
+									t.effect.value !== null &&
+									t.effect.value >= approvalCount + 1, // +1 because the current vote has not been counted in approvalCount yet
+							);
+						},
+					});
+					return !!transaction;
+				},
 				startPollFee: server.creditSettings.newStartServerPollFee,
 				callerId: interaction.user.id,
 				description: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
@@ -114,7 +164,7 @@ export default {
 						content: "Server started successfully",
 					});
 				},
-				approvalCount: server.approvalSettings.startServerApproval,
+				approvalCount,
 				disapprovalCount:
 					server.approvalSettings.startServerDisapproval,
 				credit: server.creditSettings.startServerVoteFee,

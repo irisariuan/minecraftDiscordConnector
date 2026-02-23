@@ -9,6 +9,7 @@ import type { CommandFile } from "../lib/commandFile";
 import { spendCredit, getCredit, type Transaction } from "../lib/credit";
 import { settings } from "../lib/settings";
 import { sendPaginationMessage } from "../lib/pagination";
+import { formatTicketNames } from "../lib/utils/ticket";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -30,8 +31,8 @@ export default {
 		const user = interaction.options.getUser("user") ?? interaction.user;
 		if (
 			user.id !== interaction.user.id &&
-			!(await spendCredit(interaction, {
-				userId: interaction.user.id,
+			!(await spendCredit(interaction.channel, {
+				user: interaction.user,
 				cost: settings.checkUserCreditFee,
 				reason: `Check credit of user ${user.displayName}`,
 			}))
@@ -85,7 +86,7 @@ export default {
 					new Date(history.timestamp),
 				)}${history.reason ? `\nReason: \`${history.reason}\`` : ""}${
 					history.ticketUsed !== null
-						? `\nTicket Used: \`${history.ticketUsed.name}\` (\`${history.ticketUsed.ticketId}\`)`
+						? `\nTicket Used: ${formatTicketNames(history.ticketUsed)}`
 						: ""
 				}\nID: \`${history.trackingId}\`\n${
 					history.serverTag !== null

@@ -116,8 +116,8 @@ export default {
 			});
 		}
 
-		const payment = await spendCredit(interaction, {
-			userId: interaction.user.id,
+		const payment = await spendCredit(interaction.channel, {
+			user: interaction.user,
 			cost: amount + totalTransferringFee,
 			reason: `Transfer Credit (${amount} credits with ${totalTransferringFee} fee to ${userMention(user.id)})`,
 		});
@@ -143,7 +143,7 @@ export default {
 				if (refundAmount <= 0 || payment.changed <= 0) return;
 				await changeCredit({
 					userId: interaction.user.id,
-					change: -Math.min(refundAmount, payment.changed),
+					change: Math.min(refundAmount, Math.abs(payment.changed)),
 					reason: "Transfer Credit Refund",
 				});
 				await sendCreditNotification({
