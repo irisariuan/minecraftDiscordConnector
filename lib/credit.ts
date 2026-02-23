@@ -251,6 +251,10 @@ export interface SpendCreditParams {
 	mustUseTickets?: boolean;
 	skipPayment?: Resolvable<boolean>;
 	/**
+	 * Default is as much tickets as selection allows
+	 */
+	maxSelectableTickets?: number;
+	/**
 	 * When this param is provided, the default canSpendCredit check will be skipped, and the function will directly call this callback to check if the credit can be spent.
 	 */
 	onBeforeSpend?: (params: {
@@ -289,6 +293,7 @@ export async function spendCredit(
 		channel,
 		acceptedTicketTypeIds,
 		acceptedTicketEffectTypes = regularPaymentTicketEffects,
+		maxSelectableTickets,
 	} = params;
 	const tickets = await getUserTicketsByUserId({
 		userId: user.id,
@@ -342,6 +347,8 @@ export async function spendCredit(
 		},
 		insideThread: createdChannel,
 		hideUseWithoutTicket: mustUseTickets,
+		minSelect: 1,
+		maxSelect: maxSelectableTickets ?? tickets.length,
 	});
 	await cleanUp(message);
 

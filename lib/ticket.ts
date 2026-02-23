@@ -299,8 +299,8 @@ export async function useUserTicket(
 	)
 		return false;
 	await createBulkTicketHistories(
-		tickets.map(({ ticketId }) => ({
-			ticketId,
+		tickets.map(({ id }) => ({
+			ticketId: id,
 			action: TicketAction.Use,
 			reason,
 		})),
