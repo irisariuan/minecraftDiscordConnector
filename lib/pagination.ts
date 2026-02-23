@@ -73,7 +73,7 @@ interface SendPaginationMessageProps<
 		force?: boolean;
 	}) => Promise<ResultType[] | undefined> | ResultType[] | undefined;
 	/**
-	 * @returns {boolean} If we should stop to listen to the select menu
+	 * @returns {boolean} Whether we should stop to listen to the select menu
 	 */
 	onItemSelected?: (
 		interaction: StringSelectMenuInteraction,
@@ -81,7 +81,7 @@ interface SendPaginationMessageProps<
 		refreshDisplay: () => Promise<void>,
 	) => Promise<boolean> | boolean;
 	/**
-	 * @returns {boolean} If we should stop to listen to the component rows
+	 * @returns {boolean} Whether we should stop to listen to the component rows
 	 */
 	onComponentRowsReacted?: (
 		interaction: MessageComponentInteraction,
@@ -90,9 +90,17 @@ interface SendPaginationMessageProps<
 	) => Promise<boolean> | boolean;
 }
 
+export interface CreateSelectMenuOptions {
+	minSelect?: Resolvable<number, SelectMenuOption[]>;
+	maxSelect?: Resolvable<number, SelectMenuOption[]>;
+	placeholder?: string;
+	showSelectMenu?: Resolvable<boolean>;
+}
+
 interface BasePaginationProps<T> {
 	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
 	filterFunc?: (filter?: string) => (v: T) => boolean;
+	selectMenuOptions?: CreateSelectMenuOptions;
 	selectMenuTransform?: (v: T, index: number) => SelectMenuOption;
 	customComponentRows?: Resolvable<
 		ActionRowBuilder<MessageActionRowComponentBuilder>[]
@@ -117,9 +125,9 @@ export async function sendPaginationMessage<ResultType>(
 		options,
 		filterFunc,
 		onItemSelected,
-		selectMenuTransform,
 		interactionFilter,
 		onComponentRowsReacted,
+		selectMenuOptions,
 	} = props;
 	let page = 0;
 	const result = new CacheItem<ResultType[]>(null, {
@@ -140,7 +148,8 @@ export async function sendPaginationMessage<ResultType>(
 		interval: 1000 * 60 * 5,
 		ttl: 1000 * 60 * 3,
 	});
-	let showSelectMenu = selectMenuTransform !== undefined;
+	let showSelectMenu =
+		(await resolve(selectMenuOptions?.showSelectMenu)) ?? false;
 
 	// Helper function to refresh the display
 	const refreshDisplay = async (newPage = 0) => {
@@ -300,6 +309,7 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 		selectMenuTransform,
 		showSelectMenu,
 		customComponentRows,
+		selectMenuOptions,
 	} = props;
 	const data = await result.getData();
 	if (!interaction.deferred && !interaction.replied) {
@@ -345,12 +355,12 @@ async function editInteraction<T>(props: EditInteractionProps<T>) {
 	});
 	const selectMenuRow =
 		selectMenuTransform && showSelectMenu && filteredResult.length > 0
-			? createSelectMenu(
+			? await createSelectMenu(
 					filteredResult.map((item, index) =>
 						selectMenuTransform(item, page * pageSize + index),
 					),
 					page,
-					options?.selectMenuPlaceholder,
+					selectMenuOptions,
 				)
 			: [];
 	return await interaction.editReply({

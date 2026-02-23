@@ -95,8 +95,8 @@ function newApproval(
 		Approval,
 		"approvalIds" | "disapprovalIds" | "timeout" | "superStatus" | "cleanUp"
 	>,
-	cleanUp: () => unknown | Promise<unknown>,
-	update: () => unknown | Promise<unknown>,
+	cleanUp: () => unknown,
+	update: () => unknown,
 ) {
 	const existingApproval = getApproval(approval.server, approval.message.id);
 	if (existingApproval) {
@@ -229,7 +229,7 @@ export function checkApprovalStatus(approval: Approval): ApprovalStatus {
 	return ApprovalStatus.Timeout;
 }
 
-export function getApproval(
+function getApproval(
 	server: Server,
 	messageId: string,
 	forceReturn = false,
@@ -255,6 +255,19 @@ export function getApproval(
 			)
 				return null;
 			return approval;
+		}
+	}
+	return null;
+}
+
+function getApprovalInServers(
+	serverManager: ServerManager,
+	id: string,
+): { approval: Approval; server: Server } | null {
+	for (const [_, server] of serverManager.getAllServerEntries()) {
+		const approval = getApproval(server, id);
+		if (approval) {
+			return { approval, server };
 		}
 	}
 	return null;
@@ -347,24 +360,15 @@ export async function sendApprovalPoll(
 	);
 }
 
-export function findApproval(
-	serverManager: ServerManager,
-	id: string,
-): { approval: Approval; server: Server } | null {
-	for (const [_, server] of serverManager.getAllServerEntries()) {
-		const approval = getApproval(server, id);
-		if (approval) {
-			return { approval, server };
-		}
-	}
-	return null;
-}
-
+/**
+ * A full flow handler for approval message button interactions, 
+ * including super approval confirmation, credit handling, and finalization (when approval is fulfilled)
+ */
 export async function updateApprovalMessage(
 	serverManager: ServerManager,
 	reaction: ButtonInteraction,
 ) {
-	const result = findApproval(serverManager, reaction.message.id);
+	const result = getApprovalInServers(serverManager, reaction.message.id);
 	if (!result) return;
 	const { approval, server } = result;
 	const userPerm = await readPermission(reaction.user, approval.server.id);

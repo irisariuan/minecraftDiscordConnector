@@ -11,7 +11,10 @@ import {
 	createTicketComponent,
 	TicketComponentCustomId,
 } from "../lib/component/ticket";
-import { createTicketEmbed } from "../lib/embed/ticket";
+import {
+	createTicketEmbed,
+	createTicketsUsageEmbed,
+} from "../lib/embed/ticket";
 import { sendPaginationMessage } from "../lib/pagination";
 import {
 	getUserTicketsByUserId,
@@ -23,6 +26,7 @@ import {
 } from "../lib/ticket";
 import { trimTextWithSuffix } from "../lib/utils";
 import { ticketEffectManager } from "../lib/ticket/effect";
+import type { TicketUsage } from "../lib/utils/ticket";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -70,7 +74,7 @@ export default {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		await sendPaginationMessage({
 			interaction,
-			getResult: async () => {
+			async getResult() {
 				const tickets = await getUserTicketsByUserId({
 					userId: interaction.user.id,
 					usableOnly: false,
@@ -92,7 +96,7 @@ export default {
 						}) ?? []
 				);
 			},
-			formatter: (ticket: Ticket) => {
+			formatter(ticket: Ticket) {
 				const useCount = ticket.histories?.length ?? 0;
 				const maxUseText =
 					ticket.maxUse !== null && ticket.maxUse > 0
@@ -138,33 +142,41 @@ export default {
 				notFoundMessage: "You have no usable tickets.",
 			},
 			interactionFilter: (i) => i.user.id === interaction.user.id,
-			selectMenuTransform: (ticket: Ticket, index: number) => ({
+			selectMenuOptions: {
+				showSelectMenu: true,
+				// limit to select up to 5 tickets at once, to prevent abuse of using too many tickets at once and 
+				// hitting text limits or embed limits
+				maxSelect: (opt) => Math.min(opt.length, 5),
+			},
+			selectMenuTransform: (ticket: Ticket) => ({
 				label: trimTextWithSuffix(ticket.name, 100),
 				value: ticket.ticketId,
 				description: ticket.description
 					? `${trimTextWithSuffix(ticket.description, 50)}, ID: ${ticket.ticketId}`
 					: `No description, ID: ${ticket.ticketId}`,
 			}),
-			onItemSelected: async (menuInteraction, result) => {
+			async onItemSelected(menuInteraction, result) {
 				await menuInteraction.deferReply({
 					flags: MessageFlags.Ephemeral,
 				});
 				const tickets = await result.getData();
-				const ticket = tickets?.find(
-					(t) => t.ticketId === menuInteraction.values[0],
+				const usedTickets = tickets?.filter((t) =>
+					menuInteraction.values.includes(t.ticketId),
 				);
-				if (!ticket) return false;
+				if (!usedTickets) return false;
 				const reply = await menuInteraction.editReply({
 					embeds: [
-						createTicketEmbed(
-							ticket,
-							interaction.user.username,
-							interaction.user.username,
-						),
+						...(tickets?.map((ticket) =>
+							createTicketEmbed(
+								ticket,
+								interaction.user.username,
+								interaction.user.username,
+							),
+						) ?? []),
 					],
 					components: [createTicketComponent()],
 				});
-				return handleReply(menuInteraction, reply, ticket);
+				return handleReply(menuInteraction, reply, usedTickets);
 			},
 		});
 	},
@@ -173,7 +185,7 @@ export default {
 async function handleReply(
 	interaction: StringSelectMenuInteraction,
 	message: Message,
-	ticket: Ticket,
+	tickets: Ticket[],
 ): Promise<boolean> {
 	const response = await message
 		.awaitMessageComponent({
@@ -190,33 +202,32 @@ async function handleReply(
 		});
 		return false;
 	}
-	await useUserTicket(ticket.ticketId, "Used via /useticket command");
-	const usage = ticketEffectManager.use(
-		interaction.user.id,
-		ticket.ticketId,
-		ticket.effect,
-		() => {
-			interaction.user
-				.send(
-					`Your ticket **${ticket.name}** effect (${TicketEffectTypeNames[ticket.effect.effect]}: ${ticket.effect.value}) has passed.`,
-				)
-				.catch(() => null);
-		},
+	await useUserTicket(
+		tickets.map((v) => v.ticketId),
+		"Used via /useticket command",
 	);
-	if (usage)
-		await response.update({
-			content: `You have used the ticket **${ticket.name}**!`,
-			embeds: [],
-			components: [],
-		});
-	else {
-		const usage = ticketEffectManager.get(ticket.ticketId);
-		if (!usage) throw new Error("Failed to get ticket usage info");
-		await response.update({
-			content: `The ticket **${ticket.name}** is currently in use and cannot be used again until the effect expires at ${time(usage.expireTime)}.`,
-			embeds: [],
-			components: [],
+	const usages: TicketUsage[] = [];
+	for (const ticket of tickets) {
+		usages.push({
+			ticket,
+			usedAt: new Date(),
+			success: ticketEffectManager.use(
+				interaction.user.id,
+				ticket.ticketId,
+				ticket.effect,
+				() => {
+					interaction.user
+						.send(
+							`Your ticket **${ticket.name}** effect (${TicketEffectTypeNames[ticket.effect.effect]}: ${ticket.effect.value}) has passed.`,
+						)
+						.catch(() => null);
+				},
+			),
 		});
 	}
+	await response.update({
+		embeds: [createTicketsUsageEmbed(usages)],
+	});
+
 	return true;
 }

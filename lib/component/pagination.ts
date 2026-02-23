@@ -12,9 +12,10 @@ import {
 import {
 	calculateMaxPage,
 	pageSize,
+	type CreateSelectMenuOptions,
 	type PaginationOptions,
 } from "../pagination";
-import { resolveSync } from "../utils";
+import { resolve, resolveSync } from "../utils";
 
 interface CreateEmbedProps<T> {
 	result: T[];
@@ -174,15 +175,34 @@ export interface SelectMenuOption {
 	description?: string;
 }
 
-export function createSelectMenu(
+export async function createSelectMenu(
 	options: SelectMenuOption[],
 	page: number,
-	placeholder = "Select an option",
+	selectMenuOption?: CreateSelectMenuOptions,
 ) {
 	const selectMenu = new StringSelectMenuBuilder()
 		.setCustomId(SelectAction.SELECT_MENU_ID)
-		.setPlaceholder(placeholder)
-		.addOptions(options.slice(page * pageSize, (page + 1) * pageSize));
+		.setPlaceholder(selectMenuOption?.placeholder ?? "Select an option")
+		.addOptions(options.slice(page * pageSize, (page + 1) * pageSize))
+		.setMaxValues(
+			selectMenuOption?.maxSelect
+				? Math.min(
+						await resolve(selectMenuOption.maxSelect, options),
+						options.length,
+					)
+				: 1,
+		)
+		.setMinValues(
+			selectMenuOption?.minSelect
+				? Math.min(
+						Math.max(
+							1,
+							await resolve(selectMenuOption.minSelect, options),
+						),
+						options.length,
+					)
+				: 1,
+		);
 	return [
 		new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 			selectMenu,

@@ -318,6 +318,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					notFoundMessage: `${user.id === interaction.user.id ? "You have" : `${userMention(user.id)} has`} no tickets.`,
 				},
 				interactionFilter: (i) => i.user.id === interaction.user.id,
+				selectMenuOptions: { showSelectMenu: true },
 				selectMenuTransform: (ticket: Ticket, index: number) => ({
 					label: trimTextWithSuffix(ticket.name, 100),
 					value: ticket.ticketId,
@@ -388,7 +389,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					reason: `Added by ${interaction.user.username}`,
 					maxUse,
 					expiresAt,
-					silent
+					silent,
 				});
 				let expireText = "";
 				if (expireInput) {
@@ -409,7 +410,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						reason: `Added by ${interaction.user.username} to role ${users.name}`,
 						maxUse,
 						expiresAt,
-						silent
+						silent,
 					});
 					userCount++;
 				}
@@ -452,7 +453,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 					const removed = await removeTicketFromUser({
 						ticketId,
 						user: member.user,
-						silent
+						silent,
 					});
 					if (removed) removedCount++;
 				}
@@ -517,7 +518,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				user: await interaction.client.users
 					.fetch(rawTicket.userId)
 					.catch(() => null),
-				silent
+				silent,
 			});
 
 			if (!success) {

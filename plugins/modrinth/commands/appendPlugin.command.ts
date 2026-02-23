@@ -65,6 +65,7 @@ export default {
 				name: version.version_number,
 				value: `ID: \`${version.id}\`, Published on ${time(new Date(version.date_published))}`,
 			}),
+			selectMenuOptions: { showSelectMenu: true },
 			selectMenuTransform: (version, index) => ({
 				label: version.version_number,
 				value: version.id,

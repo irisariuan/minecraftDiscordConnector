@@ -5,6 +5,8 @@ import {
 	type DbTicketType,
 	type Ticket,
 } from "../ticket";
+import type { TicketUsage } from "../utils/ticket";
+import { calculateEffectDuration } from "../ticket/effect";
 
 export function createTicketEmbed(
 	ticket: Ticket,
@@ -145,4 +147,44 @@ export function createTicketTypeUpdateEmbed(ticketType: DbTicketType) {
 			value: ticketType.description,
 		});
 	return embed;
+}
+
+export function createTicketsUsageEmbed(tickets: TicketUsage[]) {
+	return new EmbedBuilder()
+		.setTitle("Active Ticket Usages")
+		.setColor("Purple")
+		.addFields(
+			tickets.length > 0
+				? tickets.map((t) => {
+						const duration = calculateEffectDuration(
+							t.ticket.effect,
+						);
+						return {
+							name: `Ticket ID: ${t.ticket.ticketId}`,
+							value: `Effect: ${
+								TicketEffectTypeNames[t.ticket.effect.effect] ??
+								"Unknown effect"
+							} (${t.ticket.effect.value})\nStarted at: ${time(
+								t.usedAt,
+							)}\nExpires at: ${
+								t.ticket.expiresAt
+									? duration !== null
+										? time(
+												new Date(
+													t.usedAt.getTime() +
+														duration,
+												),
+											)
+										: "Unknown duration"
+									: "No expiration"
+							}`,
+						};
+					})
+				: [
+						{
+							name: "No active ticket usages",
+							value: "There are currently no active ticket usages.",
+						},
+					],
+		);
 }

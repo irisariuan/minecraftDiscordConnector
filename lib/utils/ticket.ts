@@ -11,3 +11,9 @@ export function formatTicketNames(
 		)
 		.join(", ");
 }
+
+export interface TicketUsage {
+	ticket: Ticket,
+	success: boolean,
+	usedAt: Date,
+}

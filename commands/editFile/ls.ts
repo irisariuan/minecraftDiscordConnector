@@ -158,6 +158,7 @@ export async function lsHandler(
 			const searchText = filter.toLowerCase();
 			return file.name.toLowerCase().includes(searchText);
 		},
+		selectMenuOptions: { showSelectMenu: true },
 		selectMenuTransform: (file: FileInfo, index: number) => ({
 			label: file.isDirectory ? `📁 ${file.name}` : `📄 ${file.name}`,
 			value: index.toString(),
