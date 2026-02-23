@@ -28,6 +28,11 @@ import {
 	createApprovalEmbed,
 } from "./embed/approval";
 import { APPROVAL_TIMEOUT } from "./env";
+import {
+	createApprovalResultString,
+	isUserVoted,
+	removeUserFromApproval,
+} from "./approval/utils";
 
 /**
  * All core components needed for the approval system to work
@@ -85,7 +90,7 @@ export interface ApprovalOptions {
 export const MESSAGE_VALID_TIME = 14 * 60 * 1000; // 14 minutes, since discord message valid time is 15 minutes
 export const DELETE_AFTER_MS = 3 * 1000;
 
-export function newApproval(
+function newApproval(
 	approval: Omit<
 		Approval,
 		"approvalIds" | "disapprovalIds" | "timeout" | "superStatus" | "cleanUp"
@@ -137,7 +142,7 @@ export function newApproval(
 	return newApproval;
 }
 
-export function transferApproval(
+function transferApproval(
 	approval: Approval,
 	newMessage: Message | PartialMessage,
 ) {
@@ -150,7 +155,7 @@ export function transferApproval(
 	approval.server.approvalList.set(newMessage.id, approval);
 }
 
-export function approve(
+function approve(
 	server: Server,
 	messageId: string,
 	userId: string,
@@ -164,7 +169,7 @@ export function approve(
 	}
 	return checkApprovalStatus(approval);
 }
-export function disapprove(
+function disapprove(
 	server: Server,
 	messageId: string,
 	userId: string,
@@ -179,7 +184,7 @@ export function disapprove(
 	return checkApprovalStatus(approval);
 }
 
-export async function removeApproval(approval: Approval) {
+async function removeApproval(approval: Approval) {
 	console.log(`Removing approval ${approval.message.id}`);
 	clearTimeout(approval.timeout);
 	clearInterval(approval.updateInterval);
@@ -363,19 +368,24 @@ export async function updateApprovalMessage(
 	if (!result) return;
 	const { approval, server } = result;
 	const userPerm = await readPermission(reaction.user, approval.server.id);
+
 	let approving: boolean;
 	let disapproving: boolean;
+
 	let canceling: boolean;
+
 	let superApprove: boolean;
 	const canSuperApprove = comparePermission(
 		userPerm,
 		PermissionFlags.superApprove,
 	);
+
 	let paymentSkipped = false;
 	let canRepeatApprove = comparePermission(
 		userPerm,
 		PermissionFlags.repeatApproval,
 	);
+
 	if (
 		!compareAnyPermissions(userPerm, [
 			PermissionFlags.approve,
@@ -407,7 +417,7 @@ export async function updateApprovalMessage(
 				componentType: ComponentType.Button,
 			})
 			.catch(() => null);
-		await answer.delete();
+		await answer.delete().catch(() => {});
 		if (!res || res.customId === ApprovalMessageComponentId.Revoke) {
 			const followUp = await reaction.followUp({
 				content: "Timeout or cancelled, no action taken",
@@ -451,12 +461,7 @@ export async function updateApprovalMessage(
 	if (canceling) {
 		const prevCount =
 			approval.approvalIds.length + approval.disapprovalIds.length;
-		approval.approvalIds = approval.approvalIds.filter(
-			(id) => id !== reaction.user.id,
-		);
-		approval.disapprovalIds = approval.disapprovalIds.filter(
-			(id) => id !== reaction.user.id,
-		);
+		removeUserFromApproval(approval, reaction.user.id);
 		if (
 			prevCount ===
 			approval.approvalIds.length + approval.disapprovalIds.length
@@ -503,10 +508,7 @@ export async function updateApprovalMessage(
 		);
 		// Handle credit spending
 	} else if (approval.options.credit && !paymentSkipped) {
-		if (
-			approval.approvalIds.includes(reaction.user.id) ||
-			approval.disapprovalIds.includes(reaction.user.id)
-		) {
+		if (isUserVoted(approval, reaction.user.id)) {
 			// approved/disapproved, check options.canRepeatApprove
 			if (approval.options.canRepeatApprove) {
 				canRepeatApprove = await resolve(
@@ -578,18 +580,14 @@ export async function updateApprovalMessage(
 		approval.approvalIds.includes(reaction.user.id) &&
 		!(superApprove && canSuperApprove)
 	) {
-		approval.approvalIds = approval.approvalIds.filter(
-			(id) => id !== reaction.user.id,
-		);
+		removeUserFromApproval(approval, reaction.user.id, "approval");
 	} else if (
 		!canRepeatApprove &&
 		approving &&
 		approval.disapprovalIds.includes(reaction.user.id) &&
 		!(superApprove && canSuperApprove)
 	) {
-		approval.disapprovalIds = approval.disapprovalIds.filter(
-			(id) => id !== reaction.user.id,
-		);
+		removeUserFromApproval(approval, reaction.user.id, "disapproval");
 	}
 
 	// Process the approval/disapproval
@@ -612,12 +610,16 @@ export async function updateApprovalMessage(
 			.edit({
 				embeds: [createApprovalEmbed(approval)],
 			})
-			.catch(console.error);
+			.catch(() => {
+				reaction.deleteReply().catch(() => {});
+				if (!reaction.channel?.isSendable()) return;
+				reaction.channel.send({
+					embeds: [createApprovalEmbed(approval)],
+				});
+			});
 	}
 
-	const countStr = approving
-		? `${approval.approvalIds.length}/${approval.options.approvalCount}`
-		: `${approval.disapprovalIds.length}/${approval.options.disapprovalCount}`;
+	const countStr = createApprovalResultString(approval, approving);
 
 	const followUp = await reaction.followUp({
 		content: `${approving ? "Approved" : "Disapproved"} by ${userMention(reaction.user.id)} ${canSuperApprove && superApprove ? `(forced, ${countStr}) ` : `(${countStr})`}`,
