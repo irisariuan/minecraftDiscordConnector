@@ -25,7 +25,7 @@ import {
 	getUserSelectedTickets,
 	getUserSelectTicketChannel,
 	getUserTicketsByUserId,
-	paymentTicketEffects,
+	regularPaymentTicketEffects,
 	TicketEffectType,
 	useUserTicket,
 	type Ticket,
@@ -238,6 +238,7 @@ async function spendCreditWithoutTicket(
 }
 export interface SpendCreditParams {
 	user: User | GuildMember;
+	channel: Channel | null;
 	cost: number;
 	serverId?: number;
 	reason: string;
@@ -246,6 +247,7 @@ export interface SpendCreditParams {
 	 * Undefined represent allowing all tickets
 	 */
 	acceptedTicketTypeIds?: string[];
+	acceptedTicketEffectTypes?: TicketEffectType[];
 	mustUseTickets?: boolean;
 	skipPayment?: Resolvable<boolean>;
 	/**
@@ -274,7 +276,6 @@ export interface SpendCreditParams {
  * This is useful for staff or other special users who should not be charged for their actions.
  */
 export async function spendCredit(
-	channel: Channel | null,
 	params: SpendCreditParams,
 ): Promise<PartialTransaction | null> {
 	const {
@@ -285,11 +286,14 @@ export async function spendCredit(
 		mustUseTickets,
 		skipPayment,
 		onBeforeSpend,
+		channel,
+		acceptedTicketTypeIds,
+		acceptedTicketEffectTypes = regularPaymentTicketEffects,
 	} = params;
 	const tickets = await getUserTicketsByUserId({
 		userId: user.id,
-		ticketTypeIds: params.acceptedTicketTypeIds,
-		ticketEffectTypes: paymentTicketEffects,
+		ticketTypeIds: acceptedTicketTypeIds,
+		ticketEffectTypes: acceptedTicketEffectTypes,
 	});
 	if (mustUseTickets && tickets?.length === 0) return null;
 	const credit = await getCredit(user.id);
@@ -310,7 +314,7 @@ export async function spendCredit(
 	}
 	if (
 		!tickets ||
-		params.acceptedTicketTypeIds?.length === 0 ||
+		acceptedTicketTypeIds?.length === 0 ||
 		tickets.length === 0 ||
 		!channel?.isSendable()
 	) {

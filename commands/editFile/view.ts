@@ -42,8 +42,9 @@ export async function viewHandler(
 	const expirationTime = expirationMinutes * 60 * 1000; // Convert to milliseconds
 
 	if (
-		!(await spendCredit(interaction.channel, {
+		!(await spendCredit({
 			user: interaction.user,
+			channel: interaction.channel,
 			cost: server.creditSettings.viewFileFee,
 			reason: `View File ${filename}`,
 			serverId: server.id,

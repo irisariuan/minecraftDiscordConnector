@@ -31,8 +31,9 @@ export default {
 		const user = interaction.options.getUser("user") ?? interaction.user;
 		if (
 			user.id !== interaction.user.id &&
-			!(await spendCredit(interaction.channel, {
+			!(await spendCredit({
 				user: interaction.user,
+				channel: interaction.channel,
 				cost: settings.checkUserCreditFee,
 				reason: `Check credit of user ${user.displayName}`,
 			}))

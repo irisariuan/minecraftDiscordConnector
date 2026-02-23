@@ -16,7 +16,7 @@ import {
 } from "../lib/permission";
 
 import { sendMessagesToUsersById } from "../lib/utils";
-import { TicketEffectType } from "../lib/ticket";
+import { TicketEffectType, voteApprovalTicketEffects } from "../lib/ticket";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -72,8 +72,9 @@ export default {
 		}
 		await interaction.deleteReply();
 
-		const transaction = await spendCredit(interaction.channel, {
+		const transaction = await spendCredit({
 			user: interaction.user,
+			channel: interaction.channel,
 			cost: server.creditSettings.newStartServerPollFee,
 			reason: "New Start Server Poll",
 			serverId: server.id,
@@ -118,12 +119,13 @@ export default {
 							.length +
 						approval.disapprovalIds.filter((id) => id === user.id)
 							.length;
-					const transaction = await spendCredit(interaction.channel, {
+					const transaction = await spendCredit({
+						user,
+						channel: interaction.channel,
 						cost: approval.options.credit,
 						reason: "Start Server Vote",
-						user,
 						serverId: server.id,
-						acceptedTicketTypeIds: [TicketEffectType.RepeatApprove],
+						acceptedTicketTypeIds: voteApprovalTicketEffects,
 						mustUseTickets: true,
 						onBeforeSpend: async ({ tickets }) => {
 							if (!tickets) return false;

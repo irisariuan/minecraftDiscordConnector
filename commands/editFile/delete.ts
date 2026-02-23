@@ -47,8 +47,9 @@ export async function deleteHandler(
 	);
 
 	// Charge credit for file deletion
-	const payment = await spendCredit(interaction.channel, {
+	const payment = await spendCredit({
 		user: interaction.user,
+		channel: interaction.channel,
 		cost: server.creditSettings.editFileFee,
 		reason: `Delete File ${filename}`,
 		serverId: server.id,

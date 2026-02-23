@@ -361,7 +361,7 @@ export async function sendApprovalPoll(
 }
 
 /**
- * A full flow handler for approval message button interactions, 
+ * A full flow handler for approval message button interactions,
  * including super approval confirmation, credit handling, and finalization (when approval is fulfilled)
  */
 export async function updateApprovalMessage(
@@ -526,8 +526,9 @@ export async function updateApprovalMessage(
 			}
 		} else {
 			// new approval/disapproval, spend credit
-			const transaction = await spendCredit(reaction.channel, {
+			const transaction = await spendCredit({
 				user: reaction.user,
+				channel: reaction.channel,
 				cost: approval.options.credit,
 				serverId: approval.server.id,
 				reason: `Approval Poll Reaction: ${approval.content}`,

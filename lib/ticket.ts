@@ -81,6 +81,7 @@ export enum TicketEffectType {
 	 */
 	CustomApprovalCount = "custom_approval_count",
 	/**
+	 * Can be used when voting an approval only
 	 * Value: Max. approval count
 	 */
 	RepeatApprove = "repeat_approve",
@@ -168,11 +169,18 @@ export function calculatePaymentTicketEffects(
 	return cost;
 }
 
-export const paymentTicketEffects: TicketEffectType[] = [
+export const basePaymentTicketEffects: TicketEffectType[] = [
 	TicketEffectType.FixedCredit,
 	TicketEffectType.Multiplier,
 	TicketEffectType.FreeUnderCost,
+];
+export const regularPaymentTicketEffects = [
 	TicketEffectType.CustomApprovalCount,
+	...basePaymentTicketEffects,
+];
+export const voteApprovalTicketEffects = [
+	TicketEffectType.RepeatApprove,
+	...basePaymentTicketEffects,
 ];
 
 /**

@@ -116,8 +116,9 @@ export default {
 			});
 		}
 
-		const payment = await spendCredit(interaction.channel, {
+		const payment = await spendCredit({
 			user: interaction.user,
+			channel: interaction.channel,
 			cost: amount + totalTransferringFee,
 			reason: `Transfer Credit (${amount} credits with ${totalTransferringFee} fee to ${userMention(user.id)})`,
 		});

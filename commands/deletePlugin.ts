@@ -46,8 +46,9 @@ export default {
 			)
 		)
 			return await deleteFunc();
-		const payment = await spendCredit(interaction.channel, {
+		const payment = await spendCredit({
 			user: interaction.user,
+			channel: interaction.channel,
 			cost: server.creditSettings.deletePluginFee,
 			reason: `Delete Plugin ${plugin}`,
 			serverId: server.id,

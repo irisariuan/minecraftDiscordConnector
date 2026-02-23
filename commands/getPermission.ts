@@ -42,8 +42,9 @@ export default {
 
 		if (
 			user.id !== interaction.user.id &&
-			!(await spendCredit(interaction.channel, {
+			!(await spendCredit({
 				user: interaction.user,
+				channel: interaction.channel,
 				cost: settings.checkUserPermissionFee,
 				reason: `Check Permission Of User ${user.displayName}`,
 				serverId: serverId,

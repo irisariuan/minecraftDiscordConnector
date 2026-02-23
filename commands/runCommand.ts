@@ -88,8 +88,9 @@ export default {
 		}
 		await interaction.deleteReply();
 		if (
-			!(await spendCredit(interaction.channel, {
+			!(await spendCredit({
 				user: interaction.user,
+				channel: interaction.channel,
 				cost: server.creditSettings.newRunCommandPollFee,
 				reason: "New Run Command Poll",
 				serverId: server.id,

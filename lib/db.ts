@@ -218,9 +218,7 @@ export async function getUserTickets(
 			...(ticketTypeIds ? { ticket: { id: { in: ticketTypeIds } } } : {}),
 			...(ticketEffectTypes
 				? {
-						OR: ticketEffectTypes.map((effect) => ({
-							ticket: { effect: { equals: effect } },
-						})),
+						ticket: { effect: { in: ticketEffectTypes } },
 					}
 				: {}),
 		},

@@ -232,9 +232,10 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				interaction.options.getUser("user") ?? interaction.user;
 			if (
 				user.id !== interaction.user.id &&
-				!(await spendCredit(interaction.channel, {
-					cost: settings.checkUserTicketFee,
+				!(await spendCredit({
+					channel: interaction.channel,
 					user: interaction.user,
+					cost: settings.checkUserTicketFee,
 					reason: `Checking tickets for user ${user.username}`,
 				}))
 			) {
