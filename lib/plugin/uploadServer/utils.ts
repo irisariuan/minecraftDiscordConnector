@@ -59,6 +59,14 @@ export const UploadRequestSchema = z.discriminatedUnion("action", [
 	}),
 ]);
 export function isNbtExtension(extension: string): boolean {
-	const nbtExtensions = ["dat", "nbt", "schematic", "schem", "dat_old"];
+	const nbtExtensions = [
+		"dat",
+		"nbt",
+		"schematic",
+		"schem",
+		"dat_old",
+		"mca",
+		"mcr",
+	];
 	return nbtExtensions.includes(removePrefix(extension.toLowerCase(), "."));
 }
