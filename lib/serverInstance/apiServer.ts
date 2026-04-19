@@ -105,7 +105,7 @@ export function initApiServer(
 			return res.status(400).send("Invalid server port");
 		}
 		const player = await getPlayerByUuid(parsed.data.uuid);
-		if (player?.playername !== parsed.data.playerName) {
+		if (player && player.playername !== parsed.data.playerName) {
 			await updatePlayerName(parsed.data.uuid, parsed.data.playerName);
 		}
 
