@@ -51,16 +51,18 @@ export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setRequired(true)
 						.setAutocomplete(true),
 				)
-				.addNumberOption((option) =>
-					option
-						.setName("value")
-						.setDescription("Value of the ticket effect, always fill in a value unless specified"),
-				)
 				.addStringOption((option) =>
 					option
 						.setName("name")
 						.setDescription("Name of the ticket type")
 						.setRequired(true),
+				)
+				.addNumberOption((option) =>
+					option
+						.setName("value")
+						.setDescription(
+							"Value of the ticket effect, always fill in a value unless specified",
+						),
 				)
 				.addStringOption((option) =>
 					option
