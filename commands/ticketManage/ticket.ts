@@ -29,6 +29,7 @@ import {
 import { settings } from "../../lib/settings";
 import {
 	addTicketToUser,
+	formatEffectData,
 	getUserTicketsByUserId,
 	isTicketAvailable,
 	removeTicketFromUser,
@@ -289,7 +290,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						value: `Ticket ID: \`${ticket.ticketId}\`\nTicket Type ID: \`${ticket.ticketTypeId}\`\nEffect: ${
 							TicketEffectTypeNames[ticket.effect.effect] ??
 							"Unknown effect"
-						} (${ticket.effect.value})\n${
+						} (${formatEffectData(ticket.effect)})\n${
 							ticket.description || "No description"
 						}\n${expireText}\nAvailability: ${
 							isTicketAvailable(ticket)

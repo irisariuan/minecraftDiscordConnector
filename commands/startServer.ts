@@ -91,10 +91,10 @@ export default {
 		);
 		if (
 			customApprovalTicket &&
-			customApprovalTicket.effect?.value !== null &&
-			Number.isInteger(customApprovalTicket?.effect?.value)
+			customApprovalTicket.effect.effect ===
+				TicketEffectType.CustomApprovalCount
 		) {
-			approvalCount = customApprovalTicket.effect.value;
+			approvalCount = customApprovalTicket.effect.count;
 		}
 		if (approvalCount === 0) {
 			const pid = await server.start(serverManager);
@@ -133,8 +133,7 @@ export default {
 								(t) =>
 									t.effect.effect ===
 										TicketEffectType.RepeatApprove &&
-									t.effect.value !== null &&
-									t.effect.value >= approvalCount + 1, // +1 because the current vote has not been counted in approvalCount yet
+									t.effect.maxCount >= approvalCount + 1, // +1 because the current vote has not been counted in approvalCount yet
 							);
 						},
 					});

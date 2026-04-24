@@ -22,6 +22,7 @@ import {
 } from "./permission";
 import {
 	calculatePaymentTicketEffects,
+	deserializeEffectData,
 	getUserSelectedTickets,
 	getUserSelectTicketChannel,
 	getUserTicketsByUserId,
@@ -175,10 +176,10 @@ export async function getCredit(userId: string): Promise<UserCredit | null> {
 							description: t.ticket.description,
 							reason: t.reason,
 							ticketTypeId: t.ticket.id,
-							effect: {
-								effect: t.ticket.effect as TicketEffectType,
-								value: t.ticket.value,
-							},
+							effect: deserializeEffectData(
+								t.ticket.effect,
+								t.ticket.effectData,
+							),
 						})) ?? null,
 					historyId: v.relatedTicketHistoryId,
 				}),

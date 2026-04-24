@@ -96,7 +96,7 @@ model Ticket {
     description String?
     name        String
     effect      String
-    value       Float?
+    effectData  Json
     userTickets UserTicket[]
 }
 

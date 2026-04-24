@@ -67,9 +67,120 @@ export interface UserTicket extends Ticket {
 	userId: string;
 }
 
-export interface TicketEffect {
-	effect: TicketEffectType;
-	value: number | null;
+export type TicketEffect =
+	| { effect: TicketEffectType.Multiplier; factor: number }
+	| { effect: TicketEffectType.FixedCredit; amount: number }
+	| { effect: TicketEffectType.FreeUnderCost; threshold: number }
+	| { effect: TicketEffectType.FreePlay; hours: number }
+	| { effect: TicketEffectType.CustomApprovalCount; count: number }
+	| { effect: TicketEffectType.RepeatApprove; maxCount: number };
+
+/** The plain data fields stored in the DB `effectData` column (no discriminant). */
+export type EffectDataOf<T extends TicketEffectType> = Omit<
+	Extract<TicketEffect, { effect: T }>,
+	"effect"
+>;
+
+/**
+ * Deserializes the `effectData` JSON column + effect type string into a
+ * fully-typed `TicketEffect` discriminated union member.
+ */
+export function deserializeEffectData(
+	effectType: string,
+	data: unknown,
+): TicketEffect {
+	const type = effectType as TicketEffectType;
+	const d = (data ?? {}) as Record<string, unknown>;
+	switch (type) {
+		case TicketEffectType.Multiplier:
+			return { effect: type, factor: d.factor as number };
+		case TicketEffectType.FixedCredit:
+			return { effect: type, amount: d.amount as number };
+		case TicketEffectType.FreeUnderCost:
+			return { effect: type, threshold: d.threshold as number };
+		case TicketEffectType.FreePlay:
+			return { effect: type, hours: d.hours as number };
+		case TicketEffectType.CustomApprovalCount:
+			return { effect: type, count: d.count as number };
+		case TicketEffectType.RepeatApprove:
+			return { effect: type, maxCount: d.maxCount as number };
+		default:
+			throw new Error(`Unknown TicketEffectType: "${effectType}"`);
+	}
+}
+
+/**
+ * Serializes a `TicketEffect` into the plain data object stored in the DB
+ * `effectData` column (strips the `effect` discriminant).
+ */
+export function serializeEffectData(
+	effect: TicketEffect,
+): Record<string, number> {
+	const { effect: _type, ...rest } = effect;
+	return rest as Record<string, number>;
+}
+
+/**
+ * Builds a `TicketEffect` from an effect type and a single numeric value.
+ * Used by Discord commands and tools where only one number is provided.
+ */
+export function buildEffectFromValue(
+	type: TicketEffectType,
+	value: number,
+): TicketEffect {
+	switch (type) {
+		case TicketEffectType.Multiplier:
+			return { effect: type, factor: value };
+		case TicketEffectType.FixedCredit:
+			return { effect: type, amount: value };
+		case TicketEffectType.FreeUnderCost:
+			return { effect: type, threshold: value };
+		case TicketEffectType.FreePlay:
+			return { effect: type, hours: value };
+		case TicketEffectType.CustomApprovalCount:
+			return { effect: type, count: value };
+		case TicketEffectType.RepeatApprove:
+			return { effect: type, maxCount: value };
+	}
+}
+
+/**
+ * Extracts the primary numeric value from a `TicketEffect` for display or
+ * for commands that only expose a single value field.
+ */
+export function getEffectSingleValue(effect: TicketEffect): number {
+	switch (effect.effect) {
+		case TicketEffectType.Multiplier:
+			return effect.factor;
+		case TicketEffectType.FixedCredit:
+			return effect.amount;
+		case TicketEffectType.FreeUnderCost:
+			return effect.threshold;
+		case TicketEffectType.FreePlay:
+			return effect.hours;
+		case TicketEffectType.CustomApprovalCount:
+			return effect.count;
+		case TicketEffectType.RepeatApprove:
+			return effect.maxCount;
+	}
+}
+
+/** Human-readable summary of the effect data (used in embeds and messages). */
+export function formatEffectData(effect: TicketEffect): string {
+	switch (effect.effect) {
+		case TicketEffectType.Multiplier:
+			return `×${effect.factor}`;
+		case TicketEffectType.FixedCredit:
+			return `-${effect.amount} credits`;
+		case TicketEffectType.FreeUnderCost:
+			return `free under ${effect.threshold}`;
+		case TicketEffectType.FreePlay:
+			return `${effect.hours}h free play`;
+		case TicketEffectType.CustomApprovalCount:
+			return `${effect.count} approvals`;
+		case TicketEffectType.RepeatApprove:
+			return `max ${effect.maxCount} approvals`;
+	}
 }
 export enum TicketEffectType {
 	Multiplier = "multiplier",
@@ -150,21 +261,15 @@ export function calculatePaymentTicketEffects(
 	)) {
 		switch (ticket.effect) {
 			case TicketEffectType.FixedCredit: {
-				if (ticket.value === null)
-					throw new Error("Fixed credit ticket must have a value");
-				cost = Math.max(0, cost - ticket.value);
+				cost = Math.max(0, cost - ticket.amount);
 				break;
 			}
 			case TicketEffectType.Multiplier: {
-				if (ticket.value === null)
-					throw new Error("Multiplier ticket must have a value");
-				cost = Math.max(0, Math.floor(cost * ticket.value));
+				cost = Math.max(0, Math.floor(cost * ticket.factor));
 				break;
 			}
 			case TicketEffectType.FreeUnderCost: {
-				if (ticket.value === null)
-					throw new Error("Free under cost ticket must have a value");
-				if (cost <= ticket.value) return 0;
+				if (cost <= ticket.threshold) return 0;
 				break;
 			}
 		}
@@ -229,10 +334,10 @@ export async function getUserTicketsByUserId({
 			reason: ticket.reason,
 			ticketTypeId: ticket.ticket.id,
 			expiresAt: ticket.expiresAt,
-			effect: {
-				effect: ticket.ticket.effect as TicketEffectType,
-				value: ticket.ticket.value,
-			},
+			effect: deserializeEffectData(
+				ticket.ticket.effect,
+				ticket.ticket.effectData,
+			),
 			histories: ticket.history.map((h) => ({
 				action: h.action,
 				reason: h.reason,
@@ -260,10 +365,10 @@ export async function getAllTickets(): Promise<UserTicket[]> {
 		reason: ticket.reason,
 		ticketTypeId: ticket.ticket.id,
 		expiresAt: ticket.expiresAt,
-		effect: {
-			effect: ticket.ticket.effect as TicketEffectType,
-			value: ticket.ticket.value,
-		},
+		effect: deserializeEffectData(
+			ticket.ticket.effect,
+			ticket.ticket.effectData,
+		),
 		histories: ticket.history.map((h) => ({
 			action: h.action,
 			reason: h.reason,
@@ -772,10 +877,10 @@ export async function addTicketToUser({
 					ticketTypeId,
 					name: rawTicket.ticket.name,
 					description: rawTicket.ticket.description,
-					effect: {
-						effect: rawTicket.ticket.effect as TicketEffectType,
-						value: rawTicket.ticket.value,
-					},
+					effect: deserializeEffectData(
+						rawTicket.ticket.effect,
+						rawTicket.ticket.effectData,
+					),
 					maxUse: rawTicket.maxUse ?? null,
 					expiresAt: rawTicket.expiresAt,
 					reason: rawTicket.reason,
@@ -870,10 +975,10 @@ export async function updateUserTicket({
 				ticketTypeId: rawTicket.ticketId,
 				name: rawTicket.ticket.name,
 				description: rawTicket.ticket.description,
-				effect: {
-					effect: rawTicket.ticket.effect as TicketEffectType,
-					value: rawTicket.ticket.value,
-				},
+				effect: deserializeEffectData(
+					rawTicket.ticket.effect,
+					rawTicket.ticket.effectData,
+				),
 				maxUse: rawTicket.maxUse ?? null,
 				expiresAt: rawTicket.expiresAt,
 				reason: rawTicket.reason,

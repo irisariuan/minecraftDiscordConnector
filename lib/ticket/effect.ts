@@ -92,12 +92,10 @@ export class TicketEffectManager {
 export function calculateEffectDuration(effect: TicketEffect) {
 	switch (effect.effect) {
 		case TicketEffectType.FreePlay: {
-			if (effect.value === null)
-				throw new Error("FreePlay effect must have a value");
-			if (effect.value <= 0)
-				throw new Error("FreePlay effect value must be greater than 0");
+			if (effect.hours <= 0)
+				throw new Error("FreePlay effect hours must be greater than 0");
 			// Value is in hours, convert to milliseconds
-			return effect.value * 60 * 60 * 1000;
+			return effect.hours * 60 * 60 * 1000;
 		}
 		default: {
 			return null;

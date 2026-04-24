@@ -4,6 +4,7 @@ import {
 	getAllRawTicketTypes,
 	getUserByIdWithoutTransactions,
 } from "../lib/db";
+import { deserializeEffectData, formatEffectData } from "../lib/ticket";
 
 const userId = await input({
 	message: "Please enter the user ID",
@@ -36,7 +37,7 @@ if (ticketTypes.length === 0) {
 const selectedTicketType = await select({
 	message: "Please select a ticket type to assign",
 	choices: ticketTypes.map((ticket) => ({
-		name: `${ticket.name} (${ticket.effect}: ${ticket.value})${ticket.description ? ` - ${ticket.description}` : ""}`,
+		name: `${ticket.name} (${ticket.effect}: ${formatEffectData(deserializeEffectData(ticket.effect, ticket.effectData))})${ticket.description ? ` - ${ticket.description}` : ""}`,
 		value: ticket.id,
 		description: ticket.description ?? undefined,
 	})),
@@ -89,7 +90,10 @@ const selectedTicket = ticketTypes.find((t) => t.id === selectedTicketType);
 console.log("\n=== Ticket Assignment Summary ===");
 console.log(`User ID: ${userId}`);
 console.log(`Ticket Type: ${selectedTicket?.name}`);
-console.log(`Effect: ${selectedTicket?.effect} (${selectedTicket?.value})`);
+if (selectedTicket)
+	console.log(
+		`Effect: ${selectedTicket.effect} (${formatEffectData(deserializeEffectData(selectedTicket.effect, selectedTicket.effectData))})`,
+	);
 if (selectedTicket?.description)
 	console.log(`Description: ${selectedTicket.description}`);
 if (reason) console.log(`Reason: ${reason}`);
