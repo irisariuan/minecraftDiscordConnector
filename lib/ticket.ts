@@ -89,21 +89,21 @@ export function deserializeEffectData(
 	effectType: string,
 	data: unknown,
 ): TicketEffect {
-	const type = effectType as TicketEffectType;
+	const effect = effectType as TicketEffectType;
 	const d = (data ?? {}) as Record<string, unknown>;
-	switch (type) {
+	switch (effect) {
 		case TicketEffectType.Multiplier:
-			return { effect: type, factor: d.factor as number };
+			return { effect, factor: d.factor as number };
 		case TicketEffectType.FixedCredit:
-			return { effect: type, amount: d.amount as number };
+			return { effect, amount: d.amount as number };
 		case TicketEffectType.FreeUnderCost:
-			return { effect: type, threshold: d.threshold as number };
+			return { effect, threshold: d.threshold as number };
 		case TicketEffectType.FreePlay:
-			return { effect: type, hours: d.hours as number };
+			return { effect, hours: d.hours as number };
 		case TicketEffectType.CustomApprovalCount:
-			return { effect: type, count: d.count as number };
+			return { effect, count: d.count as number };
 		case TicketEffectType.RepeatApprove:
-			return { effect: type, maxCount: d.maxCount as number };
+			return { effect, maxCount: d.maxCount as number };
 		default:
 			throw new Error(`Unknown TicketEffectType: "${effectType}"`);
 	}
