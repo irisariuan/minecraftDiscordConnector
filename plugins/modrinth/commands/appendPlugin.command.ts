@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import {
 	ComponentType,
 	MessageFlags,
@@ -9,6 +11,7 @@ import {
 	createRequestComponent,
 	RequestComponentId,
 } from "../../../lib/component/request";
+import { deletePluginRecord, getPluginsByServerId } from "../../../lib/db";
 import { sendPaginationMessage } from "../../../lib/pagination";
 import {
 	orPerm,
@@ -85,6 +88,8 @@ export default {
 				await menuInteraction.deferUpdate();
 				const value = menuInteraction.values[0];
 				if (!value) return false;
+
+				// ── Permission check ──────────────────────────────────────
 				if (
 					!comparePermission(
 						userPermission,
@@ -95,7 +100,7 @@ export default {
 						content: `Please ask a staff to permit your request on downloading \`${value}\``,
 						components: [createRequestComponent()],
 					});
-					const result = await request
+					const staffResult = await request
 						.awaitMessageComponent({
 							componentType: ComponentType.Button,
 							filter: async (i) =>
@@ -106,14 +111,14 @@ export default {
 							time: 1000 * 60 * 10,
 						})
 						.catch(() => null);
-					if (!result) {
+					if (!staffResult) {
 						await request.edit({
 							content: "Request to download plugin timed out.",
 							components: [],
 						});
 						return false;
 					}
-					if (result.customId === RequestComponentId.Deny) {
+					if (staffResult.customId === RequestComponentId.Deny) {
 						await request.edit({
 							content: "Request to download plugin denied.",
 							components: [],
@@ -125,31 +130,229 @@ export default {
 						components: [],
 					});
 				}
-				const { newDownload } = await downloadPluginFile(server, value);
-				if (!newDownload) {
-					await menuInteraction.editReply({
-						content:
-							"Failed to download plugin or plugin already exists.",
-						components: [],
-						embeds: [],
-					});
-					return false;
-				}
-				await menuInteraction.editReply({
-					content:
-						"Plugin downloaded and appended successfully! You should restart the server to take effect",
-					components: [],
-					embeds: [],
-				});
-				collector.stop();
-				const found = (await result.getData())?.find(
+
+				// ── Cache version list ────────────────────────────────────
+				const allVersions = await result.getData();
+				const selectedVersion = allVersions?.find(
 					(v) => v.id === value,
 				);
-				const filteredDependencies = found?.dependencies.filter(
-					(v) => !!v.file_name,
-				);
+
+				// ── Upgrade check (same project, different installed version) ──
+				let upgradeHandled = false;
+
+				if (selectedVersion?.project_id) {
+					const serverPlugins = await getPluginsByServerId(server.id);
+					const existingRecord = serverPlugins.find(
+						(p) =>
+							p.projectId === selectedVersion.project_id &&
+							p.versionId !== value,
+					);
+
+					if (existingRecord) {
+						const existingVersionLabel =
+							allVersions?.find(
+								(v) => v.id === existingRecord.versionId,
+							)?.version_number ?? existingRecord.versionId;
+						const newVersionLabel = selectedVersion.version_number;
+
+						// First confirmation
+						const firstMsg = await menuInteraction.followUp({
+							content: `Version \`${existingVersionLabel}\` of this plugin is already installed. Replacing it with \`${newVersionLabel}\` will remove the old version. Are you sure?`,
+							components: [
+								createRequestComponent({
+									showDeny: false,
+									showCancel: true,
+								}),
+							],
+							flags: MessageFlags.Ephemeral,
+						});
+						const firstConfirm = await firstMsg
+							.awaitMessageComponent({
+								componentType: ComponentType.Button,
+								filter: (i) =>
+									i.user.id === interaction.user.id,
+								time: 1000 * 60 * 2,
+							})
+							.catch(() => null);
+
+						await firstMsg.edit({ components: [] });
+
+						if (
+							!firstConfirm ||
+							firstConfirm.customId === RequestComponentId.Cancel
+						) {
+							await firstConfirm?.deferUpdate().catch(() => {});
+							await menuInteraction.editReply({
+								content: "Plugin replacement cancelled.",
+								components: [],
+								embeds: [],
+							});
+							return false;
+						}
+
+						await firstConfirm.deferUpdate();
+
+						// Second confirmation
+						const secondMsg = await menuInteraction.followUp({
+							content: `Are you absolutely sure you want to replace \`${existingVersionLabel}\` with \`${newVersionLabel}\`? This cannot be undone.`,
+							components: [
+								createRequestComponent({
+									showDeny: false,
+									showCancel: true,
+								}),
+							],
+							flags: MessageFlags.Ephemeral,
+						});
+						const secondConfirm = await secondMsg
+							.awaitMessageComponent({
+								componentType: ComponentType.Button,
+								filter: (i) =>
+									i.user.id === interaction.user.id,
+								time: 1000 * 60 * 2,
+							})
+							.catch(() => null);
+
+						await secondMsg.edit({ components: [] });
+
+						if (
+							!secondConfirm ||
+							secondConfirm.customId === RequestComponentId.Cancel
+						) {
+							await secondConfirm?.deferUpdate().catch(() => {});
+							await menuInteraction.editReply({
+								content: "Plugin replacement cancelled.",
+								components: [],
+								embeds: [],
+							});
+							return false;
+						}
+
+						await secondConfirm.deferUpdate();
+
+						// Download new version (force in case filename collides)
+						const { newDownload: upgraded } =
+							await downloadPluginFile(server, value, true);
+
+						if (!upgraded) {
+							await menuInteraction.editReply({
+								content:
+									"Failed to download the new plugin version.",
+								components: [],
+								embeds: [],
+							});
+							return false;
+						}
+
+						// Remove old file and DB record
+						if (
+							existingRecord.filePath &&
+							existsSync(existingRecord.filePath)
+						) {
+							await rm(existingRecord.filePath).catch(() => {});
+						}
+						await deletePluginRecord(
+							existingRecord.projectId,
+							existingRecord.versionId,
+							server.id,
+						);
+
+						await menuInteraction.editReply({
+							content: `Plugin upgraded from \`${existingVersionLabel}\` to \`${newVersionLabel}\` successfully! You should restart the server to take effect.`,
+							components: [],
+							embeds: [],
+						});
+
+						upgradeHandled = true;
+					}
+				}
+
+				// ── Normal download flow ──────────────────────────────────
+				if (!upgradeHandled) {
+					const { newDownload, filename } = await downloadPluginFile(
+						server,
+						value,
+					);
+
+					if (!newDownload && filename === null) {
+						await menuInteraction.editReply({
+							content: "Failed to download plugin.",
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
+
+					if (!newDownload && filename !== null) {
+						// Same version already on disk — offer single replace
+						const confirmMsg = await menuInteraction.followUp({
+							content: `Plugin \`${filename}\` already exists on the server. Do you want to replace it?`,
+							components: [
+								createRequestComponent({
+									showDeny: false,
+									showCancel: true,
+								}),
+							],
+							flags: MessageFlags.Ephemeral,
+						});
+						const confirmation = await confirmMsg
+							.awaitMessageComponent({
+								componentType: ComponentType.Button,
+								filter: (i) =>
+									i.user.id === interaction.user.id,
+								time: 1000 * 60 * 2,
+							})
+							.catch(() => null);
+
+						await confirmMsg.edit({ components: [] });
+
+						if (
+							!confirmation ||
+							confirmation.customId === RequestComponentId.Cancel
+						) {
+							await confirmation?.deferUpdate().catch(() => {});
+							await menuInteraction.editReply({
+								content: "Plugin replacement cancelled.",
+								components: [],
+								embeds: [],
+							});
+							return false;
+						}
+
+						await confirmation.deferUpdate();
+						const { newDownload: replaced } =
+							await downloadPluginFile(server, value, true);
+
+						if (!replaced) {
+							await menuInteraction.editReply({
+								content: "Failed to replace the plugin.",
+								components: [],
+								embeds: [],
+							});
+							return false;
+						}
+
+						await menuInteraction.editReply({
+							content:
+								"Plugin replaced successfully! You should restart the server to take effect.",
+							components: [],
+							embeds: [],
+						});
+					} else {
+						await menuInteraction.editReply({
+							content:
+								"Plugin downloaded and appended successfully! You should restart the server to take effect.",
+							components: [],
+							embeds: [],
+						});
+					}
+				}
+
+				// ── Common end: stop collector + dependency notice ────────
+				collector.stop();
+				const filteredDependencies =
+					selectedVersion?.dependencies.filter((v) => !!v.file_name);
 				if (
-					found &&
+					selectedVersion &&
 					filteredDependencies &&
 					filteredDependencies.length > 0
 				) {

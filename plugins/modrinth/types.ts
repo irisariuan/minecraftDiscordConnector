@@ -170,4 +170,6 @@ export type RichUpdateEntry = {
 	newVersionNumber: string;
 	newVersionDate: number; // ms timestamp, already transformed by listPluginVersions
 	newFilename: string;
+	/** File size in bytes, null when unavailable */
+	newFileSize: number | null;
 };
