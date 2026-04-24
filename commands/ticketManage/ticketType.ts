@@ -225,7 +225,7 @@ export async function ticketTypeHandler(
 				},
 				formatter: (ticketType: DbTicketType) => ({
 					name: `${ticketType.name} (${ticketType.id})`,
-					value: `Effect: ${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? "Unknown effect"} (${formatEffectData(deserializeEffectData(ticketType.effect, ticketType.effectData))})\n${ticketType.description || "No description"}`,
+					value: `🧪Effect: ${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? "❓Unknown effect"} (${formatEffectData(deserializeEffectData(ticketType.effect, ticketType.effectData))})\n${ticketType.description || "No description"}`,
 				}),
 				filterFunc: (filter?: string) => (ticketType: DbTicketType) => {
 					if (!filter) return true;

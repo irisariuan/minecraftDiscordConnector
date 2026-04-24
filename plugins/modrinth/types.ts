@@ -1,3 +1,5 @@
+import type { getPluginsByServerId } from "../../lib/db";
+
 export enum SideValue {
 	Required = "required",
 	Optional = "optional",
@@ -57,6 +59,8 @@ export interface PluginGetVersionItem {
 	 */
 	id: string;
 	project_id: string;
+	/** ISO-8601 date string */
+	date_published: string;
 	files: PluginGetVersionFileItem[];
 }
 
@@ -153,3 +157,17 @@ export interface ListPluginVersionsProps {
 	game_versions?: string[];
 	featured?: boolean;
 }
+
+export type DbPlugin = Awaited<ReturnType<typeof getPluginsByServerId>>[number];
+export type RichUpdateEntry = {
+	plugin: DbPlugin;
+	projectTitle: string;
+	/** Installed version */
+	currentVersionNumber: string;
+	currentVersionDate: number | null; // ms timestamp, null when unavailable
+	/** Available (newer) version */
+	newVersionId: string;
+	newVersionNumber: string;
+	newVersionDate: number; // ms timestamp, already transformed by listPluginVersions
+	newFilename: string;
+};
