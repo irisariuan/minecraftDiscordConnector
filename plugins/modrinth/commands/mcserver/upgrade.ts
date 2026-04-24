@@ -30,6 +30,7 @@ import {
 	writeStartScript,
 } from "../../lib";
 import type { ServerType } from "../../types";
+import { rm } from "node:fs/promises";
 
 export function upgradeSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 	return sub
@@ -213,7 +214,6 @@ export async function upgradeHandler(
 
 			// Remove old paper JARs
 			const oldPaperJars = await findJarsByPrefix(serverDir, "paper-");
-			const { rm } = await import("node:fs/promises");
 			for (const old of oldPaperJars) {
 				if (old !== newJarName)
 					await rm(safeJoin(serverDir, old)).catch(() => {});
@@ -261,7 +261,6 @@ export async function upgradeHandler(
 				installerPath,
 				serverDir,
 			);
-			const { rm } = await import("node:fs/promises");
 			await rm(installerPath).catch(() => {});
 
 			if (!ok) {

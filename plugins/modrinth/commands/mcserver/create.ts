@@ -31,6 +31,7 @@ import {
 } from "../../lib";
 import type { ServerType } from "../../types";
 import type { ExecuteParams } from "../../../../lib/commandFile";
+import { rm, writeFile } from "node:fs/promises";
 
 export function createSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 	return sub
@@ -212,7 +213,6 @@ export async function createHandler(
 				safeJoin(serverDir, jarName),
 			);
 			// Fabric also needs a fabric-server-launcher.properties
-			const { writeFile } = await import("node:fs/promises");
 			await writeFile(
 				safeJoin(serverDir, "fabric-server-launcher.properties"),
 				`serverJar=server.jar\n`,
@@ -244,7 +244,6 @@ export async function createHandler(
 				serverDir,
 			);
 
-			const { rm } = await import("node:fs/promises");
 			await rm(installerPath).catch(() => {});
 
 			if (!ok) {
@@ -355,5 +354,7 @@ export async function createHandler(
 		.setTimestamp();
 
 	interaction.editReply({ content: "", embeds: [embed] });
-	interaction.followUp('You can always edit the startup script using /manageServer')
+	interaction.followUp(
+		"You can always edit the startup script using /manageServer",
+	);
 }

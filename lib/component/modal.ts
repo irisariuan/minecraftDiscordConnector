@@ -33,9 +33,9 @@ export function buildModal(
 	const input = new TextInputBuilder()
 		.setCustomId(ModalComponentId.Input)
 		.setStyle(TextInputStyle.Paragraph)
-		.setValue(currentContent?.slice(0, 4000) ?? "")
 		.setMaxLength(4000)
 		.setRequired(true);
+	if (currentContent) input.setValue(currentContent.slice(0, 4000));
 	const label = new LabelBuilder()
 		.setLabel("Edit Content")
 		.setDescription(
@@ -71,7 +71,9 @@ export function buildModalPromptRow(): ActionRowBuilder<ButtonBuilder> {
  * Single "✏️ Edit script content" button row.
  * Shown after a server-edit operation succeeds.
  */
-export function buildEditModalContentRow(label = "Edit script content"): ActionRowBuilder<ButtonBuilder> {
+export function buildEditModalContentRow(
+	label = "Edit script content",
+): ActionRowBuilder<ButtonBuilder> {
 	return new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder()
 			.setCustomId(ModalComponentId.EditBtn)
