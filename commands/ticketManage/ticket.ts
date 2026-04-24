@@ -92,7 +92,7 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 					option
 						.setName("expire")
 						.setDescription(
-							"Duration (DD:HH:MM:SS, Ns), date (YYYY/M/D, M/D, YYYY/M/D+HH:MM), or today's time (+HH:MM)",
+							"Standard Time Representation",
 						)
 						.setRequired(false),
 				)
@@ -153,7 +153,7 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 					option
 						.setName("expire")
 						.setDescription(
-							"Duration (DD:HH:MM:SS, Ns), date (YYYY/M/D, M/D, YYYY/M/D+HH:MM), today's time (+HH:MM), or 'remove' to clear",
+							"Standard Time Representation, or 'remove' to clear",
 						)
 						.setRequired(false),
 				)
