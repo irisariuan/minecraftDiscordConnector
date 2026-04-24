@@ -5,6 +5,7 @@ import {
 	time,
 	userMention,
 } from "discord.js";
+
 import { buildInteractionFetcher, sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import { spendCredit } from "../lib/credit";
@@ -66,9 +67,10 @@ export default {
 				});
 			}
 			console.log(`Server started with PID ${pid}`);
-			return await interaction.editReply({
+			await interaction.editReply({
 				content: "Server started successfully",
 			});
+			return;
 		}
 		await interaction.deleteReply();
 
@@ -104,9 +106,10 @@ export default {
 				});
 			}
 			console.log(`Server started with PID ${pid}`);
-			return await interaction.editReply({
+			await interaction.editReply({
 				content: "Server started successfully",
 			});
+			return;
 		}
 
 		sendApprovalPoll(buildInteractionFetcher(interaction), {

@@ -26,6 +26,7 @@ import { serverConfig } from "./lib/serverInstance/plugin/types";
 import { changeSettings, loadSettings, settings } from "./lib/settings";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
 import { getAllTickets, ticketNotificationManager } from "./lib/ticket";
+import { pluginEvents } from "./lib/pluginEvent";
 
 let enablePlugins = !process.argv.includes("--no-plugins");
 let commands = await loadCommands(enablePlugins);
@@ -347,9 +348,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		};
 
 		if (doNotRequireServer(command)) {
-			return await Promise.try(() =>
+			Promise.try(() =>
 				command.execute({ interaction, client, serverManager }),
 			).catch(errorHandler);
+			pluginEvents.emit("commandCalled", {
+				commandName,
+				interaction,
+				server: null,
+				client,
+				serverManager,
+			});
+			return;
 		}
 		const server = await getUserSelectedServer(
 			serverManager,
@@ -420,9 +429,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			});
 		}
 
-		await Promise.try(() =>
+		Promise.try(() =>
 			command.execute({ interaction, client, server, serverManager }),
 		).catch(errorHandler);
+		pluginEvents.emit("commandCalled", {
+			commandName,
+			interaction,
+			server,
+			client,
+			serverManager,
+		});
 	} else if (interaction.isMessageComponent() && interaction.isButton()) {
 		if (
 			interaction.user.bot ||

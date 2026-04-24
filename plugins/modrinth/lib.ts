@@ -3,6 +3,7 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { EmbedBuilder, bold, inlineCode, italic } from "discord.js";
 import { upsertNewPlugin, getPluginsByServerId } from "../../lib/db";
 import type { Server } from "../../lib/server";
+import type { DbPlugin, RichUpdateEntry } from "./types";
 import {
 	ensureSuffix,
 	removeSuffix,
@@ -210,6 +211,128 @@ export async function checkPluginCompatibility(
 	);
 
 	return results;
+}
+
+/**
+ * Check all DB-tracked plugins for this server against Modrinth and return
+ * entries where a newer version is available for the server's current
+ * Minecraft version + loader.
+ */
+export async function checkOutdatedPlugins(server: Server): Promise<{
+	outdated: RichUpdateEntry[];
+	failed: string[];
+}> {
+	const plugins = await getPluginsByServerId(server.id);
+	if (plugins.length === 0) return { outdated: [], failed: [] };
+
+	// Keep only the most-recently updated record per projectId
+	const latestByProject = new Map<string, DbPlugin>();
+	for (const plugin of plugins) {
+		const existing = latestByProject.get(plugin.projectId);
+		if (!existing || plugin.updatedAt > existing.updatedAt) {
+			latestByProject.set(plugin.projectId, plugin);
+		}
+	}
+
+	const outdated: RichUpdateEntry[] = [];
+	const failed: string[] = [];
+
+	for (const [projectId, plugin] of latestByProject.entries()) {
+		const [versions, currentVersionDetails, projectDetails] =
+			await Promise.all([
+				listPluginVersions(projectId, {
+					loaders: [server.config.loaderType],
+					game_versions: [server.config.minecraftVersion],
+				}),
+				getPluginVersionDetails(plugin.versionId),
+				getPlugin(projectId),
+			]);
+
+		if (!versions || versions.length === 0) {
+			failed.push(projectDetails?.title ?? projectId);
+			continue;
+		}
+
+		const latest = versions[0];
+		if (!latest) {
+			failed.push(projectDetails?.title ?? projectId);
+			continue;
+		}
+
+		// Already up-to-date — skip silently
+		if (latest.id === plugin.versionId) continue;
+
+		outdated.push({
+			plugin,
+			projectTitle: projectDetails?.title ?? projectId,
+			currentVersionNumber:
+				currentVersionDetails?.version_number ?? plugin.versionId,
+			currentVersionDate: currentVersionDetails?.date_published
+				? new Date(currentVersionDetails.date_published).getTime()
+				: null,
+			newVersionId: latest.id,
+			newVersionNumber: latest.version_number,
+			newVersionDate: latest.date_published,
+			newFilename: latest.files[0]?.filename ?? "unknown",
+			newFileSize: latest.files[0]?.size ?? null,
+		});
+	}
+
+	return { outdated, failed };
+}
+
+/**
+ * Build a compact embed summarising outdated plugins found by
+ * {@link checkOutdatedPlugins}.  Returns `null` when everything is up-to-date
+ * and there is nothing to show.
+ */
+export function buildOutdatedPluginsEmbed(
+	outdated: RichUpdateEntry[],
+	failed: string[],
+	serverTag: string,
+): EmbedBuilder | null {
+	if (outdated.length === 0 && failed.length === 0) return null;
+
+	const embed = new EmbedBuilder()
+		.setTitle("🔌 Outdated Plugin Check")
+		.setColor(outdated.length > 0 ? 0xf39c12 : 0x95a5a6)
+		.setDescription(
+			outdated.length > 0
+				? `${bold(serverTag)} has ${bold(String(outdated.length))} outdated plugin${outdated.length !== 1 ? "s" : ""}. Run ${inlineCode("/updateplugins")} to update.`
+				: `${bold(serverTag)} — all tracked plugins are up to date.`,
+		)
+		.setTimestamp();
+
+	if (outdated.length > 0) {
+		const MAX_SHOWN = 10;
+		const lines = outdated
+			.slice(0, MAX_SHOWN)
+			.map(
+				(r) =>
+					`• ${bold(r.projectTitle)} — ${inlineCode(r.currentVersionNumber)} → ${inlineCode(r.newVersionNumber)}`,
+			)
+			.join("\n");
+		const overflow =
+			outdated.length > MAX_SHOWN
+				? `\n${italic(`…and ${outdated.length - MAX_SHOWN} more`)}`
+				: "";
+		embed.addFields({
+			name: `⬆️ Updates Available (${outdated.length})`,
+			value: trimTextWithSuffix(lines + overflow, 1024),
+		});
+	}
+
+	if (failed.length > 0) {
+		embed.addFields({
+			name: `❓ Could Not Check (${failed.length})`,
+			value: trimTextWithSuffix(
+				failed.map((id) => inlineCode(id)).join(", "),
+				1024,
+			),
+		});
+	}
+
+	return embed;
 }
 
 export function buildCompatEmbed(
