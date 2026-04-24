@@ -1,10 +1,5 @@
 import { defaultSettings } from "../defaultSettings";
-import {
-	getServerApprovalSettings,
-	getServerCreditSettings,
-	SettingType,
-	upsertSetting,
-} from "./db";
+import { getServerSettings, SettingType, upsertSetting } from "./db";
 import type { Server, ServerManager } from "./server";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
@@ -115,18 +110,14 @@ export async function loadSettings(): Promise<Partial<GlobalSettings>> {
 	return data;
 }
 
-export async function loadServerSettings(id: number): Promise<ServerSettings> {
-	const [creditRows, approvalRows] = await Promise.all([
-		getServerCreditSettings(id),
-		getServerApprovalSettings(id),
-	]);
-
-	const filtered: Partial<ServerSettings> = {};
-	for (const row of [...(creditRows ?? []), ...(approvalRows ?? [])]) {
-		filtered[row.name as keyof ServerSettings] = row.value;
+export async function loadServerSettings(
+	id: number,
+): Promise<Partial<ServerSettings>> {
+	const settings: Partial<ServerSettings> = {};
+	for (const entry of await getServerSettings(id)) {
+		settings[entry.name as keyof ServerSettings] = entry.value;
 	}
-
-	return { ...settings, ...filtered };
+	return settings;
 }
 
 export async function editSetting(
@@ -159,16 +150,3 @@ export async function editSetting(
 		...changes,
 	};
 }
-
-// ---------------------------------------------------------------------------
-// Legacy aliases kept for any callers that haven't been updated yet
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use {@link setSettings} instead */
-export const setCreditSettings = setSettings;
-/** @deprecated Use {@link changeSettings} instead */
-export const changeCreditSettings = changeSettings;
-/** @deprecated Use {@link loadServerSettings} instead */
-export const loadServerCreditSetting = loadServerSettings;
-/** @deprecated Use {@link loadSettings} instead */
-export const loadCreditSettings = loadSettings;

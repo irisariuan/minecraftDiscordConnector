@@ -21,13 +21,13 @@ type AcceptedInteractions =
 	| AutocompleteInteraction
 	| ChatInputCommandInteraction;
 
-interface ExecuteParams<Interaction extends AcceptedInteractions> {
+export interface ExecuteParams<Interaction extends AcceptedInteractions> {
 	interaction: Interaction;
 	serverManager: ServerManager;
 	client: Client;
 }
 
-interface ExecuteParamsWithServer<
+export interface ExecuteParamsWithServer<
 	Interaction extends AcceptedInteractions,
 > extends ExecuteParams<Interaction> {
 	server: Server;

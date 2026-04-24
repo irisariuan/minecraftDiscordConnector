@@ -46,10 +46,15 @@ export async function getUserSelectedServer(
 			}, 1000 * 5);
 			return null;
 		}
-		await interaction.reply({
-			content: "No servers available",
-			flags: MessageFlags.Ephemeral,
-		});
+		if (!interaction.deferred || !interaction.replied)
+			await interaction.reply({
+				content: "No servers available",
+				flags: MessageFlags.Ephemeral,
+			});
+		else
+			await interaction.editReply({
+				content: "No servers available",
+			});
 		return null;
 	}
 	if (serverCount === 1) {
@@ -64,10 +69,15 @@ export async function getUserSelectedServer(
 				}, 1000 * 5);
 				return null;
 			}
-			await interaction.reply({
-				content: "No servers available",
-				flags: MessageFlags.Ephemeral,
-			});
+			if (!interaction.deferred || !interaction.replied)
+				await interaction.reply({
+					content: "No servers available",
+					flags: MessageFlags.Ephemeral,
+				});
+			else
+				await interaction.editReply({
+					content: "No servers available",
+				});
 			return null;
 		}
 		if (!interaction.deferred)

@@ -529,6 +529,12 @@ export function joinPath(...segments: string[]): string {
 		.join("/");
 }
 
+export function joinPathWithBase(base: string, ...segments: string[]): string | null {
+	const joined = joinPathSafe(...segments);
+	if (joined === null) return null;
+	return join(base, joined);
+}
+
 /**
  * Get the parent path by removing the last segment
  * Returns empty string if already at root

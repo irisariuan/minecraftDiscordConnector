@@ -159,6 +159,39 @@ export interface ListPluginVersionsProps {
 }
 
 export type DbPlugin = Awaited<ReturnType<typeof getPluginsByServerId>>[number];
+
+// ─── mcserver types ───────────────────────────────────────────────────────────
+
+export const SERVER_TYPES = ["vanilla", "paper", "fabric", "forge"] as const;
+export type ServerType = (typeof SERVER_TYPES)[number];
+
+export interface MojangManifest {
+	versions: { id: string; type: string; url: string }[];
+}
+
+export interface MojangVersionInfo {
+	downloads: {
+		server?: { url: string; sha1: string; size: number };
+	};
+}
+
+export interface FabricVersion {
+	version: string;
+	stable: boolean;
+}
+
+export interface ForgePromotions {
+	promos: Record<string, string>;
+}
+
+export interface CompatResult {
+	projectId: string;
+	title: string;
+	currentVersion: string;
+	/** null = unknown / not on Modrinth */
+	compatible: boolean | null;
+	availableVersionId: string | null;
+}
 export type RichUpdateEntry = {
 	plugin: DbPlugin;
 	projectTitle: string;

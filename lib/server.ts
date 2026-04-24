@@ -15,6 +15,7 @@ import { loadServerSettings, type ServerSettings } from "./settings";
 import { SuspendingEventEmitter } from "./suspend";
 import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
 import { initApiServer } from "./serverInstance/apiServer";
+import { defaultSettings } from "../defaultSettings";
 
 if (
 	!process.env.SERVER_DIR ||
@@ -48,11 +49,11 @@ interface CreateServerOptions {
 	defaultSuspending?: boolean;
 	config: ServerConfig;
 	serverId: number;
-	settings: ServerSettings;
+	settings: Partial<ServerSettings>;
 	gameType: ServerGameType;
 	startupScript?: string;
 }
-const serverGameTypes = ["minecraft", "hytale", "unknown"] as const;
+export const serverGameTypes = ["minecraft", "hytale", "unknown"] as const;
 export type ServerGameType = (typeof serverGameTypes)[number];
 
 export class Server {
@@ -90,7 +91,7 @@ export class Server {
 		this.approvalList = new Map();
 		this.config = config;
 		this.id = serverId;
-		this.settings = settings;
+		this.settings = { ...defaultSettings, ...settings };
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
 		this.paymentManager = new PaymentManager();
@@ -439,6 +440,60 @@ export class ServerManager {
 			}
 		}
 		return ports;
+	}
+
+	async addOrReloadServer(serverData: {
+		id: number;
+		port: number[];
+		path: string;
+		pluginPath: string;
+		gameType: string;
+		startupScript: string | null;
+		apiPort: number | null;
+		loaderType: string;
+		modType: string;
+		version: string;
+		tag: string | null;
+	}): Promise<"full" | "partial"> {
+		if (!serverGameTypes.includes(serverData.gameType as ServerGameType)) {
+			throw new Error(`Unknown server game type: ${serverData.gameType}`);
+		}
+		const existingServer = this.servers.get(serverData.id);
+		const isRunning =
+			existingServer && (await existingServer.isOnline.getData(true));
+
+		if (isRunning) {
+			// Partial in-memory update for a live server
+			existingServer.startupScript =
+				serverData.startupScript ?? undefined;
+			existingServer.gameType = serverData.gameType as ServerGameType;
+			// config is readonly reference but the object itself is mutable
+			(existingServer.config as ServerConfig).tag = serverData.tag;
+			return "partial";
+		}
+
+		const newServer = new Server({
+			serverId: serverData.id,
+			config: {
+				loaderType: serverData.loaderType,
+				minecraftVersion: serverData.version,
+				modType: serverData.modType,
+				pluginDir: serverData.pluginPath,
+				serverDir: serverData.path,
+				tag: serverData.tag,
+				port: serverData.port,
+				apiPort: serverData.apiPort,
+			},
+			settings: await loadServerSettings(serverData.id),
+			gameType: serverData.gameType as ServerGameType,
+			startupScript: serverData.startupScript ?? undefined,
+		});
+		this.servers.set(serverData.id, newServer);
+		return "full";
+	}
+
+	removeServer(serverId: number) {
+		this.servers.delete(serverId);
 	}
 
 	async exitAllServers(client: Client) {

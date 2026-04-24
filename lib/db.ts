@@ -11,6 +11,8 @@ export enum SettingType {
 	Approval = "approval",
 }
 
+export type DbServer = Prisma.ServerModel;
+
 export async function createUser(data: Prisma.UserCreateInput) {
 	return prisma.user.create({ data });
 }
@@ -161,7 +163,7 @@ export async function createServer(data: Prisma.ServerCreateInput) {
 	return prisma.server.create({ data });
 }
 
-export async function getAllServers() {
+export async function getAllServers(): Promise<DbServer[]> {
 	return prisma.server.findMany();
 }
 
@@ -169,19 +171,24 @@ export async function getAllServerIds() {
 	return prisma.server.findMany({ select: { id: true } });
 }
 
+export async function updateServer(id: number, data: Prisma.ServerUpdateInput) {
+	return prisma.server.update({ where: { id }, data });
+}
+
+export async function deleteServer(id: number) {
+	return prisma.server.delete({ where: { id } });
+}
+
 export async function hasAnyServer() {
 	return (await prisma.server.count()) > 0;
 }
 
-export async function getServerCreditSettings(serverId: number) {
+export async function getServerSettings(
+	serverId: number,
+	type?: SettingType,
+) {
 	return await prisma.setting.findMany({
-		where: { serverId, type: SettingType.ServerCredit },
-	});
-}
-
-export async function getServerApprovalSettings(serverId: number) {
-	return await prisma.setting.findMany({
-		where: { serverId, type: SettingType.Approval },
+		where: { serverId, type },
 	});
 }
 

@@ -155,8 +155,8 @@ export default {
 							)?.version_number ?? existingRecord.versionId;
 						const newVersionLabel = selectedVersion.version_number;
 
-						// First confirmation
-						const firstMsg = await menuInteraction.followUp({
+						// Confirmation
+						const replaceMsg = await menuInteraction.followUp({
 							content: `Version \`${existingVersionLabel}\` of this plugin is already installed. Replacing it with \`${newVersionLabel}\` will remove the old version. Are you sure?`,
 							components: [
 								createRequestComponent({
@@ -166,7 +166,7 @@ export default {
 							],
 							flags: MessageFlags.Ephemeral,
 						});
-						const firstConfirm = await firstMsg
+						const confirmMsg = await replaceMsg
 							.awaitMessageComponent({
 								componentType: ComponentType.Button,
 								filter: (i) =>
@@ -175,13 +175,10 @@ export default {
 							})
 							.catch(() => null);
 
-						await firstMsg.edit({ components: [] });
-
-						if (
-							!firstConfirm ||
-							firstConfirm.customId === RequestComponentId.Cancel
-						) {
-							await firstConfirm?.deferUpdate().catch(() => {});
+						if (!confirmMsg) {
+							await replaceMsg
+								.edit({ components: [] })
+								.catch(() => {});
 							await menuInteraction.editReply({
 								content: "Plugin replacement cancelled.",
 								components: [],
@@ -190,35 +187,11 @@ export default {
 							return false;
 						}
 
-						await firstConfirm.deferUpdate();
-
-						// Second confirmation
-						const secondMsg = await menuInteraction.followUp({
-							content: `Are you absolutely sure you want to replace \`${existingVersionLabel}\` with \`${newVersionLabel}\`? This cannot be undone.`,
-							components: [
-								createRequestComponent({
-									showDeny: false,
-									showCancel: true,
-								}),
-							],
-							flags: MessageFlags.Ephemeral,
-						});
-						const secondConfirm = await secondMsg
-							.awaitMessageComponent({
-								componentType: ComponentType.Button,
-								filter: (i) =>
-									i.user.id === interaction.user.id,
-								time: 1000 * 60 * 2,
-							})
-							.catch(() => null);
-
-						await secondMsg.edit({ components: [] });
+						await confirmMsg.update({ components: [] });
 
 						if (
-							!secondConfirm ||
-							secondConfirm.customId === RequestComponentId.Cancel
+							confirmMsg.customId === RequestComponentId.Cancel
 						) {
-							await secondConfirm?.deferUpdate().catch(() => {});
 							await menuInteraction.editReply({
 								content: "Plugin replacement cancelled.",
 								components: [],
@@ -226,8 +199,6 @@ export default {
 							});
 							return false;
 						}
-
-						await secondConfirm.deferUpdate();
 
 						// Download new version (force in case filename collides)
 						const { newDownload: upgraded } =
@@ -303,13 +274,10 @@ export default {
 							})
 							.catch(() => null);
 
-						await confirmMsg.edit({ components: [] });
-
-						if (
-							!confirmation ||
-							confirmation.customId === RequestComponentId.Cancel
-						) {
-							await confirmation?.deferUpdate().catch(() => {});
+						if (!confirmation) {
+							await confirmMsg
+								.edit({ components: [] })
+								.catch(() => {});
 							await menuInteraction.editReply({
 								content: "Plugin replacement cancelled.",
 								components: [],
@@ -318,7 +286,18 @@ export default {
 							return false;
 						}
 
-						await confirmation.deferUpdate();
+						await confirmation.update({ components: [] });
+
+						if (
+							confirmation.customId === RequestComponentId.Cancel
+						) {
+							await menuInteraction.editReply({
+								content: "Plugin replacement cancelled.",
+								components: [],
+								embeds: [],
+							});
+							return false;
+						}
 						const { newDownload: replaced } =
 							await downloadPluginFile(server, value, true);
 
