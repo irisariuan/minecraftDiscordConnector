@@ -40,7 +40,7 @@ export const PermissionFlags = {
 	skipPayment: 1 << 23,
 	serverModify: 1 << 24,
 	serverCreate: 1 << 25,
-	restrictServerAccess: 1 << 26,
+	unrestrictedServerAccess: 1 << 26,
 } as const;
 
 export const allPermission = Object.values(PermissionFlags).reduce(

@@ -174,5 +174,5 @@ export default {
 				});
 		}
 	},
-	permissions: PermissionFlags.restrictServerAccess,
+	permissions: PermissionFlags.unrestrictedServerAccess,
 } satisfies CommandFile<false>;
