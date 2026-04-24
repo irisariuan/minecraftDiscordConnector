@@ -49,15 +49,6 @@ export function initApiServer(
 		if (player.playername !== parsed.data.playerName) {
 			await updatePlayerName(parsed.data.uuid, parsed.data.playerName);
 		}
-		if (
-			!(await canSpendCredit(
-				player.discordId,
-				server.settings.playFee,
-			)) &&
-			!parsed.data.disconnect
-		) {
-			return res.send(JSON.stringify({ kick: true }));
-		}
 		const effects = ticketEffectManager.getUserActiveEffects(
 			player.discordId,
 		);
@@ -71,6 +62,15 @@ export function initApiServer(
 			)
 		) {
 			return res.send(JSON.stringify({ kick: false }));
+		}
+		if (
+			!(await canSpendCredit(
+				player.discordId,
+				server.settings.playFee,
+			)) &&
+			!parsed.data.disconnect
+		) {
+			return res.send(JSON.stringify({ kick: true }));
 		}
 		await changeCredit({
 			change: -server.settings.playFee,

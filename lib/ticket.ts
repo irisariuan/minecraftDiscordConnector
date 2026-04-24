@@ -75,6 +75,9 @@ export enum TicketEffectType {
 	Multiplier = "multiplier",
 	FixedCredit = "fixed_credit",
 	FreeUnderCost = "free_under_cost",
+	/**
+	 * Exempt user from payment for certain hours. Value is the hours of
+	 */
 	FreePlay = "free_play",
 	/**
 	 * Can be used when starting an approval only

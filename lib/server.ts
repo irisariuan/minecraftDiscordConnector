@@ -477,23 +477,32 @@ export class ServerManager {
 	}
 }
 
+interface Payment {
+	startTime: number;
+	validDuration: number;
+	timeout: NodeJS.Timeout;
+}
+
 class PaymentManager {
 	/**
-	 * Map<ID, Payment interval>
+	 * Map<ID, Payment>
 	 */
-	payment: Map<string, number>;
-	isActive: boolean;
-	timeouts: Set<NodeJS.Timeout>;
+	private payment: Map<string, Payment>;
+	private active: boolean;
+	private timeouts: Set<NodeJS.Timeout>;
 	constructor() {
 		this.payment = new Map();
-		this.isActive = false;
+		this.active = false;
 		this.timeouts = new Set();
 	}
+	get isActive() {
+		return this.active;
+	}
 	setActive(active: boolean) {
-		if ((active && !this.isActive) || (!active && this.isActive)) {
+		if ((active && !this.active) || (!active && this.active)) {
 			this.reset();
 		}
-		this.isActive = active;
+		this.active = active;
 	}
 
 	reset() {
@@ -507,15 +516,22 @@ class PaymentManager {
 	}
 	markPaid(uuid: string, paymentInterval: number) {
 		this.setActive(true);
-		this.payment.set(uuid, paymentInterval);
 		const timeout = setTimeout(() => {
 			this.payment.delete(uuid);
 			this.timeouts.delete(timeout);
 		}, paymentInterval);
+		this.payment.set(uuid, {
+			startTime: Date.now(),
+			validDuration: paymentInterval,
+			timeout,
+		});
 		this.timeouts.add(timeout);
 	}
 	hasPaid(uuid: string) {
 		return this.payment.has(uuid);
+	}
+	getPayment(uuid: string) {
+		return this.payment.get(uuid);
 	}
 }
 
