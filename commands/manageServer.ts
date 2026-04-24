@@ -1,5 +1,6 @@
 import {
 	bold,
+	ComponentType,
 	inlineCode,
 	italic,
 	MessageFlags,
@@ -12,9 +13,19 @@ import {
 	getAllServers,
 	selectServerById,
 	updateServer,
+	type DbServer,
 } from "../lib/db";
-import { PermissionFlags } from "../lib/permission";
+import { andPerm, PermissionFlags } from "../lib/permission";
 import { serverGameTypes } from "../lib/server";
+import {
+	buildEditModalContentRow,
+	collectInputFromModal,
+	ModalComponentId,
+} from "../lib/component/modal";
+import { readFile, writeFile } from "node:fs/promises";
+import { joinPathWithBase } from "../lib/utils";
+import { readFileSync } from "node:fs";
+import { getUserSelectedServer } from "../lib/component/server";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -86,27 +97,12 @@ export default {
 						.setDescription("Game type (default: minecraft)")
 						.setRequired(false)
 						.setAutocomplete(true),
-				)
-				.addStringOption((o) =>
-					o
-						.setName("startupscript")
-						.setDescription(
-							"Path to startup script relative to server dir (default: ./start.sh)",
-						)
-						.setRequired(false),
 				),
 		)
 		.addSubcommand((sub) =>
 			sub
 				.setName("edit")
 				.setDescription("Edit an existing server instance")
-				.addStringOption((o) =>
-					o
-						.setName("server")
-						.setDescription("Server to edit")
-						.setRequired(true)
-						.setAutocomplete(true),
-				)
 				.addStringOption((o) =>
 					o
 						.setName("path")
@@ -181,17 +177,14 @@ export default {
 				.setName("delete")
 				.setDescription(
 					"Delete a server instance from the database (server must be offline)",
-				)
-				.addStringOption((o) =>
-					o
-						.setName("server")
-						.setDescription("Server to delete")
-						.setRequired(true)
-						.setAutocomplete(true),
 				),
 		),
 	requireServer: false,
-	permissions: PermissionFlags.editSetting,
+	permissions: andPerm(
+		PermissionFlags.editSetting,
+		PermissionFlags.serverModify,
+		PermissionFlags.serverCreate,
+	),
 	async execute({ interaction, serverManager }) {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		const sub = interaction.options.getSubcommand(true);
@@ -213,11 +206,7 @@ export default {
 
 				return [
 					`${bold(`[${s.id}] ${s.tag ?? `Server #${s.id}`}`)} — ${statusLabel}`,
-					`  Path: ${inlineCode(s.path)}`,
-					`  Plugins: ${inlineCode(s.pluginPath)}`,
-					`  Version: ${inlineCode(s.version)} | Loader: ${inlineCode(s.loaderType)} | Mod: ${inlineCode(s.modType)}`,
-					`  Ports: ${inlineCode(s.port.join(", "))} | API Port: ${s.apiPort != null ? inlineCode(String(s.apiPort)) : italic("none")}`,
-					`  Game: ${inlineCode(s.gameType)} | Script: ${s.startupScript ? inlineCode(s.startupScript) : italic("default (./start.sh)")}`,
+					formatServerSummary(s),
 				].join("\n");
 			});
 
@@ -290,32 +279,95 @@ export default {
 				startupScript: startupScriptRaw,
 			});
 
+			const finalStartupScript = newServer.startupScript ?? "start.sh";
+
+			console.log(
+				"Collecting startup script content for",
+				finalStartupScript,
+			);
+			const message = await interaction.editReply({
+				components: [buildEditModalContentRow()],
+			});
+			const collector = message.createMessageComponentCollector({
+				componentType: ComponentType.Button,
+				time: 1000 * 60 * 5,
+				filter: (i) =>
+					i.user.id === interaction.user.id &&
+					i.customId === ModalComponentId.EditBtn,
+			});
+			collector.on("collect", async (i) => {
+				const { content, interaction } =
+					await collectInputFromModal(
+						i,
+						await readFile(finalStartupScript, "utf8").catch(
+							() => "",
+						),
+					);
+				if (content !== null) {
+					const scriptPath = joinPathWithBase(
+						newServer.path,
+						finalStartupScript,
+					);
+					console.log(
+						"Received startup script content, writing to",
+						scriptPath,
+					);
+					if (!scriptPath) {
+						await interaction.editReply({
+							content:
+								"Failed to determine safe path for custom startup script.",
+						});
+					} else {
+						try {
+							await writeFile(scriptPath, content, "utf8");
+							await interaction.editReply({
+								content: `Startup script ${inlineCode(finalStartupScript)} updated successfully.`,
+							});
+						} catch {
+							await interaction.editReply({
+								content: `Failed to write startup script to disk at ${inlineCode(scriptPath)}. Please check file permissions and try again.`,
+							});
+							return;
+						}
+					}
+					collector.stop();
+				}
+			});
+			collector.on("dispose", () => {
+				message
+					.edit({
+						components: [],
+					})
+					.catch(() => {
+						/* ignore */
+					});
+			});
+
 			await serverManager.addOrReloadServer(newServer);
 
-			return await interaction.editReply({
+			await interaction.editReply({
 				content: `✅ Server ${bold(newServer.tag ?? `Server #${newServer.id}`)} (ID: ${bold(String(newServer.id))}) created and loaded successfully.\n${formatServerSummary(newServer)}`,
 			});
+			return;
 		}
 
 		// ─── EDIT / DELETE: resolve target server ─────────────────────────
-		const serverIdRaw = interaction.options.getString("server", true);
-		const serverId = parseInt(serverIdRaw);
-		if (isNaN(serverId)) {
-			return await interaction.editReply({
-				content: "Invalid server selection.",
-			});
-		}
-
-		const dbServer = await selectServerById(serverId);
+		const server = await getUserSelectedServer(
+			serverManager,
+			interaction,
+			true,
+		);
+		if (!server) return;
+		const dbServer = await selectServerById(server.id);
 		if (!dbServer) {
 			return await interaction.editReply({
-				content: `Server with ID ${inlineCode(String(serverId))} not found.`,
+				content: `Server with ID ${inlineCode(String(server.id))} not found.`,
 			});
 		}
 
 		// ─── DELETE ───────────────────────────────────────────────────────
 		if (sub === "delete") {
-			const inMemoryServer = serverManager.getServer(serverId);
+			const inMemoryServer = serverManager.getServer(server.id);
 			if (
 				inMemoryServer &&
 				(await inMemoryServer.isOnline.getData(true))
@@ -325,11 +377,11 @@ export default {
 				});
 			}
 
-			await deleteServer(serverId);
-			serverManager.removeServer(serverId);
+			await deleteServer(server.id);
+			serverManager.removeServer(server.id);
 
 			return await interaction.editReply({
-				content: `🗑️ Server ${bold(dbServer.tag ?? `Server #${dbServer.id}`)} (ID: ${bold(String(serverId))}) has been deleted.`,
+				content: `🗑️ Server ${bold(dbServer.tag ?? `Server #${dbServer.id}`)} (ID: ${bold(String(server.id))}) has been deleted.`,
 			});
 		}
 
@@ -360,12 +412,6 @@ export default {
 				newGameType,
 				newStartupScriptRaw,
 			].some((v) => v !== null);
-
-			if (!anyProvided) {
-				return await interaction.editReply({
-					content: "You must provide at least one field to update.",
-				});
-			}
 
 			// Validate port if provided
 			let newPorts: number[] | undefined;
@@ -406,6 +452,13 @@ export default {
 						? null // reset to default
 						: newStartupScriptRaw;
 
+			const finalStartupScript =
+				(newStartupScript === undefined
+					? dbServer.startupScript
+					: newStartupScript === null
+						? null
+						: newStartupScript) ?? "start.sh";
+
 			const newApiPort =
 				newApiPortRaw === null
 					? undefined // not changing
@@ -413,7 +466,7 @@ export default {
 						? null // clearing
 						: newApiPortRaw;
 
-			const updatedServer = await updateServer(serverId, {
+			const changing = {
 				...(newPath !== null && { path: newPath }),
 				...(newPluginPath !== null && { pluginPath: newPluginPath }),
 				...(newVersion !== null && { version: newVersion }),
@@ -426,10 +479,75 @@ export default {
 				...(newStartupScript !== undefined && {
 					startupScript: newStartupScript,
 				}),
+			};
+			let updatedServer;
+			let reloadType = null;
+			if (anyProvided) {
+				updatedServer = await updateServer(server.id, changing);
+				reloadType =
+					await serverManager.addOrReloadServer(updatedServer);
+			} else {
+				updatedServer = dbServer; // no changes, use existing
+			}
+			//rewrite startup script if requested
+			console.log(
+				"Collecting startup script content for",
+				finalStartupScript,
+			);
+			const message = await interaction.editReply({
+				components: [buildEditModalContentRow()],
 			});
-
-			const reloadType =
-				await serverManager.addOrReloadServer(updatedServer);
+			const collector = message.createMessageComponentCollector({
+				componentType: ComponentType.Button,
+				time: 1000 * 60 * 5,
+				filter: (i) =>
+					i.user.id === interaction.user.id &&
+					i.customId === ModalComponentId.EditBtn,
+			});
+			collector.on("collect", async (i) => {
+				const { content, interaction } =
+					await collectInputFromModal(
+						i,
+						await readFile(finalStartupScript, "utf8").catch(
+							() => "",
+						),
+					);
+				if (content !== null) {
+					const scriptPath = joinPathWithBase(
+						updatedServer.path,
+						finalStartupScript,
+					);
+					console.log("Resolved script path:", scriptPath);
+					if (!scriptPath) {
+						await interaction.editReply({
+							content:
+								"Failed to determine safe path for custom startup script.",
+						});
+					} else {
+						try {
+							await writeFile(scriptPath, content, "utf8");
+							await interaction.editReply({
+								content: `Startup script ${inlineCode(finalStartupScript)} updated successfully.`,
+							});
+						} catch {
+							await interaction.editReply({
+								content: `Failed to write startup script to disk at ${inlineCode(scriptPath)}. Please check file permissions and try again.`,
+							});
+							return;
+						}
+					}
+					collector.stop();
+				}
+			});
+			collector.on("dispose", () => {
+				message
+					.edit({
+						components: [],
+					})
+					.catch(() => {
+						/* ignore */
+					});
+			});
 
 			const warningLine =
 				reloadType === "partial"
@@ -437,7 +555,7 @@ export default {
 					: "";
 
 			return await interaction.editReply({
-				content: `✅ Server ${bold(updatedServer.tag ?? `Server #${updatedServer.id}`)} (ID: ${bold(String(serverId))}) updated successfully.${warningLine}\n${formatServerSummary(updatedServer)}`,
+				content: `✅ Server ${bold(updatedServer.tag ?? `Server #${updatedServer.id}`)} (ID: ${bold(String(server.id))}) updated successfully.${warningLine}\n${anyProvided ? formatServerSummary(updatedServer) : "*No update*"}`,
 			});
 		}
 
@@ -487,24 +605,15 @@ function parsePorts(raw: string): number[] | null {
 	return parts;
 }
 
-function formatServerSummary(s: {
-	id: number;
-	tag: string | null;
-	path: string;
-	pluginPath: string;
-	version: string;
-	loaderType: string;
-	modType: string;
-	port: number[];
-	apiPort: number | null;
-	gameType: string;
-	startupScript: string | null;
-}): string {
+function formatServerSummary(s: Omit<DbServer, "id" | "tag">): string {
+	const joinedPath = joinPathWithBase(s.path, s.startupScript ?? "start.sh");
+	const filePreview = joinedPath ? readFileSync(joinedPath, "utf8") : null;
 	return [
 		`  Path: ${inlineCode(s.path)}`,
 		`  Plugins: ${inlineCode(s.pluginPath)}`,
 		`  Version: ${inlineCode(s.version)} | Loader: ${inlineCode(s.loaderType)} | Mod: ${inlineCode(s.modType)}`,
-		`  Ports: ${inlineCode(s.port.join(", "))} | API Port: ${s.apiPort != null ? inlineCode(String(s.apiPort)) : italic("none")}`,
+		`  Port(s): ${inlineCode(s.port.join(", "))} | API Port: ${s.apiPort != null ? inlineCode(String(s.apiPort)) : italic("none")}`,
 		`  Game: ${inlineCode(s.gameType)} | Script: ${s.startupScript ? inlineCode(s.startupScript) : italic("default (./start.sh)")}`,
+		`  Script: ${filePreview ? "\n```\n" + filePreview.slice(0, 500) + (filePreview.length > 500 ? "\n…\n```" : "\n```") : italic("No startup script found or file is empty.")}`,
 	].join("\n");
 }

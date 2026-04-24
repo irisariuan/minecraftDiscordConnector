@@ -1,50 +1,14 @@
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	ComponentType,
-	EmbedBuilder,
-	MessageFlags,
-	SlashCommandBuilder,
-	bold,
-	inlineCode,
-	italic,
-} from "discord.js";
-import { existsSync } from "node:fs";
+import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import type { CommandFile } from "../../../lib/commandFile";
-import {
-	createServer,
-	getAllServers,
-	selectServerById,
-	updateServer,
-} from "../../../lib/db";
 import { PermissionFlags } from "../../../lib/permission";
-import {
-	findHighestAvailableVersion,
-	getPaperProject,
-	getPaperVersionBuild,
-} from "../../../lib/serverInstance/jar";
-import { safeJoin, trimTextWithSuffix } from "../../../lib/utils";
-import { downloadAndSave } from "../../../lib/utils/web";
+import { getPaperProject } from "../../../lib/serverInstance/jar";
+import { trimTextWithSuffix } from "../../../lib/utils";
 import {
 	FORGE_PROMOTIONS_URL,
-	buildCompatEmbed,
-	checkPluginCompatibility,
-	ensureDir,
-	fabricServerJarUrl,
-	findJarsByPrefix,
-	forgeInstallerUrl,
-	getForgePromo,
 	getFabricGameVersions,
-	getLatestStableFabricInstaller,
-	getLatestStableFabricLoader,
 	getMojangReleaseVersions,
-	getVanillaServerUrl,
-	runForgeInstaller,
-	writeEula,
-	writeStartScript,
 } from "../lib";
-import type { ForgePromotions, ServerType } from "../types";
+import type { ForgePromotions } from "../types";
 import { createHandler, createSubcommandBuilder } from "./mcserver/create";
 import { upgradeHandler, upgradeSubcommandBuilder } from "./mcserver/upgrade";
 
@@ -71,10 +35,11 @@ export default {
 			const pairs = serverManager.getAllTagPairs();
 			return interaction.respond(
 				pairs
-					.filter(
-						(p) =>
-							String(p.id).includes(query) ||
-							(p.tag ?? "").toLowerCase().includes(query),
+					.filter((p) =>
+						query
+							? String(p.id).includes(query) ||
+								(p.tag ?? "").toLowerCase().includes(query)
+							: true,
 					)
 					.slice(0, 25)
 					.map((p) => ({
@@ -88,13 +53,10 @@ export default {
 		}
 
 		// Version autocomplete
-		if (
-			focused.name === "minecraft_version" ||
-			focused.name === "version"
-		) {
+		if (focused.name === "minecraftversion" || focused.name === "version") {
 			const query = focused.value.toLowerCase();
 			const serverType =
-				interaction.options.getString("server_type") ??
+				interaction.options.getString("servertype") ??
 				(focused.name === "version"
 					? (() => {
 							const sid = parseInt(
@@ -135,7 +97,7 @@ export default {
 			}
 
 			const filtered = versions
-				.filter((v) => v.toLowerCase().includes(query))
+				.filter((v) => (query ? v.toLowerCase().includes(query) : true))
 				.slice(0, 25);
 			return interaction.respond(
 				filtered.map((v) => ({ name: v, value: v })),
@@ -151,11 +113,9 @@ export default {
 		const sub = interaction.options.getSubcommand(true);
 		switch (sub) {
 			case "create":
-				await createHandler(params);
-				break;
+				return await createHandler(params);
 			case "upgrade":
-				await upgradeHandler(params);
-				break;
+				return await upgradeHandler(params);
 		}
 
 		return interaction.reply({

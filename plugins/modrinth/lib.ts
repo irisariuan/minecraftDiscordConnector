@@ -130,7 +130,7 @@ export async function writeEula(serverDir: string) {
 export async function writeStartScript(serverDir: string, jarName: string) {
 	await writeFile(
 		`${serverDir}/start.sh`,
-		`#!/bin/sh\nexec java -Xmx2G -Xms1G -jar ${jarName} nogui\n`,
+		`#!/bin/sh\nexec java -Xmx8G -Xms1G -jar ${jarName} nogui\n`,
 		{ mode: 0o755 },
 	);
 }

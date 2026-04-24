@@ -38,7 +38,7 @@ export function createSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 		.setDescription("Download & set up a new Minecraft server")
 		.addStringOption((o) =>
 			o
-				.setName("server_type")
+				.setName("servertype")
 				.setDescription(
 					"Server software to use (vanilla / paper / fabric / forge)",
 				)
@@ -52,14 +52,14 @@ export function createSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 		)
 		.addStringOption((o) =>
 			o
-				.setName("minecraft_version")
+				.setName("minecraftversion")
 				.setDescription("Minecraft version, e.g. 1.21.1")
 				.setRequired(true)
 				.setAutocomplete(true),
 		)
 		.addStringOption((o) =>
 			o
-				.setName("server_dir")
+				.setName("serverdir")
 				.setDescription(
 					"Absolute path to the server directory (will be created if missing)",
 				)
@@ -67,7 +67,7 @@ export function createSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 		)
 		.addStringOption((o) =>
 			o
-				.setName("plugin_dir")
+				.setName("plugindir")
 				.setDescription(
 					"Absolute path to the plugins/mods directory (will be created if missing)",
 				)
@@ -87,7 +87,7 @@ export function createSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 		)
 		.addStringOption((o) =>
 			o
-				.setName("loader_version")
+				.setName("loaderversion")
 				.setDescription(
 					"Fabric loader / Forge version override (defaults to latest stable)",
 				)
@@ -101,16 +101,16 @@ export async function createHandler(
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 	const serverType = interaction.options.getString(
-		"server_type",
+		"servertype",
 		true,
 	) as ServerType;
-	const mcVersion = interaction.options.getString("minecraft_version", true);
-	const serverDir = interaction.options.getString("server_dir", true);
-	const pluginDir = interaction.options.getString("plugin_dir", true);
+	const mcVersion = interaction.options.getString("minecraftversion", true);
+	const serverDir = interaction.options.getString("serverdir", true);
+	const pluginDir = interaction.options.getString("plugindir", true);
 	const tag = interaction.options.getString("tag");
 	const portRaw = interaction.options.getString("port") ?? "25565";
 	const loaderVersionOverride =
-		interaction.options.getString("loader_version");
+		interaction.options.getString("loaderversion");
 
 	// Parse ports
 	const ports = portRaw
@@ -222,7 +222,7 @@ export async function createHandler(
 			const forgeVer = loaderVersionOverride ?? recommended ?? latest;
 			if (!forgeVer) {
 				return interaction.editReply({
-					content: `❌ No Forge version found for Minecraft ${bold(mcVersion)}. Try specifying \`loader_version\` manually.`,
+					content: `❌ No Forge version found for Minecraft ${bold(mcVersion)}. Try specifying \`loaderversion\` manually.`,
 				});
 			}
 			const installerJar = `forge-${mcVersion}-${forgeVer}-installer.jar`;
@@ -354,5 +354,6 @@ export async function createHandler(
 		})
 		.setTimestamp();
 
-	return interaction.editReply({ content: "", embeds: [embed] });
+	interaction.editReply({ content: "", embeds: [embed] });
+	interaction.followUp('You can always edit the startup script using /manageServer')
 }
