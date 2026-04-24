@@ -69,7 +69,7 @@ export default {
 			!(await spendCredit({
 				user: interaction.user,
 				channel: interaction.channel,
-				cost: server.creditSettings.newCancelStopServerPollFee,
+				cost: server.settings.newCancelStopServerPollFee,
 				serverId: server.id,
 				reason: "Cancel Stop Server Poll",
 			}))
@@ -83,7 +83,7 @@ export default {
 		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: `Cancel Server Shutdown at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
-				startPollFee: server.creditSettings.newCancelStopServerPollFee,
+				startPollFee: server.settings.newCancelStopServerPollFee,
 				callerId: interaction.user.id,
 				description: `Cancel Server Shutdown (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
@@ -103,10 +103,9 @@ export default {
 						content: "Cancelled scheduled shutdown",
 					});
 				},
-				approvalCount: server.approvalSettings.cancelStopServerApproval,
-				disapprovalCount:
-					server.approvalSettings.cancelStopServerDisapproval,
-				credit: server.creditSettings.cancelStopServerVoteFee,
+				approvalCount: server.settings.cancelStopServerApproval,
+				disapprovalCount: server.settings.cancelStopServerDisapproval,
+				credit: server.settings.cancelStopServerVoteFee,
 			},
 			server,
 		});

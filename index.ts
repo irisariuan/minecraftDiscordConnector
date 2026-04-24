@@ -23,11 +23,7 @@ import {
 import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
 import { createServerManager } from "./lib/server";
 import { serverConfig } from "./lib/serverInstance/plugin/types";
-import {
-	changeCreditSettings,
-	loadCreditSettings,
-	settings,
-} from "./lib/settings";
+import { changeSettings, loadSettings, settings } from "./lib/settings";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
 import { getAllTickets, ticketNotificationManager } from "./lib/ticket";
 
@@ -196,10 +192,10 @@ const giveCredits = process.argv.includes("-C")
 		)
 	: 0;
 
-const currentSettings = await loadCreditSettings();
+const currentSettings = await loadSettings();
 console.log("Loaded custom credit settings");
 if (process.argv.includes("-C")) {
-	changeCreditSettings(
+	changeSettings(
 		{
 			dailyGift: Number.parseInt(
 				await input({

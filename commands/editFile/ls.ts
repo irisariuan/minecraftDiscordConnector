@@ -53,7 +53,7 @@ export async function lsHandler(
 	const payment = await spendCredit({
 		user: interaction.user,
 		channel: interaction.channel,
-		cost: server.creditSettings.lsFilesFee,
+		cost: server.settings.lsFilesFee,
 		reason: `List Files ${currentPath || "(root)"}`,
 		serverId: server.id,
 	});

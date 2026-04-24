@@ -1,7 +1,4 @@
-import {
-	defaultApprovalSettings,
-	defaultCreditSettings,
-} from "../defaultSettings";
+import { defaultSettings } from "../defaultSettings";
 import {
 	getServerApprovalSettings,
 	getServerCreditSettings,
@@ -11,9 +8,8 @@ import {
 import type { Server, ServerManager } from "./server";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
-const APPROVAL_SETTINGS = `${process.cwd()}/data/approvalSettings.json`;
 
-export interface ServerCreditSettings {
+export interface ServerSettings {
 	newCancelStopServerPollFee: number;
 	newRunCommandPollFee: number;
 	newStartServerPollFee: number;
@@ -33,9 +29,23 @@ export interface ServerCreditSettings {
 	viewFileFee: number;
 	playFee: number;
 	cancelShutdownFee: number;
+
+	paymentInterval: number;
+
+	cancelStopServerApproval: number;
+	cancelStopServerDisapproval: number;
+
+	runCommandApproval: number;
+	runCommandDisapproval: number;
+
+	startServerApproval: number;
+	startServerDisapproval: number;
+
+	stopServerApproval: number;
+	stopServerDisapproval: number;
 }
 
-export interface CreditSettings extends ServerCreditSettings {
+export interface GlobalSettings extends ServerSettings {
 	dailyGift: number;
 	giftMax: number;
 
@@ -53,140 +63,80 @@ export interface CreditSettings extends ServerCreditSettings {
 	checkUserTicketFee: number;
 	refreshDnsFee: number;
 }
-export interface ApprovalSettings {
-	cancelStopServerApproval: number;
-	cancelStopServerDisapproval: number;
 
-	runCommandApproval: number;
-	runCommandDisapproval: number;
+const approvalKeys = new Set<string>([
+	"cancelStopServerApproval",
+	"cancelStopServerDisapproval",
+	"runCommandApproval",
+	"runCommandDisapproval",
+	"startServerApproval",
+	"startServerDisapproval",
+	"stopServerApproval",
+	"stopServerDisapproval",
+]);
 
-	startServerApproval: number;
-	startServerDisapproval: number;
+export let settings: GlobalSettings = defaultSettings;
 
-	stopServerApproval: number;
-	stopServerDisapproval: number;
-}
-
-export let settings: CreditSettings = defaultCreditSettings;
-export let approvalSettings: ApprovalSettings = defaultApprovalSettings;
-
-export function setApprovalSettings(
-	changes: Partial<ApprovalSettings>,
-	serverManager: ServerManager,
-) {
-	approvalSettings = { ...approvalSettings, ...changes };
-	for (const server of serverManager.getAllServers()) {
-		for (const [k, v] of Object.entries(changes)) {
-			if (defaultApprovalSettings[k as keyof ApprovalSettings] !== v)
-				continue;
-			server.approvalSettings[k as keyof ApprovalSettings] = v;
-		}
-	}
-}
-
-function saveApprovalSettings(settings: Partial<ApprovalSettings>) {
-	const currentLocalSettings = approvalSettings;
-	const newSettings = { ...currentLocalSettings, ...settings };
-	return Bun.write(APPROVAL_SETTINGS, JSON.stringify(newSettings, null, 4));
-}
-export async function changeApprovalSettings(
-	changes: Partial<ApprovalSettings>,
-	serverManager: ServerManager,
-) {
-	setApprovalSettings(changes, serverManager);
-	return await saveApprovalSettings(changes);
-}
-
-export async function loadApprovalSettings(): Promise<
-	Partial<ApprovalSettings>
-> {
-	const settings = Bun.file(APPROVAL_SETTINGS);
-	if (!(await settings.exists())) return {};
-	const data = await settings.json().catch(() => ({}));
-	return data;
-}
-
-export function setCreditSettings(
-	changes: Partial<CreditSettings>,
+export function setSettings(
+	changes: Partial<GlobalSettings>,
 	serverManager: ServerManager,
 ) {
 	settings = { ...settings, ...changes };
-
 	for (const server of serverManager.getAllServers()) {
 		for (const [k, v] of Object.entries(changes)) {
 			if (
-				!Object.keys(server.creditSettings).includes(k) ||
-				defaultCreditSettings[k as keyof CreditSettings] !== v
+				!Object.keys(server.settings).includes(k) ||
+				defaultSettings[k as keyof GlobalSettings] !== v
 			)
 				continue;
-			server.creditSettings[k as keyof ServerCreditSettings] = v;
+			server.settings[k as keyof ServerSettings] = v;
 		}
 	}
 }
 
-async function saveCreditSettings(settings: Partial<CreditSettings>) {
-	const currentLocalSettings = await loadCreditSettings();
-	const newSettings = { ...currentLocalSettings, ...settings };
+async function saveSettings(changes: Partial<GlobalSettings>) {
+	const currentLocalSettings = await loadSettings();
+	const newSettings = { ...currentLocalSettings, ...changes };
 	return await Bun.write(SETTINGS, JSON.stringify(newSettings, null, 4));
 }
 
-export async function changeCreditSettings(
-	changes: Partial<CreditSettings>,
+export async function changeSettings(
+	changes: Partial<GlobalSettings>,
 	serverManager: ServerManager,
 ) {
-	setCreditSettings(changes, serverManager);
-	await saveCreditSettings(changes);
+	setSettings(changes, serverManager);
+	await saveSettings(changes);
 }
 
-export async function loadCreditSettings(): Promise<Partial<CreditSettings>> {
-	const settings = Bun.file(SETTINGS);
-	if (!(await settings.exists())) return {};
-	const data = await settings.json().catch(() => ({}));
+export async function loadSettings(): Promise<Partial<GlobalSettings>> {
+	const file = Bun.file(SETTINGS);
+	if (!(await file.exists())) return {};
+	const data = await file.json().catch(() => ({}));
 	return data;
 }
 
-export async function loadServerCreditSetting(
-	id: number,
-): Promise<ServerCreditSettings> {
-	const serverSettings = await getServerCreditSettings(id);
-	if (!serverSettings) {
-		return settings;
+export async function loadServerSettings(id: number): Promise<ServerSettings> {
+	const [creditRows, approvalRows] = await Promise.all([
+		getServerCreditSettings(id),
+		getServerApprovalSettings(id),
+	]);
+
+	const filtered: Partial<ServerSettings> = {};
+	for (const row of [...(creditRows ?? []), ...(approvalRows ?? [])]) {
+		filtered[row.name as keyof ServerSettings] = row.value;
 	}
 
-	// Filter out null values and only include defined server settings
-	const filteredServerSettings: Partial<ServerCreditSettings> = {};
-	for (const setting of serverSettings) {
-		filteredServerSettings[setting.name as keyof ServerCreditSettings] =
-			setting.value;
-	}
-	return { ...settings, ...filteredServerSettings };
-}
-
-export async function loadServerApprovalSetting(
-	id: number,
-): Promise<ApprovalSettings> {
-	const serverSettings = await getServerApprovalSettings(id);
-	if (!serverSettings) {
-		return defaultApprovalSettings;
-	}
-	const filteredServerSettings: Partial<ApprovalSettings> = {};
-	for (const setting of serverSettings) {
-		filteredServerSettings[setting.name as keyof ApprovalSettings] =
-			setting.value;
-	}
-	return { ...defaultApprovalSettings, ...filteredServerSettings };
+	return { ...settings, ...filtered };
 }
 
 export async function editSetting(
 	server: Server,
-	type: SettingType,
-	changes: Partial<
-		SettingType extends SettingType.ServerCredit
-			? ServerCreditSettings
-			: ApprovalSettings
-	>,
+	changes: Partial<ServerSettings>,
 ) {
 	for (const [key, value] of Object.entries(changes)) {
+		const type = approvalKeys.has(key)
+			? SettingType.Approval
+			: SettingType.ServerCredit;
 		await upsertSetting({
 			create: {
 				name: key,
@@ -204,15 +154,21 @@ export async function editSetting(
 			},
 		});
 	}
-	if (type === SettingType.Approval) {
-		server.approvalSettings = {
-			...server.approvalSettings,
-			...changes,
-		};
-	} else {
-		server.creditSettings = {
-			...server.creditSettings,
-			...changes,
-		};
-	}
+	server.settings = {
+		...server.settings,
+		...changes,
+	};
 }
+
+// ---------------------------------------------------------------------------
+// Legacy aliases kept for any callers that haven't been updated yet
+// ---------------------------------------------------------------------------
+
+/** @deprecated Use {@link setSettings} instead */
+export const setCreditSettings = setSettings;
+/** @deprecated Use {@link changeSettings} instead */
+export const changeCreditSettings = changeSettings;
+/** @deprecated Use {@link loadServerSettings} instead */
+export const loadServerCreditSetting = loadServerSettings;
+/** @deprecated Use {@link loadSettings} instead */
+export const loadCreditSettings = loadSettings;

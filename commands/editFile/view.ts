@@ -45,7 +45,7 @@ export async function viewHandler(
 		!(await spendCredit({
 			user: interaction.user,
 			channel: interaction.channel,
-			cost: server.creditSettings.viewFileFee,
+			cost: server.settings.viewFileFee,
 			reason: `View File ${filename}`,
 			serverId: server.id,
 		}))

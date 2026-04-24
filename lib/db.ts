@@ -318,10 +318,15 @@ export async function getPlayerByUuid(uuid: string) {
 	return await prisma.player.findUnique({ where: { uuid } });
 }
 export async function updatePlayerName(uuid: string, name: string) {
-	return await prisma.player.update({
-		where: { uuid },
-		data: { playername: name },
-	});
+	try {
+		return await prisma.player.update({
+			where: { uuid },
+			data: { playername: name },
+		});
+	} catch (e) {
+		console.error(`Failed to update player name for uuid ${uuid}:`, e);
+		return null;
+	}
 }
 export async function getPlayerByName(name: string) {
 	return await prisma.player.findMany({ where: { playername: name } });

@@ -52,7 +52,7 @@ export function initApiServer(
 		if (
 			!(await canSpendCredit(
 				player.discordId,
-				server.creditSettings.playFee,
+				server.settings.playFee,
 			)) &&
 			!parsed.data.disconnect
 		) {
@@ -73,19 +73,22 @@ export function initApiServer(
 			return res.send(JSON.stringify({ kick: false }));
 		}
 		await changeCredit({
-			change: -server.creditSettings.playFee,
+			change: -server.settings.playFee,
 			reason: `Play on server ${server.config.tag ?? `Server #${server.id}`}`,
 			userId: player.discordId,
 			serverId: server.id,
 		});
-		server.paymentManager.markPaid(player.uuid);
+		server.paymentManager.markPaid(
+			player.uuid,
+			server.settings.paymentInterval,
+		);
 		const user = await client.users
 			.fetch(player.discordId)
 			.catch(() => null);
 		if (user)
 			await sendCreditNotification({
 				user,
-				creditChanged: -server.creditSettings.playFee,
+				creditChanged: -server.settings.playFee,
 				reason: `Play on server ${server.config.tag ?? `Server #${server.id}`}`,
 				serverId: server.id,
 				silent: true,
@@ -137,14 +140,14 @@ export function initApiServer(
 		if (
 			!(await canSpendCredit(
 				player.discordId,
-				server.creditSettings.cancelShutdownFee,
+				server.settings.cancelShutdownFee,
 			))
 		) {
 			return res.status(403).send("Not enough credit");
 		}
-		if (server.creditSettings.cancelShutdownFee > 0) {
+		if (server.settings.cancelShutdownFee > 0) {
 			await changeCredit({
-				change: -server.creditSettings.cancelShutdownFee,
+				change: -server.settings.cancelShutdownFee,
 				reason: `Cancel shutdown on server ${server.config.tag ?? `Server #${server.id}`}`,
 				userId: player.discordId,
 				serverId: server.id,
@@ -155,7 +158,7 @@ export function initApiServer(
 			if (user)
 				await sendCreditNotification({
 					user,
-					creditChanged: -server.creditSettings.cancelShutdownFee,
+					creditChanged: -server.settings.cancelShutdownFee,
 					reason: `Cancel shutdown on server ${server.config.tag ?? `Server #${server.id}`}`,
 					serverId: server.id,
 					silent: true,

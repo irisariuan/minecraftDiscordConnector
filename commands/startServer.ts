@@ -75,7 +75,7 @@ export default {
 		const transaction = await spendCredit({
 			user: interaction.user,
 			channel: interaction.channel,
-			cost: server.creditSettings.newStartServerPollFee,
+			cost: server.settings.newStartServerPollFee,
 			reason: "New Start Server Poll",
 			serverId: server.id,
 		});
@@ -85,7 +85,7 @@ export default {
 				flags: MessageFlags.Ephemeral,
 			});
 		}
-		let approvalCount = server.approvalSettings.startServerApproval;
+		let approvalCount = server.settings.startServerApproval;
 		const customApprovalTicket = transaction.ticketUsed?.find(
 			(t) => t.effect.effect === TicketEffectType.CustomApprovalCount,
 		);
@@ -140,7 +140,7 @@ export default {
 					});
 					return !!transaction;
 				},
-				startPollFee: server.creditSettings.newStartServerPollFee,
+				startPollFee: server.settings.newStartServerPollFee,
 				callerId: interaction.user.id,
 				description: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
@@ -167,9 +167,8 @@ export default {
 					});
 				},
 				approvalCount,
-				disapprovalCount:
-					server.approvalSettings.startServerDisapproval,
-				credit: server.creditSettings.startServerVoteFee,
+				disapprovalCount: server.settings.startServerDisapproval,
+				credit: server.settings.startServerVoteFee,
 			},
 			server,
 		});

@@ -49,13 +49,13 @@ export default {
 		const payment = await spendCredit({
 			user: interaction.user,
 			channel: interaction.channel,
-			cost: server.creditSettings.deletePluginFee,
+			cost: server.settings.deletePluginFee,
 			reason: `Delete Plugin ${plugin}`,
 			serverId: server.id,
 		});
 		if (!payment) {
 			return await interaction.editReply({
-				content: `Failed to delete a plugin. Deleting a plugin costs ${server.creditSettings.deletePluginFee} credits.`,
+				content: `Failed to delete a plugin. Deleting a plugin costs ${server.settings.deletePluginFee} credits.`,
 			});
 		}
 

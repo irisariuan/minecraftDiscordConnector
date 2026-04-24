@@ -98,7 +98,7 @@ export default {
 			!(await spendCredit({
 				user: interaction.user,
 				channel: interaction.channel,
-				cost: server.creditSettings.newStopServerPollFee,
+				cost: server.settings.newStopServerPollFee,
 				reason: "New Stop Server Poll",
 				serverId: server.id,
 			}))
@@ -111,7 +111,7 @@ export default {
 		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: displayString,
 			options: {
-				startPollFee: server.creditSettings.newStopServerPollFee,
+				startPollFee: server.settings.newStopServerPollFee,
 				callerId: interaction.user.id,
 				description: displayString,
 				async onSuccess(approval, message) {
@@ -149,9 +149,9 @@ export default {
 						content: "Server stopped successfully",
 					});
 				},
-				approvalCount: server.approvalSettings.stopServerApproval,
-				disapprovalCount: server.approvalSettings.stopServerDisapproval,
-				credit: server.creditSettings.stopServerVoteFee,
+				approvalCount: server.settings.stopServerApproval,
+				disapprovalCount: server.settings.stopServerDisapproval,
+				credit: server.settings.stopServerVoteFee,
 			},
 			server,
 		});

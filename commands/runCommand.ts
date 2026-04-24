@@ -91,7 +91,7 @@ export default {
 			!(await spendCredit({
 				user: interaction.user,
 				channel: interaction.channel,
-				cost: server.creditSettings.newRunCommandPollFee,
+				cost: server.settings.newRunCommandPollFee,
 				reason: "New Run Command Poll",
 				serverId: server.id,
 			}))
@@ -104,9 +104,9 @@ export default {
 		return await sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: command,
 			options: {
-				approvalCount: server.approvalSettings.runCommandApproval,
-				disapprovalCount: server.approvalSettings.runCommandDisapproval,
-				startPollFee: server.creditSettings.newRunCommandPollFee,
+				approvalCount: server.settings.runCommandApproval,
+				disapprovalCount: server.settings.runCommandDisapproval,
+				startPollFee: server.settings.newRunCommandPollFee,
 				callerId: interaction.user.id,
 				description: `Command: \`${command}\` (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
@@ -140,7 +140,7 @@ export default {
 						),
 					);
 				},
-				credit: server.creditSettings.runCommandVoteFee,
+				credit: server.settings.runCommandVoteFee,
 			},
 			duration: timeout ?? undefined,
 			server,

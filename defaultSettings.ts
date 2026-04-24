@@ -1,6 +1,6 @@
-import type { ApprovalSettings, CreditSettings } from "./lib/settings";
+import type { GlobalSettings } from "./lib/settings";
 
-export const defaultCreditSettings: CreditSettings = {
+export const defaultSettings: GlobalSettings = {
 	dailyGift: 20,
 	giftMax: 70,
 
@@ -33,8 +33,9 @@ export const defaultCreditSettings: CreditSettings = {
 	viewFileFee: 30,
 	playFee: 10,
 	cancelShutdownFee: 0,
-};
-export const defaultApprovalSettings: ApprovalSettings = {
+
+	paymentInterval: 300_000,
+
 	cancelStopServerApproval: 2,
 	cancelStopServerDisapproval: 2,
 

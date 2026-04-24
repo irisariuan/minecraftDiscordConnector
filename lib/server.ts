@@ -11,12 +11,7 @@ import { type ServerConfig } from "./serverInstance/plugin/types";
 import { type LogLine } from "./serverInstance/request";
 import express, { type Express } from "express";
 import { Server as HTTPServer } from "http";
-import {
-	loadServerApprovalSetting,
-	loadServerCreditSetting,
-	type ApprovalSettings,
-	type ServerCreditSettings,
-} from "./settings";
+import { loadServerSettings, type ServerSettings } from "./settings";
 import { SuspendingEventEmitter } from "./suspend";
 import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
 import { initApiServer } from "./serverInstance/apiServer";
@@ -53,12 +48,11 @@ interface CreateServerOptions {
 	defaultSuspending?: boolean;
 	config: ServerConfig;
 	serverId: number;
-	creditSettings: ServerCreditSettings;
-	approvalSettings: ApprovalSettings;
+	settings: ServerSettings;
 	gameType: ServerGameType;
 	startupScript?: string;
 }
-const serverGameTypes = ["minecraft"] as const;
+const serverGameTypes = ["minecraft", "hytale", "unknown"] as const;
 export type ServerGameType = (typeof serverGameTypes)[number];
 
 export class Server {
@@ -71,8 +65,7 @@ export class Server {
 	timeouts: NodeJS.Timeout[];
 	suspendingEvent: SuspendingEventEmitter;
 	approvalList: Map<string, Approval>;
-	creditSettings: ServerCreditSettings;
-	approvalSettings: ApprovalSettings;
+	settings: ServerSettings;
 	gameType: ServerGameType;
 	startupScript?: string;
 	paymentManager: PaymentManager;
@@ -85,8 +78,7 @@ export class Server {
 			false,
 		serverId,
 		config,
-		creditSettings,
-		approvalSettings,
+		settings,
 		gameType,
 		startupScript,
 	}: CreateServerOptions) {
@@ -98,11 +90,10 @@ export class Server {
 		this.approvalList = new Map();
 		this.config = config;
 		this.id = serverId;
-		this.creditSettings = creditSettings;
-		this.approvalSettings = approvalSettings;
+		this.settings = settings;
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
-		this.paymentManager = new PaymentManager(1000 * 60 * 20);
+		this.paymentManager = new PaymentManager();
 		this.isOnline = new CacheItem<boolean>(false, {
 			interval: 1000 * 5,
 			ttl: 1000 * 5,
@@ -410,10 +401,7 @@ export class ServerManager {
 						port: server.port,
 						apiPort: server.apiPort,
 					},
-					creditSettings: await loadServerCreditSetting(server.id),
-					approvalSettings: await loadServerApprovalSetting(
-						server.id,
-					),
+					settings: await loadServerSettings(server.id),
 					gameType: server.gameType as ServerGameType,
 					startupScript: server.startupScript ?? undefined,
 				}),
@@ -490,15 +478,16 @@ export class ServerManager {
 }
 
 class PaymentManager {
-	payment: Set<string>;
+	/**
+	 * Map<ID, Payment interval>
+	 */
+	payment: Map<string, number>;
 	isActive: boolean;
 	timeouts: Set<NodeJS.Timeout>;
-	paymentInterval: number;
-	constructor(paymentInterval: number) {
-		this.payment = new Set();
+	constructor() {
+		this.payment = new Map();
 		this.isActive = false;
 		this.timeouts = new Set();
-		this.paymentInterval = paymentInterval;
 	}
 	setActive(active: boolean) {
 		if ((active && !this.isActive) || (!active && this.isActive)) {
@@ -516,13 +505,13 @@ class PaymentManager {
 		}
 		this.payment.clear();
 	}
-	markPaid(uuid: string) {
+	markPaid(uuid: string, paymentInterval: number) {
 		this.setActive(true);
-		this.payment.add(uuid);
+		this.payment.set(uuid, paymentInterval);
 		const timeout = setTimeout(() => {
 			this.payment.delete(uuid);
 			this.timeouts.delete(timeout);
-		}, this.paymentInterval);
+		}, paymentInterval);
 		this.timeouts.add(timeout);
 	}
 	hasPaid(uuid: string) {
