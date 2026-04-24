@@ -286,6 +286,107 @@ export function parseTimeString(timeStr: string): number | null {
 }
 
 /**
+ * Parses an expiration input into an absolute Date.
+ *
+ * Absolute date formats (interpreted in local time):
+ *   +HH:MM              today at HH:MM (e.g. +14:30 = today at 14:30)
+ *   +HH:MM:SS           today at HH:MM:SS
+ *   YYYY/M/D            midnight on that date
+ *   M/D                 midnight on that date in the current year
+ *   YYYY/M/D+HH:MM      that date at HH:MM  (+ is a separator, not UTC offset)
+ *   YYYY/M/D+HH:MM:SS   that date at HH:MM:SS
+ *
+ * Relative duration formats (added to current time):
+ *   DD:HH:MM:SS, HH:MM:SS, MM:SS, Ns  (same as parseTimeString)
+ *
+ * Returns null if the string cannot be parsed.
+ */
+export function parseExpireDate(input: string): Date | null {
+	const s = input.trim();
+
+	// +HH:MM[:SS] — today at a specific clock time
+	const todayTimeMatch = s.match(/^\+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+	if (todayTimeMatch) {
+		const h = Number(todayTimeMatch[1]);
+		const m = Number(todayTimeMatch[2]);
+		const sec =
+			todayTimeMatch[3] !== undefined ? Number(todayTimeMatch[3]) : 0;
+		if (h > 23 || m > 59 || sec > 59) return null;
+		const now = new Date();
+		return new Date(
+			now.getFullYear(),
+			now.getMonth(),
+			now.getDate(),
+			h,
+			m,
+			sec,
+			0,
+		);
+	}
+
+	// Any format containing / — absolute date
+	if (s.includes("/")) {
+		// Split on first + to separate date and optional time parts.
+		// (Skip index 0 in case s starts with +, but that case is already
+		//  handled above, so indexOf('+') will be > 0 here.)
+		const plusIdx = s.indexOf("+");
+		const datePart = plusIdx !== -1 ? s.slice(0, plusIdx) : s;
+		const timePart = plusIdx !== -1 ? s.slice(plusIdx + 1) : null;
+
+		const dateParts = datePart.split("/").map(Number);
+		if (dateParts.some((n) => isNaN(n))) return null;
+
+		let year: number;
+		let month: number;
+		let day: number;
+
+		if (dateParts.length === 3) {
+			// YYYY/M/D
+			year = dateParts[0]!;
+			month = dateParts[1]!;
+			day = dateParts[2]!;
+		} else if (dateParts.length === 2) {
+			// M/D — default to current year
+			year = new Date().getFullYear();
+			month = dateParts[0]!;
+			day = dateParts[1]!;
+		} else {
+			return null;
+		}
+
+		if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+		let h = 0,
+			m = 0,
+			sec = 0;
+		if (timePart !== null) {
+			const timeParts = timePart.split(":").map(Number);
+			if (
+				timeParts.some((n) => isNaN(n)) ||
+				timeParts.length < 2 ||
+				timeParts.length > 3
+			)
+				return null;
+			h = timeParts[0]!;
+			m = timeParts[1]!;
+			sec = timeParts[2] ?? 0;
+			if (h > 23 || m > 59 || sec > 59) return null;
+		}
+
+		const result = new Date(year, month - 1, day, h, m, sec, 0);
+		// Guard against invalid calendar dates (e.g. Feb 30)
+		if (result.getMonth() !== month - 1 || result.getDate() !== day)
+			return null;
+		return result;
+	}
+
+	// Fall back to duration format (relative to now)
+	const ms = parseTimeString(s);
+	if (ms === null) return null;
+	return new Date(Date.now() + ms);
+}
+
+/**
  * Format time duration string from the parsed format
  * Returns a human-readable string like "7 days 12 hours" or "30 minutes"
  */
