@@ -207,6 +207,28 @@ export async function deletePluginByPath(path: string) {
 	return await prisma.plugin.deleteMany({ where: { filePath: path } });
 }
 
+export async function getPluginsByServerId(serverId: number) {
+	return await prisma.plugin.findMany({ where: { serverId } });
+}
+
+export async function deletePluginRecord(
+	projectId: string,
+	versionId: string,
+	serverId: number,
+) {
+	return await prisma.plugin
+		.delete({
+			where: {
+				projectId_versionId_serverId: {
+					projectId,
+					versionId,
+					serverId,
+				},
+			},
+		})
+		.catch(() => null);
+}
+
 export async function getUserTickets(
 	userId: string,
 	ticketTypeIds?: string[],
