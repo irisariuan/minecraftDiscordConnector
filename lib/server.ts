@@ -6,7 +6,7 @@ import { stripVTControlCharacters } from "node:util";
 import type { Approval } from "./approval";
 import { CacheItem } from "./cache";
 import { changeCredit, sendCreditNotification } from "./credit";
-import { getAllServers } from "./db";
+import { getAllServers, getUserAccessibleServerIds } from "./db";
 import { type ServerConfig } from "./serverInstance/plugin/types";
 import { type LogLine } from "./serverInstance/request";
 import express, { type Express } from "express";
@@ -430,6 +430,32 @@ export class ServerManager {
 	}
 	getServerCount() {
 		return this.servers.size;
+	}
+
+	/**
+	 * Returns server entries visible to the given user.
+	 * If the user has no ServerAccess rows → all servers are returned.
+	 * If the user has ≥1 ServerAccess rows → only those servers are returned.
+	 */
+	async getAccessibleServerEntries(
+		userId: string,
+	): Promise<[number, Server][]> {
+		const ids = await getUserAccessibleServerIds(userId);
+		if (ids === null) return this.getAllServerEntries();
+		return this.getAllServerEntries().filter(([id]) => ids.includes(id));
+	}
+
+	async getAccessibleTagPairs(userId: string): Promise<TagPair[]> {
+		const ids = await getUserAccessibleServerIds(userId);
+		if (ids === null) return this.getAllTagPairs();
+		return this.getAllTagPairs().filter((p) => ids.includes(p.id));
+	}
+
+	async getAccessibleServerCount(userId: string): Promise<number> {
+		const ids = await getUserAccessibleServerIds(userId);
+		if (ids === null) return this.getServerCount();
+		return this.getAllServerEntries().filter(([id]) => ids.includes(id))
+			.length;
 	}
 
 	async getAllUsingPorts() {

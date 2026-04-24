@@ -35,7 +35,8 @@ export async function getUserSelectedServer(
 	interaction: ChatInputCommandInteraction,
 	ephemeral: boolean,
 ): Promise<Server | null> {
-	const serverCount = serverManager.getServerCount();
+	const userId = interaction.user.id;
+	const serverCount = await serverManager.getAccessibleServerCount(userId);
 	if (serverCount === 0) {
 		if (interaction.replied) {
 			const followUp = await interaction.followUp({
@@ -58,7 +59,9 @@ export async function getUserSelectedServer(
 		return null;
 	}
 	if (serverCount === 1) {
-		const servers = serverManager.getAllServerEntries();
+		const servers = userId
+			? await serverManager.getAccessibleServerEntries(userId)
+			: serverManager.getAllServerEntries();
 		if (!servers[0]) {
 			if (interaction.replied) {
 				const followUp = await interaction.followUp({
@@ -89,7 +92,9 @@ export async function getUserSelectedServer(
 		const content = {
 			content: "Please select a server:",
 			components: [
-				createServerSelectionMenu(serverManager.getAllTagPairs()),
+				createServerSelectionMenu(
+					await serverManager.getAccessibleTagPairs(userId),
+				),
 			],
 		};
 		const contentWithFlags: InteractionReplyOptions = {

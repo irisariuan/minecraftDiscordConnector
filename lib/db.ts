@@ -183,10 +183,7 @@ export async function hasAnyServer() {
 	return (await prisma.server.count()) > 0;
 }
 
-export async function getServerSettings(
-	serverId: number,
-	type?: SettingType,
-) {
+export async function getServerSettings(serverId: number, type?: SettingType) {
 	return await prisma.setting.findMany({
 		where: { serverId, type },
 	});
@@ -362,4 +359,57 @@ export async function getPlayerByName(name: string) {
 }
 export async function deletePlayerByUuid(uuid: string) {
 	return await prisma.player.delete({ where: { uuid } });
+}
+
+// ─── Server Access (allowlist) ────────────────────────────────────────────────
+
+/**
+ * Add a server to a user's access allowlist.
+ * Once a user has ANY entries, they can ONLY access those servers.
+ */
+export async function addServerAccess(userId: string, serverId: number) {
+	return prisma.serverAccess.upsert({
+		create: { userId, serverId },
+		update: {},
+		where: { userId_serverId: { userId, serverId } },
+	});
+}
+
+/**
+ * Remove a specific server from a user's allowlist.
+ */
+export async function removeServerAccess(userId: string, serverId: number) {
+	return prisma.serverAccess.deleteMany({ where: { userId, serverId } });
+}
+
+/**
+ * Get all servers in a user's allowlist (with server data included).
+ */
+export async function getServerAccessByUserId(userId: string) {
+	return prisma.serverAccess.findMany({
+		where: { userId },
+		include: { server: true },
+	});
+}
+
+/**
+ * Remove all server access restrictions for a user (restores full access).
+ */
+export async function clearServerAccess(userId: string) {
+	return prisma.serverAccess.deleteMany({ where: { userId } });
+}
+
+/**
+ * Return the list of server IDs the user is allowed to access.
+ * Returns `null` when the user has no restrictions (may access all servers).
+ */
+export async function getUserAccessibleServerIds(
+	userId: string,
+): Promise<number[] | null> {
+	const access = await prisma.serverAccess.findMany({
+		where: { userId },
+		select: { serverId: true },
+	});
+	if (access.length === 0) return null; // null = unrestricted
+	return access.map((a) => a.serverId);
 }
