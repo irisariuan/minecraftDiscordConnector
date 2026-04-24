@@ -347,6 +347,11 @@ function buildPhaseComponents(
 		if (!isFilled) {
 			navRow.addComponents(
 				new ButtonBuilder()
+					.setCustomId(PhasedInputAction.BACK)
+					.setLabel("◀ Back")
+					.setStyle(ButtonStyle.Secondary)
+					.setDisabled(currentPhase === 0),
+				new ButtonBuilder()
 					.setCustomId(PhasedInputAction.FILL)
 					.setLabel("✏️ Fill Step")
 					.setStyle(ButtonStyle.Primary),
@@ -837,23 +842,24 @@ export async function runPhasedInput(
 				case PhasedInputAction.CANCEL: {
 					await i.deferUpdate();
 					collector.stop("cancelled");
-					resolve(null);
 					break;
 				}
 			}
 		});
 
 		collector.on("end", (_, reason) => {
-			if (reason !== "complete" && reason !== "cancelled") {
-				interaction
-					.editReply({
-						content: "⏱️ Setup timed out.",
-						embeds: [],
-						components: [],
-					})
-					.catch(() => {});
-				resolve(null);
-			}
+			if (reason === "complete") return;
+			interaction
+				.editReply({
+					content:
+						reason === "cancelled"
+							? "❌ Setup cancelled."
+							: "⏱️ Setup timed out.",
+					embeds: [],
+					components: [],
+				})
+				.catch(() => {});
+			resolve(null);
 		});
 	});
 }

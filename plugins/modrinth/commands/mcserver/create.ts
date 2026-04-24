@@ -7,6 +7,14 @@ import {
 	type ChatInputCommandInteraction,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
+import {
+	runPhasedInput,
+	type PhasedPhase,
+} from "../../../../lib/component/phasedInput";
+import {
+	fetchVersionOptionsForLoader,
+	KNOWN_LOADERS,
+} from "../../../../lib/serverLoader";
 import { existsSync } from "node:fs";
 import { getAllServers, createServer } from "../../../../lib/db";
 import {
@@ -36,64 +44,7 @@ import { rm, writeFile } from "node:fs/promises";
 export function createSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 	return sub
 		.setName("create")
-		.setDescription("Download & set up a new Minecraft server")
-		.addStringOption((o) =>
-			o
-				.setName("servertype")
-				.setDescription(
-					"Server software to use (vanilla / paper / fabric / forge)",
-				)
-				.setRequired(true)
-				.addChoices(
-					{ name: "Vanilla", value: "vanilla" },
-					{ name: "Paper", value: "paper" },
-					{ name: "Fabric", value: "fabric" },
-					{ name: "Forge", value: "forge" },
-				),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("minecraftversion")
-				.setDescription("Minecraft version, e.g. 1.21.1")
-				.setRequired(true)
-				.setAutocomplete(true),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("serverdir")
-				.setDescription(
-					"Absolute path to the server directory (will be created if missing)",
-				)
-				.setRequired(true),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("plugindir")
-				.setDescription(
-					"Absolute path to the plugins/mods directory (will be created if missing)",
-				)
-				.setRequired(true),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("tag")
-				.setDescription("Display name for the server")
-				.setRequired(false),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("port")
-				.setDescription("Comma-separated ports (default: 25565)")
-				.setRequired(false),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("loaderversion")
-				.setDescription(
-					"Fabric loader / Forge version override (defaults to latest stable)",
-				)
-				.setRequired(false),
-		);
+		.setDescription("Download & set up a new Minecraft server");
 }
 export async function createHandler(
 	params: ExecuteParams<ChatInputCommandInteraction>,
@@ -101,29 +52,113 @@ export async function createHandler(
 	const { interaction, serverManager } = params;
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-	const serverType = interaction.options.getString(
-		"servertype",
-		true,
-	) as ServerType;
-	const mcVersion = interaction.options.getString("minecraftversion", true);
-	const serverDir = interaction.options.getString("serverdir", true);
-	const pluginDir = interaction.options.getString("plugindir", true);
-	const tag = interaction.options.getString("tag");
-	const portRaw = interaction.options.getString("port") ?? "25565";
-	const loaderVersionOverride =
-		interaction.options.getString("loaderversion");
+	// ── Collect inputs via phased wizard ────────────────────────────────────
+	const phases: PhasedPhase[] = [
+		{
+			label: "Software",
+			description:
+				"Choose the server software and target Minecraft version.",
+			fields: [
+				{
+					id: "loaderType",
+					label: "Server Type",
+					type: "select" as const,
+					selectOptions: KNOWN_LOADERS.map((l) => ({
+						label: l,
+						value: l,
+					})),
+					required: true,
+				},
+				{
+					id: "minecraftVersion",
+					label: "Minecraft Version",
+					type: "select" as const,
+					loadOptions: (values) =>
+						fetchVersionOptionsForLoader(values.loaderType ?? ""),
+					required: true,
+				},
+			],
+		},
+		{
+			label: "Paths",
+			description:
+				"Absolute filesystem paths for the server and plugins/mods directory.",
+			fields: [
+				{
+					id: "serverdir",
+					label: "Server Directory",
+					description: "Absolute path to the server folder",
+					required: true,
+				},
+				{
+					id: "plugindir",
+					label: "Plugin/Mods Directory",
+					description: "Absolute path to the plugins/mods folder",
+					required: true,
+				},
+			],
+		},
+		{
+			label: "Identity",
+			description:
+				"Port(s), display tag, and optional loader version override.",
+			fields: [
+				{
+					id: "port",
+					label: "Port(s)",
+					description: "Comma-separated integers between 1–65535",
+					placeholder: "25565",
+					required: false,
+					defaultValue: "25565",
+				},
+				{
+					id: "tag",
+					label: "Display Tag",
+					description: "Optional friendly name for this server",
+					required: false,
+				},
+				{
+					id: "loaderversion",
+					label: "Loader Version Override",
+					description:
+						"Fabric loader / Forge version (leave blank for latest stable)",
+					required: false,
+				},
+			],
+			validate: (values) => {
+				const portRaw = values.port?.trim() || "25565";
+				const ports = portRaw
+					.split(",")
+					.map((p) => parseInt(p.trim()))
+					.filter((p) => !isNaN(p) && p > 0 && p <= 65535);
+				if (ports.length === 0) {
+					return "Invalid port value(s). Provide comma-separated integers between 1 and 65535.";
+				}
+				return null;
+			},
+		},
+	];
+
+	const phaseValues = await runPhasedInput({
+		interaction,
+		title: "New Minecraft Server",
+		phases,
+	});
+	if (!phaseValues) return; // cancelled or timed out
+
+	const serverType = phaseValues[0]!.loaderType as ServerType;
+	const mcVersion = phaseValues[0]!.minecraftVersion!;
+	const serverDir = phaseValues[1]!.serverdir!;
+	const pluginDir = phaseValues[1]!.plugindir!;
+	const portRaw = phaseValues[2]!.port?.trim() || "25565";
+	const tag = phaseValues[2]!.tag?.trim() || null;
+	const loaderVersionOverride = phaseValues[2]!.loaderversion?.trim() || null;
 
 	// Parse ports
 	const ports = portRaw
 		.split(",")
 		.map((p) => parseInt(p.trim()))
 		.filter((p) => !isNaN(p) && p > 0 && p <= 65535);
-	if (ports.length === 0) {
-		return interaction.editReply({
-			content:
-				"❌ Invalid port value(s). Provide comma-separated integers between 1 and 65535.",
-		});
-	}
 
 	// Check for duplicate server paths
 	const existing = await getAllServers();

@@ -13,6 +13,11 @@ import {
 import type { ExecuteParams } from "../../../../lib/commandFile";
 import { existsSync } from "node:fs";
 import { selectServerById, updateServer } from "../../../../lib/db";
+import {
+	runPhasedInput,
+	type PhasedPhase,
+} from "../../../../lib/component/phasedInput";
+import { fetchVersionOptionsForLoader } from "../../../../lib/serverLoader";
 import { getPaperVersionBuild } from "../../../../lib/serverInstance/jar";
 import { safeJoin } from "../../../../lib/utils";
 import { downloadAndSave } from "../../../../lib/utils/web";
@@ -35,28 +40,8 @@ import { rm } from "node:fs/promises";
 export function upgradeSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 	return sub
 		.setName("upgrade")
-		.setDescription("Upgrade an existing server to a new Minecraft version")
-		.addStringOption((o) =>
-			o
-				.setName("server")
-				.setDescription("Server to upgrade")
-				.setRequired(true)
-				.setAutocomplete(true),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("version")
-				.setDescription("Target Minecraft version, e.g. 1.21.4")
-				.setRequired(true)
-				.setAutocomplete(true),
-		)
-		.addStringOption((o) =>
-			o
-				.setName("loader_version")
-				.setDescription(
-					"Fabric loader / Forge version override (defaults to latest stable)",
-				)
-				.setRequired(false),
+		.setDescription(
+			"Upgrade an existing server to a new Minecraft version",
 		);
 }
 export async function upgradeHandler(
@@ -65,22 +50,80 @@ export async function upgradeHandler(
 	const { interaction, serverManager } = params;
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-	const serverIdRaw = interaction.options.getString("server", true);
-	const newVersion = interaction.options.getString("version", true);
-	const loaderVersionOverride =
-		interaction.options.getString("loader_version");
+	// ── Collect inputs via phased wizard ────────────────────────────────────
+	const serverOptions = serverManager.getAllTagPairs().map((p) => ({
+		label: p.tag ?? `Server #${p.id}`,
+		value: String(p.id),
+	}));
 
-	const serverId = parseInt(serverIdRaw);
-	if (isNaN(serverId)) {
+	if (serverOptions.length === 0) {
 		return interaction.editReply({
-			content: "❌ Invalid server selection.",
+			content:
+				"❌ No servers are registered. Use `/manageserver create` first.",
 		});
 	}
+
+	const phases: PhasedPhase[] = [
+		{
+			label: "Target",
+			description:
+				"Select the server to upgrade and the target Minecraft version.",
+			fields: [
+				{
+					id: "server",
+					label: "Server",
+					type: "select" as const,
+					selectOptions: serverOptions,
+					required: true,
+				},
+				{
+					id: "version",
+					label: "Target Version",
+					type: "select" as const,
+					loadOptions: (values) => {
+						const sid = parseInt(values.server ?? "");
+						const sv = isNaN(sid)
+							? null
+							: serverManager.getServer(sid);
+						return fetchVersionOptionsForLoader(
+							sv?.config.loaderType ?? "",
+						);
+					},
+					required: true,
+				},
+			],
+		},
+		{
+			label: "Options",
+			description:
+				"Optional loader version override for Fabric / Forge servers.",
+			fields: [
+				{
+					id: "loaderversion",
+					label: "Loader Version Override",
+					description:
+						"Fabric loader / Forge version (leave blank for latest stable)",
+					required: false,
+				},
+			],
+		},
+	];
+
+	const phaseValues = await runPhasedInput({
+		interaction,
+		title: "Upgrade Minecraft Server",
+		phases,
+	});
+	if (!phaseValues) return; // cancelled or timed out
+
+	const serverId = parseInt(phaseValues[0]!.server!);
+	const newVersion = phaseValues[0]!.version!;
+	const loaderVersionOverride = phaseValues[1]!.loaderversion?.trim() || null;
 
 	const dbServer = await selectServerById(serverId);
 	if (!dbServer) {
 		return interaction.editReply({
-			content: `❌ Server with ID ${inlineCode(String(serverId))} not found.`,
+			content: `❌ Server with ID \`${serverId}\` not found.`,
 		});
 	}
 
@@ -97,6 +140,8 @@ export async function upgradeHandler(
 
 	await interaction.editReply({
 		content: `🔍 Checking plugin/mod compatibility for upgrade to ${bold(newVersion)}…`,
+		embeds: [],
+		components: [],
 	});
 
 	// ── Compatibility check ─────────────────────────────────────────
