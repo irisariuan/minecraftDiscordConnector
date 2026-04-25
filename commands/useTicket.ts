@@ -203,6 +203,11 @@ async function handleReply(
 		});
 		return false;
 	}
+	await interaction.editReply({
+		content: "Processing your ticket usage...",
+		embeds: [],
+		components: [],
+	});
 	await useUserTicket(
 		tickets.map((v) => v.ticketId),
 		"Used via /useticket command",
@@ -227,6 +232,7 @@ async function handleReply(
 		});
 	}
 	await response.update({
+		content: '',
 		embeds: [createTicketsUsageEmbed(usages)],
 	});
 
