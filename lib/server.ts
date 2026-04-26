@@ -608,6 +608,14 @@ class PaymentManager {
 		});
 		this.timeouts.add(timeout);
 	}
+	markUnpaid(uuid: string) {
+		const payment = this.payment.get(uuid);
+		if (payment) {
+			clearTimeout(payment.timeout);
+			this.payment.delete(uuid);
+			this.timeouts.delete(payment.timeout);
+		}
+	}
 	hasPaid(uuid: string) {
 		return this.payment.has(uuid);
 	}

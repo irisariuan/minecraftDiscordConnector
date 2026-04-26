@@ -49,13 +49,15 @@ export function initApiServer(
 		if (player.playername !== parsed.data.playerName) {
 			await updatePlayerName(parsed.data.uuid, parsed.data.playerName);
 		}
+		if (parsed.data.disconnect) {
+			return res.send(JSON.stringify({ kick: false }));
+		}
 		const effects = ticketEffectManager.getUserActiveEffects(
 			player.discordId,
 		);
 
 		if (
-			(!parsed.data.disconnect &&
-				server.paymentManager.hasPaid(player.uuid)) ||
+			server.paymentManager.hasPaid(player.uuid) ||
 			effects.some(
 				({ ticket: { effect } }) =>
 					effect.effect === TicketEffectType.FreePlay,
@@ -64,11 +66,7 @@ export function initApiServer(
 			return res.send(JSON.stringify({ kick: false }));
 		}
 		if (
-			!(await canSpendCredit(
-				player.discordId,
-				server.settings.playFee,
-			)) &&
-			!parsed.data.disconnect
+			!(await canSpendCredit(player.discordId, server.settings.playFee))
 		) {
 			return res.send(JSON.stringify({ kick: true }));
 		}
