@@ -369,9 +369,12 @@ export default {
 			const focusedOption = interaction.options.getFocused(true);
 			if (focusedOption.name === "permission") {
 				const input = focusedOption.value.toLowerCase();
-				const choices = Object.keys(PermissionFlags).filter((perm) =>
-					perm.toLowerCase().includes(input),
-				);
+				const choices = [
+					"all",
+					...Object.keys(PermissionFlags).filter((perm) =>
+						perm.toLowerCase().includes(input),
+					),
+				];
 				await interaction.respond(
 					choices.slice(0, 25).map((perm) => ({
 						name: perm,
