@@ -899,6 +899,7 @@ function parseMrpackFileIds(file: MrpackFile): {
 export interface DownloadModpackResult {
 	success: boolean;
 	name: string | null;
+	projectIds: string[];
 	filesDownloaded: number;
 	/** Number of .jar files skipped because they are incompatible with the server. */
 	filesSkipped: number;
@@ -973,6 +974,7 @@ export async function downloadModpackFile(
 			filesSkipped: 0,
 			name: null,
 			error: "Failed to retrieve version metadata.",
+			projectIds: [],
 		};
 	}
 
@@ -989,6 +991,7 @@ export async function downloadModpackFile(
 			filesSkipped: 0,
 			name: null,
 			error: "Failed to download .mrpack archive.",
+			projectIds: [],
 		};
 	}
 
@@ -1008,6 +1011,7 @@ export async function downloadModpackFile(
 			filesSkipped: 0,
 			name: null,
 			error: "Failed to parse modrinth.index.json inside the .mrpack.",
+			projectIds: [],
 		};
 	}
 
@@ -1034,6 +1038,7 @@ export async function downloadModpackFile(
 				`Loader mismatch: this modpack requires **${modpackLoader}** ` +
 				`but the server uses **${server.config.loaderType}**. ` +
 				`Install a ${modpackLoader} server or choose a different modpack.`,
+			projectIds: [],
 		};
 	}
 
@@ -1070,6 +1075,7 @@ export async function downloadModpackFile(
 
 	let filesDownloaded = 0;
 	let filesSkipped = 0;
+	const projectIds = new Set<string>();
 
 	for (const file of index.files) {
 		// Skip client-only files based on mrpack-declared env (fast path)
@@ -1121,6 +1127,7 @@ export async function downloadModpackFile(
 					continue;
 				}
 			}
+			projectIds.add(fileProjectId);
 		}
 
 		const destPath = safeJoin(server.config.serverDir, file.path);
@@ -1191,7 +1198,13 @@ export async function downloadModpackFile(
 	]);
 	await Promise.all(promises);
 
-	return { success: true, filesDownloaded, filesSkipped, name: index.name };
+	return {
+		success: true,
+		filesDownloaded,
+		filesSkipped,
+		name: index.name,
+		projectIds: [...projectIds],
+	};
 }
 
 /**

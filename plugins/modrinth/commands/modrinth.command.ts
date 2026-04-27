@@ -29,7 +29,6 @@ import {
 	resolveProjectDependencies,
 	searchPlugins,
 } from "../lib";
-import type { ResolvedDependency } from "../lib";
 import { sendSelectableActionMessage } from "../selectable";
 import {
 	ProjectType,
@@ -37,7 +36,7 @@ import {
 	type PluginSearchQueryItem,
 } from "../types";
 import type { Server } from "../../../lib/server";
-import { skip } from "@prisma/client/runtime/client";
+import { offerDependencyInstall } from "./deps";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -405,6 +404,13 @@ async function selectVersionToDownload({
 
 				onFinish?.();
 				collector.stop();
+				const deps = await resolveProjectDependencies(
+					result.projectIds,
+					new Set(result.projectIds),
+					server.config.minecraftVersion,
+					[server.config.loaderType],
+				);
+				await offerDependencyInstall(versionInteraction, server, deps);
 				return true;
 			}
 
@@ -620,83 +626,7 @@ async function selectVersionToDownload({
 					server.config.minecraftVersion,
 					[server.config.loaderType],
 				);
-				// only required/optional deps that have a resolvable version
-				const installableDeps = deps.filter(
-					(d) => d.versionId !== null,
-				);
-				if (installableDeps.length > 0) {
-					type DepAction = "install" | "skip";
-					await sendSelectableActionMessage<
-						ResolvedDependency,
-						DepAction
-					>({
-						interaction: versionInteraction,
-						items: installableDeps,
-						getItemId: (d) => d.projectId,
-						actions: {
-							install: {
-								icon: "⬇️",
-								label: "Install",
-								isActive: true,
-							},
-							skip: {
-								icon: "⏭️",
-								label: "Skip",
-								isActive: false,
-							},
-						},
-						initialAction: (d) =>
-							d.dependencyType === "required"
-								? "install"
-								: "skip",
-						cycleAction: (_d, current) =>
-							current === "install" ? "skip" : "install",
-						selectionTitle: `🔗 ${installableDeps.length} Dependenc${installableDeps.length === 1 ? "y" : "ies"} Found`,
-						selectionDescription: (counts) =>
-							[
-								"The plugin you just installed has dependencies.",
-								"",
-								`⬇️ Install: **${counts.install}** · ⏭️ Skip: **${counts.skip}**`,
-							].join("\n"),
-						formatField: (d, action) => ({
-							name: `${action === "install" ? "⬇️" : "⏭️"} ${d.projectName}`,
-							value: [
-								d.versionNumber
-									? `Version: \`${d.versionNumber}\``
-									: "Version: *unknown*",
-								`Type: **${d.dependencyType}**`,
-								`Required by: ${d.requiredBy.join(", ")}`,
-							].join("\n"),
-						}),
-						formatOption: (d, action) => ({
-							label: `${action === "install" ? "⬇️" : "⏭️"} ${trimTextWithSuffix(d.projectName, 80)}`,
-							description: trimTextWithSuffix(
-								`${d.dependencyType} · ${d.versionNumber ?? "unknown version"}`,
-								100,
-							),
-						}),
-						applyLabel: (counts) =>
-							counts.install > 0
-								? `Install (${counts.install})`
-								: "Nothing to Install",
-						process: async (d, _action) => {
-							const { newDownload } = await downloadPluginFile(
-								server,
-								d.versionId!,
-							);
-							return newDownload;
-						},
-						formatProgressValue: (d) =>
-							`⬇️ Installing \`${d.versionNumber ?? d.projectId}\``,
-						formatResultEntry: (d) =>
-							`**${d.projectName}** ${d.versionNumber ? `\`${d.versionNumber}\`` : ""}`,
-						resultFooter: (succeeded) =>
-							(succeeded.get("install")?.length ?? 0) > 0
-								? "🔄 Restart the server for changes to take effect."
-								: null,
-						progressTitle: "⬇️ Installing Dependencies",
-					});
-				}
+				await offerDependencyInstall(versionInteraction, server, deps);
 			}
 
 			return true;

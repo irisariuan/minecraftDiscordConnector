@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { SlashCommandBuilder, time } from "discord.js";
+import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../../../lib/commandFile";
 import { deletePluginRecord, getPluginsByServerId } from "../../../lib/db";
 import { sendPaginationMessage } from "../../../lib/pagination";
@@ -11,8 +11,8 @@ import {
 	getProjects,
 	getVersionsBulk,
 	resolveProjectDependencies,
-	type ResolvedDependency,
 } from "../lib";
+import { offerDependencyInstall } from "./deps";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ export default {
 			getResult: () => enriched,
 
 			formatter: (plugin) => ({
-				name: `${plugin.onDisk ? "✅" : "❌"} ${plugin.projectName}`,
+				name: plugin.projectName,
 				value: [
 					`Version: \`${plugin.versionNumber}\`${plugin.versionNumber !== plugin.versionId ? ` (ID: \`${plugin.versionId}\`)` : ""}`,
 					`File: \`${plugin.filename}\``,
@@ -259,74 +259,24 @@ export default {
 
 		// ── Phase 4: missing dependency detection ─────────────────────────
 		const installedProjectIds = new Set(enriched.map((p) => p.projectId));
+		await interaction.editReply({
+			content:
+				"🔍 Checking for missing dependencies required by your installed plugins...",
+		});
+
 		const missingDeps = await resolveProjectDependencies(
 			Array.from(installedProjectIds),
 			installedProjectIds,
 			server.config.minecraftVersion,
 			[server.config.loaderType],
 		);
+		await interaction.editReply({ content: "" }); // clear the "checking" message
 
-		// Only show deps that can actually be installed (have a resolved version)
-		const installableDeps = missingDeps.filter((d) => d.versionId !== null);
-		if (installableDeps.length === 0) return;
-
-		type DepAction = "install" | "skip";
-		await sendSelectableActionMessage<ResolvedDependency, DepAction>({
-			interaction,
-			items: installableDeps,
-			getItemId: (d) => d.projectId,
-			actions: {
-				install: { icon: "⬇️", label: "Install", isActive: true },
-				skip: { icon: "⏭️", label: "Skip", isActive: false },
-			},
-			initialAction: (d) =>
-				d.dependencyType === "required" ? "install" : "skip",
-			cycleAction: (_d, current) =>
-				current === "install" ? "skip" : "install",
-			selectionTitle: `🔗 ${installableDeps.length} Missing Dependenc${installableDeps.length === 1 ? "y" : "ies"}`,
-			selectionDescription: (counts) =>
-				[
-					"The following dependencies are required by your installed plugins but are not installed.",
-					"",
-					`⬇️ Install: **${counts.install}** · ⏭️ Skip: **${counts.skip}**`,
-				].join("\n"),
-			formatField: (d, action) => ({
-				name: `${action === "install" ? "⬇️" : "⏭️"} ${d.projectName}`,
-				value: [
-					d.versionNumber
-						? `Version: \`${d.versionNumber}\``
-						: "Version: *unknown*",
-					`Type: **${d.dependencyType}**`,
-					`Required by: ${d.requiredBy.join(", ")}`,
-				].join("\n"),
-			}),
-			formatOption: (d, action) => ({
-				label: `${action === "install" ? "⬇️" : "⏭️"} ${trimTextWithSuffix(d.projectName, 80)}`,
-				description: trimTextWithSuffix(
-					`${d.dependencyType} · ${d.versionNumber ?? "unknown version"}`,
-					100,
-				),
-			}),
-			applyLabel: (counts) =>
-				counts.install > 0
-					? `Install (${counts.install})`
-					: "Nothing to Install",
-			process: async (d, _action) => {
-				const { newDownload } = await downloadPluginFile(
-					server,
-					d.versionId!,
-				);
-				return newDownload;
-			},
-			formatProgressValue: (d) =>
-				`⬇️ Installing \`${d.versionNumber ?? d.projectId}\``,
-			formatResultEntry: (d) =>
-				`**${d.projectName}** ${d.versionNumber ? `\`${d.versionNumber}\`` : ""}`,
-			resultFooter: (succeeded) =>
-				(succeeded.get("install")?.length ?? 0) > 0
-					? "🔄 Restart the server for changes to take effect."
-					: null,
-			progressTitle: "⬇️ Installing Dependencies",
+		await offerDependencyInstall(interaction, server, missingDeps, {
+			selectionTitle: (n) =>
+				`🔗 ${n} Missing Dependenc${n === 1 ? "y" : "ies"}`,
+			descriptionHeader:
+				"The following dependencies are required by your installed plugins but are not installed.",
 		});
 	},
 
