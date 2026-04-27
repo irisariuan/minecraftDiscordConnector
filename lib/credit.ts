@@ -34,37 +34,73 @@ import {
 import { formatTicketNames } from "./utils/ticket";
 import { resolve, type Resolvable } from "./utils";
 
+/** A snapshot of a user's credit balance and full transaction history. */
 export interface UserCredit {
+	/** Discord user ID. */
 	userId: string;
+	/** Current credit balance. */
 	currentCredit: number;
+	/** All recorded transactions, sorted newest-first. */
 	histories: Transaction[];
 }
 
+/** A fully-resolved credit transaction record. */
 export interface Transaction {
+	/** Discord user ID of the account that was charged / credited. */
 	userId: string;
+	/** Balance after the transaction was applied. */
 	creditAfter: number;
+	/** Balance before the transaction was applied. */
 	creditBefore: number;
+	/**
+	 * Net credit change actually applied (may differ from `originalAmount`
+	 * when tickets reduce the cost).
+	 */
 	changed: number;
+	/** Requested credit change before any ticket discounts. */
 	originalAmount: number;
+	/** Tickets consumed during this transaction, or `null` if none were used. */
 	ticketUsed: Ticket[] | null;
+	/** Unix timestamp (ms) when the transaction occurred. */
 	timestamp: number;
+	/** Human-readable reason for the transaction. */
 	reason?: string;
+	/** Unique identifier for this transaction record. */
 	trackingId: string;
+	/** Tag of the server that initiated the transaction, or `null` if global. */
 	serverTag: string | null;
+	/** IDs of related ticket history entries, or `null` if none. */
 	historyId: string[] | null;
 }
+/**
+ * A lightweight transaction record returned by spend/charge helpers.
+ * Omits fields that are only available after the record has been persisted
+ * (`trackingId`, `historyId`, `serverTag`).
+ */
 export type PartialTransaction = Omit<
 	Transaction,
 	"trackingId" | "historyId" | "serverTag"
 >;
 
+/** Parameters for {@link setCredit}. */
 export interface SetCreditParams {
+	/** Discord user ID of the target account. */
 	userId: string;
+	/** Absolute credit value to set (not a delta). */
 	credit: number;
+	/** Optional server ID to associate with the resulting transaction record. */
 	serverId?: number;
+	/** Human-readable reason recorded in the transaction history. */
 	reason: string;
 }
 
+/**
+ * Sets a user's credit to an absolute value and records the change as a
+ * transaction.
+ *
+ * @returns The user's previous credit balance, or `null` if the user could not
+ *   be found / is not permitted to use the system.
+ */
 export async function setCredit({
 	userId,
 	credit,
@@ -94,14 +130,27 @@ export async function setCredit({
 	return userCreditFetched.currentCredit;
 }
 
+/** Parameters for {@link changeCredit}. */
 export interface ChangeCreditParams {
+	/** Discord user ID of the target account. */
 	userId: string;
+	/** Credit delta to apply (negative to deduct, positive to add). */
 	change: number;
+	/** Optional server ID to associate with the resulting transaction record. */
 	serverId?: number;
+	/** Human-readable reason recorded in the transaction history. */
 	reason: string;
+	/** IDs of ticket records to link to this transaction, if any. */
 	ticketId?: string[];
 }
 
+/**
+ * Applies a credit delta to a user's account and records the change as a
+ * transaction.
+ *
+ * @returns The user's new credit balance, or `null` if the user could not be
+ *   found / is not permitted to use the system.
+ */
 export async function changeCredit({
 	userId,
 	change,
@@ -137,6 +186,16 @@ export async function changeCredit({
 	return userCreditFetched.currentCredit + change;
 }
 
+/**
+ * Fetches the current credit balance and full transaction history for a user.
+ *
+ * If the user does not yet exist in the database but has the `use` permission,
+ * a synthetic record with a zero balance is returned so callers don't need to
+ * special-case new users.
+ *
+ * @returns A {@link UserCredit} object, or `null` if the user is not found and
+ *   does not have the `use` permission.
+ */
 export async function getCredit(userId: string): Promise<UserCredit | null> {
 	const user = await getUserById(userId);
 	if (!user) {
@@ -188,6 +247,11 @@ export async function getCredit(userId: string): Promise<UserCredit | null> {
 	};
 }
 
+/**
+ * Returns `true` when the user either has enough credit to cover `cost` or
+ * holds a permission that bypasses the balance check (`noCreditCheck` or
+ * `skipPayment`).
+ */
 export async function canSpendCredit(userId: string, cost: number) {
 	const credit = await getCredit(userId);
 	if (!credit) return false;
@@ -237,26 +301,58 @@ async function spendCreditWithoutTicket(
 		ticketUsed: null,
 	};
 }
+/** Parameters for {@link spendCredit}. */
 export interface SpendCreditParams {
+	/** The Discord user or guild member being charged. */
 	user: User | GuildMember;
+	/**
+	 * The channel in which the action is taking place.  Required to open a
+	 * ticket-selection thread.  Pass `null` to skip ticket selection entirely.
+	 */
 	channel: Channel | null;
+	/** Credit amount to charge (positive integer). */
 	cost: number;
+	/** Optional server ID to associate with the resulting transaction record. */
 	serverId?: number;
+	/** Human-readable reason recorded in the transaction history. */
 	reason: string;
 	/**
-	 * Empty array represent not allowing tickets
-	 * Undefined represent allowing all tickets
+	 * Restricts which ticket types may be applied to this payment.
+	 * - `undefined` — all ticket types are accepted.
+	 * - Empty array — no tickets are accepted (full price only).
 	 */
 	acceptedTicketTypeIds?: string[];
+	/**
+	 * Restricts which ticket effect types are eligible for this payment.
+	 * Defaults to `regularPaymentTicketEffects`.
+	 */
 	acceptedTicketEffectTypes?: TicketEffectType[];
+	/**
+	 * When `true`, the payment is aborted if the user has no applicable
+	 * tickets (i.e. full-price payment is not offered as a fallback).
+	 */
 	mustUseTickets?: boolean;
+	/**
+	 * When resolves to `true`, the credit change is skipped but a successful
+	 * `PartialTransaction` is still returned.  Useful for dry-run or preview
+	 * flows.
+	 */
 	skipPayment?: Resolvable<boolean>;
 	/**
-	 * Default is as much tickets as selection allows
+	 * Maximum number of tickets the user may select in one payment.
+	 * Defaults to the total number of eligible tickets.
 	 */
 	maxSelectableTickets?: number;
 	/**
-	 * When this param is provided, the default canSpendCredit check will be skipped, and the function will directly call this callback to check if the credit can be spent.
+	 * Custom pre-spend gate.  When provided, the default `canSpendCredit`
+	 * balance check is replaced by this callback.
+	 *
+	 * Return `false` (or a Promise resolving to `false`) to abort the payment.
+	 *
+	 * @param params.user         - The user being charged.
+	 * @param params.finalCost    - Cost after any ticket discounts.
+	 * @param params.originalCost - Original cost before discounts.
+	 * @param params.tickets      - Tickets selected by the user, if any.
 	 */
 	onBeforeSpend?: (params: {
 		user: User | GuildMember;
@@ -435,6 +531,14 @@ export async function spendCredit(
 	};
 }
 
+/**
+ * Applies a credit delta to a user's account **and** sends them a DM
+ * notification about the change.
+ *
+ * This is the low-level primitive used by {@link spendCredit} and
+ * {@link refundCredit}.  Prefer those higher-level helpers unless you need
+ * precise control over the notification message.
+ */
 export async function chargeCredit(params: SendCreditNotificationParams) {
 	const { user, creditChanged, serverId, reason } = params;
 	await changeCredit({
@@ -468,20 +572,51 @@ export async function refundCredit(
 	await sendCreditNotification(params);
 }
 
+/** Parameters for {@link sendCreditNotification} and {@link chargeCredit}. */
 interface SendCreditNotificationParams {
+	/** The Discord user or guild member to notify. */
 	user: User | PartialUser | GuildMember;
+	/** Net credit change (negative for a deduction, positive for a credit). */
 	creditChanged: number;
+	/** Human-readable reason shown in the DM. */
 	reason: string;
+	/** Optional server ID used when recording a cancellation refund. */
 	serverId?: number;
+	/**
+	 * When `true` the notification DM is sent with the
+	 * `SuppressNotifications` flag so it does not ping the user.
+	 * Defaults to `false`.
+	 */
 	silent?: boolean;
+	/**
+	 * When `true` a "Cancel Transaction" button is added to the DM that lets
+	 * the user refund the charge within 10 minutes.
+	 * Defaults to `false`.
+	 */
 	cancellable?: boolean;
+	/**
+	 * Upper bound on the refund amount when `cancellable` is `true`.
+	 * Defaults to `0` (no cap — the full `creditChanged` amount is refunded).
+	 */
 	maxRefund?: number;
 	/**
-	 * @param refundAmount Positive
+	 * Called when the user successfully cancels the transaction.
+	 *
+	 * @param refundAmount - The positive amount that was refunded.
 	 */
 	onRefund?: (refundAmount: number) => unknown;
 }
 
+/**
+ * Sends the user a DM summarising a credit change.
+ *
+ * When `cancellable` is `true`, a "Cancel Transaction" button is included and
+ * a collector is started that refunds the charge if the user clicks it within
+ * 10 minutes.
+ *
+ * @returns `true` when the DM was sent successfully, `false` if the user
+ *   could not be found / is not permitted to use the system.
+ */
 export async function sendCreditNotification({
 	user,
 	creditChanged,
@@ -553,13 +688,20 @@ export async function sendCreditNotification({
 	return true;
 }
 
+/** Custom IDs for the action buttons included in credit notification DMs. */
 export enum CreditNotificationButtonId {
+	/** Triggers a refund of the associated transaction. */
 	CancelButton = "CANCEL_TRANSACTION",
+	/** Marks the associated transaction as approved by the recipient. */
 	ApproveButton = "APPROVE_TRANSACTION",
 }
 
-// For other uses, use createRequestComponents
+// For approval flows outside credit notifications use createRequestComponents instead.
 
+/**
+ * Creates a danger-styled "Cancel Transaction" button used in credit
+ * notification DMs.
+ */
 export function createCancelTransactionButton() {
 	return new ButtonBuilder()
 		.setCustomId(CreditNotificationButtonId.CancelButton)
@@ -567,6 +709,10 @@ export function createCancelTransactionButton() {
 		.setStyle(ButtonStyle.Danger);
 }
 
+/**
+ * Creates a success-styled "Approve Transaction" button used in credit
+ * notification DMs.
+ */
 export function createApproveTransactionButton() {
 	return new ButtonBuilder()
 		.setCustomId(CreditNotificationButtonId.ApproveButton)
