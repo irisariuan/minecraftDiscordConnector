@@ -104,7 +104,10 @@ export class DomainConcurrencyLimiter {
 	}
 	private changeMaxConcurrent(host: string, change: number) {
 		const current = this.getMaxConcurrent(host);
-		const newValue = Math.max(this.defaultMaxConcurrent, current + change);
+		const newValue =
+			change > 0
+				? Math.min(this.defaultMaxConcurrent, current + change) // recover toward default, never exceed
+				: Math.max(1, current + change); // back off on 429, never below 1
 		this.maxConcurrent.set(host, newValue);
 	}
 
@@ -121,26 +124,41 @@ export class DomainConcurrencyLimiter {
 		}
 
 		q.active++;
+		// Use a definite-assignment assertion — res is always assigned before
+		// use because fetch() throwing causes the error to propagate before
+		// `return res` is ever reached.
+		let res!: Response;
+		let retryDelay: number | null = null;
 		try {
-			const res = await fetch(url, options);
+			res = await fetch(url, options);
 			if (!res.ok) {
 				this.changeMaxConcurrent(host, -1);
 				if (res.status === 429 && retry < 3) {
-					// Too Many Requests - wait and retry
-					const retryAfter =
+					// Record the delay but do NOT await or recurse here.
+					// The slot must be released (finally) before we wait and
+					// retry — otherwise the recursive _fetch call would queue
+					// behind a slot that is still held by this call, causing
+					// a deadlock when all slots are occupied.
+					retryDelay =
 						Number(res.headers.get("Retry-After")) ||
 						1000 * 2 ** retry;
-					await new Promise((r) => setTimeout(r, retryAfter));
-					return await this._fetch(url, options, retry + 1);
 				}
 			} else {
 				this.changeMaxConcurrent(host, 1);
 			}
-			return res;
 		} finally {
+			// Always release the slot so waiting requests can proceed.
 			q.active--;
 			q.pending.shift()?.();
 		}
+
+		// Slot is now free. Wait outside of any slot and then retry fresh.
+		if (retryDelay !== null) {
+			await new Promise((r) => setTimeout(r, retryDelay));
+			return this._fetch(url, options, retry + 1);
+		}
+
+		return res;
 	}
 
 	async fetch(url: string | URL, options?: RequestInit): Promise<Response> {
