@@ -69,15 +69,17 @@ export function separate<T>(arr: T[], m: number): T[][] {
  * Requests that exceed the cap are queued and released as active ones finish.
  */
 export class DomainConcurrencyLimiter {
-	private readonly defaultMaxConcurrent: number;
+	defaultMaxConcurrent: number;
+	defaultMaxRetry: number;
 	private readonly maxConcurrent: Map<string, number> = new Map();
 	private readonly queues = new Map<
 		string,
 		{ active: number; pending: Array<() => void> }
 	>();
 
-	constructor(maxConcurrent = 5) {
+	constructor(maxConcurrent = 5, maxRetry = 5) {
 		this.defaultMaxConcurrent = maxConcurrent;
+		this.defaultMaxRetry = maxRetry;
 	}
 
 	private hostname(url: string | URL): string {
@@ -133,7 +135,10 @@ export class DomainConcurrencyLimiter {
 			res = await fetch(url, options);
 			if (!res.ok) {
 				this.changeMaxConcurrent(host, -1);
-				if (res.status === 429 && retry < 3) {
+				if (res.status === 429 && retry < 5) {
+					console.log(
+						`Received 429 from ${host}, backing off (retry ${retry + 1})...`,
+					);
 					// Record the delay but do NOT await or recurse here.
 					// The slot must be released (finally) before we wait and
 					// retry — otherwise the recursive _fetch call would queue
@@ -141,7 +146,7 @@ export class DomainConcurrencyLimiter {
 					// a deadlock when all slots are occupied.
 					retryDelay =
 						Number(res.headers.get("Retry-After")) ||
-						1000 * 2 ** retry;
+						1000 * 5 ** retry;
 				}
 			} else {
 				this.changeMaxConcurrent(host, 1);
