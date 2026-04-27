@@ -153,6 +153,7 @@ export async function createHandler(
 	const portRaw = phaseValues[2]!.port?.trim() || "25565";
 	const tag = phaseValues[2]!.tag?.trim() || null;
 	const loaderVersionOverride = phaseValues[2]!.loaderversion?.trim() || null;
+	await interaction.editReply({ components: [], embeds: []})
 
 	// Parse ports
 	const ports = portRaw

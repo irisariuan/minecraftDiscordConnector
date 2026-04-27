@@ -26,7 +26,11 @@ import {
 	listPluginVersions,
 	searchPlugins,
 } from "../lib";
-import { ProjectType, type PluginListVersionItem, type PluginSearchQueryItem } from "../types";
+import {
+	ProjectType,
+	type PluginListVersionItem,
+	type PluginSearchQueryItem,
+} from "../types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,7 +59,9 @@ export default {
 		.addStringOption((option) =>
 			option
 				.setName("type")
-				.setDescription("Type of content to search for (default: plugin)")
+				.setDescription(
+					"Type of content to search for (default: plugin)",
+				)
 				.addChoices(
 					{ name: "Plugin / Mod", value: "plugin" },
 					{ name: "Modpack", value: "modpack" },
@@ -69,7 +75,9 @@ export default {
 		.addBooleanOption((option) =>
 			option
 				.setName("release")
-				.setDescription("Only show stable releases when viewing versions"),
+				.setDescription(
+					"Only show stable releases when viewing versions",
+				),
 		),
 
 	requireServer: true,
@@ -79,8 +87,7 @@ export default {
 		const contentType = (interaction.options.getString("type") ??
 			"plugin") as ContentType;
 		const query = interaction.options.getString("query") ?? undefined;
-		const onlyRelease =
-			interaction.options.getBoolean("release") ?? false;
+		const onlyRelease = interaction.options.getBoolean("release") ?? false;
 
 		const isModpack = contentType === "modpack";
 		const userPermission = await readPermission(
@@ -99,11 +106,7 @@ export default {
 				const results: PluginSearchQueryItem<false>[] = [];
 				// Each page of pagination covers 20 results; Modrinth gives 100 per call.
 				// Fetch incrementally so we don't over-request on the first page.
-				for (
-					let i = 0;
-					i < Math.ceil((pageNumber + 1) / 5);
-					i++
-				) {
+				for (let i = 0; i < Math.ceil((pageNumber + 1) / 5); i++) {
 					const resp = await searchPlugins({
 						offset: i * 100,
 						query: filter ?? query,
@@ -194,38 +197,21 @@ export default {
 					interaction: menuInteraction,
 
 					getResult: async () => {
-						const versions = await listPluginVersions(
-							slug,
-							isModpack
-								? {
-										game_versions: [
-											server.config.minecraftVersion,
-										],
-									}
-								: {
-										loaders: [server.config.loaderType],
-										game_versions: [
-											server.config.minecraftVersion,
-										],
-									},
-						);
+						const versions = await listPluginVersions(slug, {
+							loaders: [server.config.loaderType],
+							game_versions: [server.config.minecraftVersion],
+						});
 						return (versions ?? []).filter(
-							(v) =>
-								!onlyRelease || v.version_type === "release",
+							(v) => !onlyRelease || v.version_type === "release",
 						);
 					},
 
 					formatter: (version) => {
-						const compatible = isModpack
-							? version.game_versions.includes(
-									server.config.minecraftVersion,
-								)
-							: version.game_versions.includes(
-										server.config.minecraftVersion,
-									) &&
-								version.loaders.includes(
-									server.config.loaderType,
-								);
+						const compatible =
+							version.game_versions.includes(
+								server.config.minecraftVersion,
+							) &&
+							version.loaders.includes(server.config.loaderType);
 						return {
 							name: version.version_number,
 							value: [
@@ -261,8 +247,7 @@ export default {
 						value: version.id,
 					}),
 
-					interactionFilter: (i) =>
-						i.user.id === interaction.user.id,
+					interactionFilter: (i) => i.user.id === interaction.user.id,
 
 					// ── Download the selected version ─────────────────────
 					onItemSelected: async (
@@ -302,15 +287,13 @@ export default {
 
 							if (!staffResult) {
 								await request.edit({
-									content:
-										"Download request timed out.",
+									content: "Download request timed out.",
 									components: [],
 								});
 								return false;
 							}
 							if (
-								staffResult.customId ===
-								RequestComponentId.Deny
+								staffResult.customId === RequestComponentId.Deny
 							) {
 								await request.edit({
 									content: "Download request denied.",
@@ -349,9 +332,14 @@ export default {
 							await versionInteraction.editReply({
 								content: [
 									`✅ Modpack **${result.name ?? versionId}** installed successfully!`,
-									`Downloaded **${result.filesDownloaded}** files.`,
-									"Restart the server for changes to take effect.",
-								].join("\n"),
+									`Downloaded **${result.filesDownloaded}** file${result.filesDownloaded !== 1 ? "s" : ""}.`,
+									result.filesSkipped > 0
+										? `⚠️ Skipped **${result.filesSkipped}** file${result.filesSkipped !== 1 ? "s" : ""} incompatible with the \`${server.config.loaderType}\` loader.`
+										: null,
+									"🔄 Restart the server for changes to take effect.",
+								]
+									.filter(Boolean)
+									.join("\n"),
 								components: [],
 								embeds: [],
 							});
@@ -387,8 +375,7 @@ export default {
 											v.id === existingRecord.versionId,
 									)?.version_number ??
 									existingRecord.versionId;
-								const newLabel =
-									selectedVersion.version_number;
+								const newLabel = selectedVersion.version_number;
 
 								const replaceMsg =
 									await versionInteraction.followUp({
@@ -406,8 +393,7 @@ export default {
 									.awaitMessageComponent({
 										componentType: ComponentType.Button,
 										filter: (i) =>
-											i.user.id ===
-											interaction.user.id,
+											i.user.id === interaction.user.id,
 										time: 1000 * 60 * 2,
 									})
 									.catch(() => null);
@@ -511,8 +497,7 @@ export default {
 									.awaitMessageComponent({
 										componentType: ComponentType.Button,
 										filter: (i) =>
-											i.user.id ===
-											interaction.user.id,
+											i.user.id === interaction.user.id,
 										time: 1000 * 60 * 2,
 									})
 									.catch(() => null);

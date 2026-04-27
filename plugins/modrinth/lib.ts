@@ -707,7 +707,54 @@ export interface DownloadModpackResult {
 	success: boolean;
 	name: string | null;
 	filesDownloaded: number;
+	/** Number of .jar files skipped because their loader is incompatible with the server. */
+	filesSkipped: number;
 	error?: string;
+}
+
+// ─── Loader compatibility helpers ─────────────────────────────────────────────
+
+/**
+ * Known dependency keys used in `modrinth.index.json` that indicate a mod
+ * loader requirement.  The `minecraft` key is intentionally excluded — it
+ * denotes the MC version, not a loader.
+ */
+const MODPACK_LOADER_DEP_KEYS = [
+	"forge",
+	"neoforge",
+	"fabric-loader",
+	"quilt-loader",
+] as const;
+
+/**
+ * Converts a modpack dependency key (as it appears in `modrinth.index.json`)
+ * to the Modrinth loader name used in version `loaders` arrays.
+ *
+ * e.g. `"fabric-loader"` → `"fabric"`, `"forge"` → `"forge"`
+ */
+function modpackDepKeyToLoader(depKey: string): string {
+	return depKey.replace(/-loader$/, "");
+}
+
+/**
+ * Returns the set of Modrinth loader names that are considered compatible with
+ * the given server loader type.
+ *
+ * The special value `"minecraft"` (used for resource packs / data packs) is
+ * always treated as compatible and does not need to appear in this set.
+ */
+function compatibleLoadersForServer(serverLoaderType: string): Set<string> {
+	const n = serverLoaderType.toLowerCase().trim();
+	const table: Record<string, string[]> = {
+		forge: ["forge"],
+		neoforge: ["neoforge"],
+		fabric: ["fabric", "quilt"],
+		quilt: ["fabric", "quilt"],
+		paper: ["paper", "spigot", "bukkit", "purpur", "folia"],
+		spigot: ["paper", "spigot", "bukkit"],
+		vanilla: [],
+	};
+	return new Set(table[n] ?? [n]);
 }
 
 /**
@@ -716,8 +763,10 @@ export interface DownloadModpackResult {
  * Steps:
  *  1. Fetch the .mrpack file for the given version ID.
  *  2. Parse `modrinth.index.json` to get the file manifest.
- *  3. Download every server-side file to its declared path inside `serverDir`.
- *  4. Apply `overrides/` then `server-overrides/` on top.
+ *  3. Verify that the modpack's declared loader is compatible with the server.
+ *  4. Batch-fetch Modrinth version metadata for per-file loader validation.
+ *  5. Download every server-side, loader-compatible file to its declared path.
+ *  6. Apply `overrides/` then `server-overrides/` on top.
  */
 export async function downloadModpackFile(
 	server: Server,
@@ -728,6 +777,7 @@ export async function downloadModpackFile(
 		return {
 			success: false,
 			filesDownloaded: 0,
+			filesSkipped: 0,
 			name: null,
 			error: "Failed to retrieve version metadata.",
 		};
@@ -743,6 +793,7 @@ export async function downloadModpackFile(
 		return {
 			success: false,
 			filesDownloaded: 0,
+			filesSkipped: 0,
 			name: null,
 			error: "Failed to download .mrpack archive.",
 		};
@@ -761,15 +812,75 @@ export async function downloadModpackFile(
 		return {
 			success: false,
 			filesDownloaded: 0,
+			filesSkipped: 0,
 			name: null,
 			error: "Failed to parse modrinth.index.json inside the .mrpack.",
 		};
 	}
 
+	// ── Step 3: dependency-level loader check ────────────────────────────────
+	// Fail fast if the whole modpack targets an incompatible loader so that no
+	// files are downloaded at all before we know it's the wrong loader family.
+	const modpackDepKey = MODPACK_LOADER_DEP_KEYS.find(
+		(k) => k in index.dependencies,
+	);
+	const modpackLoader = modpackDepKey
+		? modpackDepKeyToLoader(modpackDepKey)
+		: null;
+	const serverCompatible = compatibleLoadersForServer(
+		server.config.loaderType,
+	);
+
+	if (modpackLoader && !serverCompatible.has(modpackLoader)) {
+		return {
+			success: false,
+			filesDownloaded: 0,
+			filesSkipped: 0,
+			name: index.name,
+			error:
+				`Loader mismatch: this modpack requires **${modpackLoader}** ` +
+				`but the server uses **${server.config.loaderType}**. ` +
+				`Install a ${modpackLoader} server or choose a different modpack.`,
+		};
+	}
+
+	// ── Step 4: batch-fetch version metadata for per-file loader checks ──────
+	// Collect the Modrinth version IDs that can be resolved from CDN URLs so we
+	// can validate each .jar's declared loaders before downloading it.
+	const modrinthVersionIds = [
+		...new Set(
+			index.files
+				.filter((f) => f.env?.server !== "unsupported")
+				.map((f) => parseMrpackFileIds(f).versionId)
+				.filter(
+					(id) =>
+						!id.startsWith("sha1:") && !id.startsWith("mrpack:"),
+				),
+		),
+	];
+
+	const versionMetaMap =
+		modrinthVersionIds.length > 0
+			? await getVersionsBulk(modrinthVersionIds)
+			: new Map<string, PluginGetVersionItem>();
+
+	// ── Step 5: batch-fetch project metadata for authoritative server_side ───
+	// The mrpack env field is set by the pack author and may be wrong.
+	// The Modrinth project's server_side field is set by the mod author and is
+	// the authoritative source of truth for whether a mod runs on a server.
+	const projectIds = [
+		...new Set([...versionMetaMap.values()].map((v) => v.project_id)),
+	];
+	const projectMetaMap =
+		projectIds.length > 0
+			? await getProjects(projectIds)
+			: new Map<string, PluginGetQueryItem>();
+
 	let filesDownloaded = 0;
+	let filesSkipped = 0;
 
 	for (const file of index.files) {
-		// Skip client-only files
+		// Skip client-only files based on mrpack-declared env (fast path)
 		if (file.env?.server === "unsupported") continue;
 
 		// Reject path traversal attempts
@@ -781,6 +892,45 @@ export async function downloadModpackFile(
 		) {
 			console.warn(`[modpack] Skipping unsafe path: ${file.path}`);
 			continue;
+		}
+
+		// ── Per-file loader + server_side check (jar files with known Modrinth metadata) ──
+		// "minecraft" loader means resource pack / data pack — always compatible.
+		// Files from non-Modrinth hosts won't have metadata and are passed through.
+		if (file.path.toLowerCase().endsWith(".jar")) {
+			const { versionId: fileVersionId } = parseMrpackFileIds(file);
+			const meta = versionMetaMap.get(fileVersionId);
+			if (meta) {
+				// Authoritative server_side check: even if the mrpack env was
+				// missing or incorrectly set by the pack author, the project's
+				// own server_side declaration is the ground truth.
+				const projectMeta = projectMetaMap.get(meta.project_id);
+				if (projectMeta?.server_side === SideValue.Unsupported) {
+					console.warn(
+						`[modpack] Skipping ${file.path}: Modrinth project ` +
+							`"${projectMeta.title}" declares server_side=unsupported ` +
+							`(client-only mod).`,
+					);
+					filesSkipped++;
+					continue;
+				}
+
+				// Loader compatibility check.
+				if (meta.loaders.length > 0) {
+					const compatible = meta.loaders.some(
+						(l) => l === "minecraft" || serverCompatible.has(l),
+					);
+					if (!compatible) {
+						console.warn(
+							`[modpack] Skipping ${file.path}: loaders ` +
+								`[${meta.loaders.join(", ")}] are not compatible ` +
+								`with server loader "${server.config.loaderType}".`,
+						);
+						filesSkipped++;
+						continue;
+					}
+				}
+			}
 		}
 
 		const destPath = safeJoin(server.config.serverDir, file.path);
@@ -851,7 +1001,7 @@ export async function downloadModpackFile(
 	]);
 	await Promise.all(promises);
 
-	return { success: true, filesDownloaded, name: index.name };
+	return { success: true, filesDownloaded, filesSkipped, name: index.name };
 }
 
 /**

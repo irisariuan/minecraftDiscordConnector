@@ -26,6 +26,7 @@ import {
 	downloadPluginFile,
 	getPlugin,
 	getPluginVersionDetails,
+	getProjects,
 	listPluginVersions,
 } from "../lib";
 import { type DbPlugin, type RichUpdateEntry } from "../types";
@@ -41,12 +42,22 @@ export default {
 	requireServer: true,
 	async execute({ interaction, server }) {
 		// ── Phase 1: gather data ──────────────────────────────────────────────
+		const checkStart = Date.now();
 		await interaction.editReply({
-			content: "🔍 Checking for plugin updates — please wait…",
+			content: "🔍 Checking for plugin updates — please wait… (0s)",
 		});
+		const checkingTicker = setInterval(() => {
+			const elapsed = Math.floor((Date.now() - checkStart) / 1000);
+			interaction
+				.editReply({
+					content: `🔍 Checking for plugin updates — please wait… (${elapsed}s)`,
+				})
+				.catch(() => {});
+		}, 1000);
 
 		const plugins = await getPluginsByServerId(server.id);
 		if (plugins.length === 0) {
+			clearInterval(checkingTicker);
 			return await interaction.editReply({
 				content:
 					"No plugins are tracked in the database for this server.",
@@ -106,10 +117,13 @@ export default {
 			});
 		}
 
+		clearInterval(checkingTicker);
+		const project = await getProjects(failedChecks);
+
 		if (richUpdates.length === 0) {
 			let content = "✅ All tracked plugins are already up to date!";
 			if (failedChecks.length > 0) {
-				content += `\n\n⚠️ Could not fetch version info for ${failedChecks.length} plugin(s): ${failedChecks.map((id) => `\`${id}\``).join(", ")}`;
+				content += `\n\n⚠️ Could not fetch version info for ${failedChecks.length} plugin(s): ${failedChecks.map((id) => `\`${project.get(id)?.title ?? id}\``).join(", ")}`;
 			}
 			return await interaction.editReply({ content });
 		}
@@ -144,7 +158,7 @@ export default {
 				];
 				if (failedChecks.length > 0) {
 					lines.push(
-						`\n⚠️ Could not check **${failedChecks.length}** plugin(s): ${failedChecks.map((id) => `\`${id}\``).join(", ")}`,
+						`\n⚠️ Could not check **${failedChecks.length}** plugin(s): ${failedChecks.map((id) => `\`${project.get(id)?.title ?? id}\``).join(", ")}`,
 					);
 				}
 				return lines.join("\n");

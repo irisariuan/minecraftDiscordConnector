@@ -54,6 +54,14 @@ const MAX_SELECT_OPTIONS = 25;
 const APPLY_ID = "__sel_apply__";
 const CANCEL_ID = "__sel_cancel__";
 const SELECT_ID = "__sel_select__";
+const FIRST_ID = "__sel_first__";
+const PREV_ID = "__sel_prev__";
+const NEXT_ID = "__sel_next__";
+const LAST_ID = "__sel_last__";
+const PAGE_NAV_IDS = new Set([FIRST_ID, PREV_ID, NEXT_ID, LAST_ID]);
+
+/** Default number of items shown per page in the selection embed and select menu. */
+const SELECTABLE_PAGE_SIZE = 10;
 
 // ─── Shared utilities ─────────────────────────────────────────────────────────
 
@@ -281,6 +289,13 @@ export interface SelectableActionOptions<TItem, TAction extends string> {
 	progressTitle?: string;
 
 	/**
+	 * Number of items shown per page in the selection embed and select menu.
+	 * Must be between 1 and 25 (Discord's embed field and select-menu limits).
+	 * Default: `10`.
+	 */
+	itemsPerPage?: number;
+
+	/**
 	 * Called right after the user clicks Apply, with the full list of
 	 * items-to-process and the live message, but BEFORE the first
 	 * `process()` call or the progress embed is shown.
@@ -299,14 +314,19 @@ export interface SelectableActionOptions<TItem, TAction extends string> {
 }
 
 /**
- * Sends an ephemeral followUp message that lets the user cycle a per-item
- * action via a select menu, then apply or cancel the batch operation.
+ * Sends a followUp message that lets the user cycle a per-item action via a
+ * paginated select menu, then apply or cancel the batch operation.
  *
  * Lifecycle:
- *  1. Selection embed + select menu + Apply/Cancel buttons.
- *  2. User toggles items (select menu cycles each item's action).
- *  3. User clicks Apply → live progress embed → result embed.
+ *  1. Selection embed (current page) + nav buttons + select menu + Apply/Cancel.
+ *  2. User navigates pages and toggles item actions via the select menu.
+ *  3. User clicks Apply → optional `onBeforeProcess` gate → live progress
+ *     embed → result embed.
  *  4. User clicks Cancel, or the timeout fires → message cleaned up.
+ *
+ * The `actionMap` persists across page navigation, so toggling items on page 1
+ * is not lost when the user moves to page 2.  Apply always acts on ALL items
+ * across all pages.
  *
  * The returned Promise resolves when the interaction is fully settled
  * (apply complete, cancelled, or timed out).
@@ -340,7 +360,18 @@ export async function sendSelectableActionMessage<
 
 	const actionKeys = Object.keys(actions) as TAction[];
 
-	// ── State ─────────────────────────────────────────────────────────────────
+	// ── Pagination state ──────────────────────────────────────────────────────
+
+	const perPage = Math.min(
+		Math.max(1, options.itemsPerPage ?? SELECTABLE_PAGE_SIZE),
+		MAX_SELECT_OPTIONS,
+	);
+	let page = 0;
+	const getMaxPage = () => Math.max(0, Math.ceil(items.length / perPage) - 1);
+	const getPageItems = () =>
+		items.slice(page * perPage, (page + 1) * perPage);
+
+	// ── Action state ──────────────────────────────────────────────────────────
 
 	const actionMap = new Map<string, TAction>(
 		items.map((item) => [getItemId(item), initialAction(item)]),
@@ -363,6 +394,7 @@ export async function sendSelectableActionMessage<
 
 	const buildSelectionEmbed = (): EmbedBuilder => {
 		const counts = getCounts();
+		const maxPage = getMaxPage();
 		const embed = new EmbedBuilder()
 			.setTitle(selectionTitle)
 			.setColor(selectionColor);
@@ -371,7 +403,7 @@ export async function sendSelectableActionMessage<
 			embed.setDescription(selectionDescription(counts));
 		}
 
-		for (const item of items.slice(0, 25)) {
+		for (const item of getPageItems()) {
 			const action = actionMap.get(getItemId(item)) ?? actionKeys[0]!;
 			const { name, value } = formatField(item, action);
 			embed.addFields({
@@ -381,19 +413,59 @@ export async function sendSelectableActionMessage<
 			});
 		}
 
-		const overflow = items.length - 25;
-		if (overflow > 0) {
+		if (maxPage > 0) {
 			embed.setFooter({
-				text: `… and ${overflow} more (not shown in menu)`,
+				text: `Page ${page + 1} / ${maxPage + 1} · ${items.length} item${items.length !== 1 ? "s" : ""} total`,
 			});
 		}
 
 		return embed;
 	};
 
+	/**
+	 * Navigation row — only rendered when there is more than one page.
+	 * Shows ⏮ ◀ [page/total] ▶ ⏭ with appropriate buttons disabled at
+	 * the first and last pages.
+	 */
+	const buildNavRow =
+		(): ActionRowBuilder<MessageActionRowComponentBuilder>[] => {
+			const maxPage = getMaxPage();
+			if (maxPage === 0) return [];
+			return [
+				new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+					new ButtonBuilder()
+						.setCustomId(FIRST_ID)
+						.setEmoji("⏮️")
+						.setStyle(ButtonStyle.Secondary)
+						.setDisabled(page === 0),
+					new ButtonBuilder()
+						.setCustomId(PREV_ID)
+						.setEmoji("◀️")
+						.setStyle(ButtonStyle.Secondary)
+						.setDisabled(page === 0),
+					new ButtonBuilder()
+						.setCustomId("__sel_page_label__")
+						.setLabel(`${page + 1} / ${maxPage + 1}`)
+						.setStyle(ButtonStyle.Secondary)
+						.setDisabled(true),
+					new ButtonBuilder()
+						.setCustomId(NEXT_ID)
+						.setEmoji("▶️")
+						.setStyle(ButtonStyle.Secondary)
+						.setDisabled(page === maxPage),
+					new ButtonBuilder()
+						.setCustomId(LAST_ID)
+						.setEmoji("⏭️")
+						.setStyle(ButtonStyle.Secondary)
+						.setDisabled(page === maxPage),
+				),
+			];
+		};
+
+	/** Select menu showing only the items on the current page. */
 	const buildSelectRow =
 		(): ActionRowBuilder<MessageActionRowComponentBuilder>[] => {
-			const opts = items.slice(0, MAX_SELECT_OPTIONS).map((item) => {
+			const opts = getPageItems().map((item) => {
 				const action = actionMap.get(getItemId(item)) ?? actionKeys[0]!;
 				const { label, description } = formatOption(item, action);
 				const opt = new StringSelectMenuOptionBuilder()
@@ -416,6 +488,7 @@ export async function sendSelectableActionMessage<
 			];
 		};
 
+	/** Apply / Cancel row.  The Apply label and disabled state reflect ALL pages. */
 	const buildButtonRow =
 		(): ActionRowBuilder<MessageActionRowComponentBuilder>[] => {
 			const counts = getCounts();
@@ -442,11 +515,18 @@ export async function sendSelectableActionMessage<
 			];
 		};
 
+	/** Convenience: all three rows in display order. */
+	const buildAllRows = () => [
+		...buildNavRow(),
+		...buildSelectRow(),
+		...buildButtonRow(),
+	];
+
 	// ── Send the initial selection message ────────────────────────────────────
 
 	const msg = await interaction.followUp({
 		embeds: [buildSelectionEmbed()],
-		components: [...buildSelectRow(), ...buildButtonRow()],
+		components: buildAllRows(),
 		...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}),
 	});
 
@@ -476,7 +556,7 @@ export async function sendSelectableActionMessage<
 			await msg
 				.edit({
 					embeds: [buildSelectionEmbed()],
-					components: [...buildSelectRow(), ...buildButtonRow()],
+					components: buildAllRows(),
 				})
 				.catch(() => {});
 		});
@@ -488,6 +568,24 @@ export async function sendSelectableActionMessage<
 		});
 
 		btnCollector.on("collect", async (i) => {
+			// ── Page navigation ───────────────────────────────────────────
+			if (PAGE_NAV_IDS.has(i.customId)) {
+				await i.deferUpdate().catch(() => {});
+				const maxPage = getMaxPage();
+				if (i.customId === FIRST_ID) page = 0;
+				else if (i.customId === PREV_ID) page = Math.max(0, page - 1);
+				else if (i.customId === NEXT_ID)
+					page = Math.min(maxPage, page + 1);
+				else if (i.customId === LAST_ID) page = maxPage;
+				await msg
+					.edit({
+						embeds: [buildSelectionEmbed()],
+						components: buildAllRows(),
+					})
+					.catch(() => {});
+				return;
+			}
+
 			// ── Cancel ────────────────────────────────────────────────────
 			if (i.customId === CANCEL_ID) {
 				selectCollector.stop();

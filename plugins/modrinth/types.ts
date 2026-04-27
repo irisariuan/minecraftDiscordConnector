@@ -53,15 +53,29 @@ export interface PluginListVersionItem<Transformed extends boolean = false> {
 }
 
 export interface PluginGetVersionItem {
+	/** Human-readable name of this version (e.g. "Version 1.0.0"). */
+	name: string;
 	version_number: string;
 	/**
 	 * Version ID, base62 encoded
 	 */
 	id: string;
 	project_id: string;
+	author_id: string;
 	/** ISO-8601 date string */
 	date_published: string;
-	files: PluginGetVersionFileItem[];
+	/** Minecraft versions this version supports. */
+	game_versions: string[];
+	/**
+	 * Mod loaders this version supports.
+	 * Values include `"forge"`, `"neoforge"`, `"fabric"`, `"quilt"`,
+	 * `"paper"`, `"spigot"`, `"minecraft"` (resource packs), etc.
+	 */
+	loaders: string[];
+	version_type: PluginVersionType;
+	featured: boolean;
+	downloads: number;
+	files: PluginVersionFileItem[];
 }
 
 export interface PluginVersionFileItem {
@@ -76,11 +90,15 @@ export interface PluginVersionFileItem {
 	file_type: string;
 }
 
-export interface PluginGetVersionFileItem extends PluginVersionFileItem {
-	game_versions: string[];
-	dependencies: PluginVersionDependencyItem[];
-	loaders: string[];
-}
+/**
+ * @deprecated The extra fields (`game_versions`, `dependencies`, `loaders`)
+ * were incorrectly modelled here — per the Modrinth API those fields live on
+ * the *version* object, not on individual file entries.  Use
+ * `PluginGetVersionItem` fields directly instead.
+ *
+ * Kept as a type alias for backwards compatibility.
+ */
+export type PluginGetVersionFileItem = PluginVersionFileItem;
 
 export interface PluginGetQueryItem extends PluginAPIResponseCommonItem {
 	body: string;
