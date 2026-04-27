@@ -58,6 +58,7 @@ const FIRST_ID = "__sel_first__";
 const PREV_ID = "__sel_prev__";
 const NEXT_ID = "__sel_next__";
 const LAST_ID = "__sel_last__";
+const CYCLE_ALL_ID = "__sel_cycle_all__";
 const PAGE_NAV_IDS = new Set([FIRST_ID, PREV_ID, NEXT_ID, LAST_ID]);
 
 /** Default number of items shown per page in the selection embed and select menu. */
@@ -508,6 +509,11 @@ export async function sendSelectableActionMessage<
 						.setStyle(ButtonStyle.Success)
 						.setDisabled(total === 0),
 					new ButtonBuilder()
+						.setCustomId(CYCLE_ALL_ID)
+						.setLabel(`Cycle All (${items.length})`)
+						.setEmoji("🔄")
+						.setStyle(ButtonStyle.Primary),
+					new ButtonBuilder()
 						.setCustomId(CANCEL_ID)
 						.setLabel("Cancel")
 						.setStyle(ButtonStyle.Secondary),
@@ -544,7 +550,6 @@ export async function sendSelectableActionMessage<
 	await new Promise<void>((resolve) => {
 		selectCollector.on("collect", async (i) => {
 			if (i.customId !== SELECT_ID) return;
-			await i.deferUpdate();
 
 			for (const id of i.values) {
 				const item = items.find((it) => getItemId(it) === id);
@@ -553,8 +558,8 @@ export async function sendSelectableActionMessage<
 				actionMap.set(id, cycleAction(item, current));
 			}
 
-			await msg
-				.edit({
+			await i
+				.update({
 					embeds: [buildSelectionEmbed()],
 					components: buildAllRows(),
 				})
@@ -568,17 +573,32 @@ export async function sendSelectableActionMessage<
 		});
 
 		btnCollector.on("collect", async (i) => {
+			// ── Cycle All ─────────────────────────────────────────────────
+			if (i.customId === CYCLE_ALL_ID) {
+				for (const item of items) {
+					const id = getItemId(item);
+					const current = actionMap.get(id) ?? actionKeys[0]!;
+					actionMap.set(id, cycleAction(item, current));
+				}
+				await i
+					.update({
+						embeds: [buildSelectionEmbed()],
+						components: buildAllRows(),
+					})
+					.catch(() => {});
+				return;
+			}
+
 			// ── Page navigation ───────────────────────────────────────────
 			if (PAGE_NAV_IDS.has(i.customId)) {
-				await i.deferUpdate().catch(() => {});
 				const maxPage = getMaxPage();
 				if (i.customId === FIRST_ID) page = 0;
 				else if (i.customId === PREV_ID) page = Math.max(0, page - 1);
 				else if (i.customId === NEXT_ID)
 					page = Math.min(maxPage, page + 1);
 				else if (i.customId === LAST_ID) page = maxPage;
-				await msg
-					.edit({
+				await i
+					.update({
 						embeds: [buildSelectionEmbed()],
 						components: buildAllRows(),
 					})
@@ -619,8 +639,8 @@ export async function sendSelectableActionMessage<
 				}));
 
 			if (toProcess.length === 0) {
-				await msg
-					.edit({
+				await interaction.webhook
+					.editMessage(msg.id, {
 						content: "No actions to apply.",
 						embeds: [],
 						components: [],
@@ -642,8 +662,10 @@ export async function sendSelectableActionMessage<
 			}
 
 			// Initialise statuses and show the first progress embed
+			// Mark every item as "processing" upfront so the embed shows
+			// the full list immediately instead of revealing items one-by-one.
 			const statuses = new Map<string, ItemStatus>(
-				toProcess.map(({ item }) => [getItemId(item), "pending"]),
+				toProcess.map(({ item }) => [getItemId(item), "processing"]),
 			);
 			let completed = 0;
 
@@ -656,8 +678,8 @@ export async function sendSelectableActionMessage<
 					status: statuses.get(getItemId(item)) ?? "pending",
 				}));
 
-			await msg
-				.edit({
+			await interaction.webhook
+				.editMessage(msg.id, {
 					embeds: [
 						buildProgressEmbed({
 							title: progressTitle,
@@ -676,12 +698,14 @@ export async function sendSelectableActionMessage<
 			);
 			const failed: TItem[] = [];
 
-			for (const { item, action } of toProcess) {
-				const id = getItemId(item);
-				statuses.set(id, "processing");
-
-				await msg
-					.edit({
+			// Throttled progress refresh — at most one Discord edit per 1.5 s
+			// to stay well within the rate-limit while items complete in parallel.
+			let progressDirty = false;
+			const progressTimer = setInterval(async () => {
+				if (!progressDirty) return;
+				progressDirty = false;
+				await interaction.webhook
+					.editMessage(msg.id, {
 						embeds: [
 							buildProgressEmbed({
 								title: progressTitle,
@@ -692,30 +716,27 @@ export async function sendSelectableActionMessage<
 						],
 					})
 					.catch(() => {});
+			}, 1500);
 
-				const ok = await process(item, action).catch(() => false);
+			// Process all items in parallel.
+			// JS is single-threaded so Map/array mutations after each `await`
+			// are always safe even when many promises are in flight.
+			await Promise.all(
+				toProcess.map(async ({ item, action }) => {
+					const ok = await process(item, action).catch(() => false);
+					const id = getItemId(item);
+					statuses.set(id, ok ? "success" : "failed");
+					if (ok) {
+						succeeded.get(action)!.push(item);
+					} else {
+						failed.push(item);
+					}
+					completed++;
+					progressDirty = true;
+				}),
+			);
 
-				statuses.set(id, ok ? "success" : "failed");
-				if (ok) {
-					succeeded.get(action)!.push(item);
-				} else {
-					failed.push(item);
-				}
-				completed++;
-
-				await msg
-					.edit({
-						embeds: [
-							buildProgressEmbed({
-								title: progressTitle,
-								entries: getEntries(),
-								completed,
-								total: toProcess.length,
-							}),
-						],
-					})
-					.catch(() => {});
-			}
+			clearInterval(progressTimer);
 
 			// Build result groups (one per action that had successes)
 			const groups: ResultGroup[] = [];
@@ -766,8 +787,8 @@ export async function sendSelectableActionMessage<
 						: undefined
 				: undefined;
 
-			await msg
-				.edit({
+			await interaction.webhook
+				.editMessage(msg.id, {
 					embeds: [
 						buildResultEmbed({
 							groups,

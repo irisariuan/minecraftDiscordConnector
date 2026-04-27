@@ -524,6 +524,184 @@ export async function listPluginVersions(
 	);
 }
 
+// ─── Dependency resolution ────────────────────────────────────────────────────
+
+/**
+ * Calls `GET /project/{id}/dependencies` and returns the projects and versions
+ * that the given project depends upon.
+ * Returns `null` on network or API error.
+ */
+async function getProjectDependencies(projectId: string): Promise<{
+	projects: PluginGetQueryItem[];
+	versions: PluginGetVersionItem[];
+} | null> {
+	const url = new URL(
+		`${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}/dependencies`,
+	);
+	const res = await safeFetch(url);
+	if (!res?.ok) return null;
+	return (await res.json()) as {
+		projects: PluginGetQueryItem[];
+		versions: PluginGetVersionItem[];
+	};
+}
+
+/**
+ * A single resolved dependency — the project to install plus context about
+ * which version to use and which parent projects require it.
+ */
+export interface ResolvedDependency {
+	/** Modrinth project ID of the dependency */
+	projectId: string;
+	/** Human-readable project name */
+	projectName: string;
+	/**
+	 * Best version ID to install.
+	 * `null` when the dep specifies no explicit version AND no compatible
+	 * version could be found via the API (e.g. game-version mismatch).
+	 */
+	versionId: string | null;
+	/** Human-readable version number, or `null` when `versionId` is null */
+	versionNumber: string | null;
+	/** Whether this dependency is required or merely optional */
+	dependencyType: "required" | "optional";
+	/** Display names of the parent projects that declared this dependency */
+	requiredBy: string[];
+}
+
+/**
+ * Resolves the required and optional dependencies for a set of version IDs,
+ * returning only those whose project is **not** already in
+ * `installedProjectIds`.
+ *
+ * Uses `GET /project/{id}/dependencies` per parent project to fetch dep
+ * metadata and available versions in one shot — no extra `getVersionsBulk` or
+ * `listPluginVersions` calls needed.
+ *
+ * `dependency_type` is derived from each dep project's `server_side` field:
+ * `"required"` → required, `"optional"` → optional, `"unsupported"` → skipped
+ * (client-only mod, should not be installed on a server).
+ *
+ * The best compatible version is chosen from `versions[]` by filtering on
+ * `gameVersion` / `loaders` and sorting newest-first.
+ *
+ * Multiple parents depending on the same project are de-duplicated;
+ * `"required"` takes priority over `"optional"` when both are present.
+ *
+ * @param projectIds          Project IDs of the mods/plugins whose dependencies
+ *                            should be resolved.
+ * @param installedProjectIds Project IDs already on the server; dependencies
+ *                            whose project is in this set are excluded.
+ * @param gameVersion         Minecraft version for version-lookup filtering.
+ * @param loaders             Loader filter (e.g. `["fabric"]`) for version-lookup.
+ */
+export async function resolveProjectDependencies(
+	projectIds: string[],
+	installedProjectIds: Set<string>,
+	gameVersion?: string,
+	loaders?: string[],
+): Promise<ResolvedDependency[]> {
+	if (projectIds.length === 0) return [];
+
+	// Call /project/{id}/dependencies for every parent project in parallel.
+	const depResponseMap = new Map<
+		string,
+		{ projects: PluginGetQueryItem[]; versions: PluginGetVersionItem[] }
+	>();
+	await Promise.all(
+		projectIds.map(async (projectId) => {
+			const response = await getProjectDependencies(projectId);
+			if (response) depResponseMap.set(projectId, response);
+		}),
+	);
+
+	// ── Aggregate all installable deps, keyed by dep project ID ──────────────
+	const depMap = new Map<
+		string,
+		{
+			projectId: string;
+			dependencyType: "required" | "optional";
+			requiredByProjectIds: string[];
+			/** Full project metadata from the deps endpoint */
+			projectMeta: PluginGetQueryItem;
+			/** Best version to install, resolved from the deps endpoint */
+			resolvedVersion: PluginGetVersionItem | null;
+		}
+	>();
+
+	for (const [parentProjectId, response] of depResponseMap) {
+		for (const depProject of response.projects) {
+			// Skip already-installed deps and client-only mods.
+			if (installedProjectIds.has(depProject.id)) continue;
+			if (depProject.server_side === SideValue.Unsupported) continue;
+
+			// Derive dependency_type from the dep project's server_side:
+			//   required → the server needs it; optional → the server can run without it.
+			const dependencyType: "required" | "optional" =
+				depProject.server_side === SideValue.Optional
+					? "optional"
+					: "required";
+
+			// Best compatible version: filter response.versions by project +
+			// loader/game-version, then take the newest.
+			const candidates = response.versions
+				.filter(
+					(v) =>
+						v.project_id === depProject.id &&
+						(!gameVersion ||
+							v.game_versions.includes(gameVersion)) &&
+						(!loaders?.length ||
+							loaders.some((l) => v.loaders.includes(l))),
+				)
+				.sort(
+					(a, b) =>
+						new Date(b.date_published).getTime() -
+						new Date(a.date_published).getTime(),
+				);
+			const resolvedVersion = candidates[0] ?? null;
+
+			const existing = depMap.get(depProject.id);
+			if (existing) {
+				// "required" beats "optional"
+				if (dependencyType === "required")
+					existing.dependencyType = "required";
+				if (!existing.resolvedVersion && resolvedVersion)
+					existing.resolvedVersion = resolvedVersion;
+				if (!existing.requiredByProjectIds.includes(parentProjectId))
+					existing.requiredByProjectIds.push(parentProjectId);
+			} else {
+				depMap.set(depProject.id, {
+					projectId: depProject.id,
+					dependencyType,
+					requiredByProjectIds: [parentProjectId],
+					projectMeta: depProject,
+					resolvedVersion,
+				});
+			}
+		}
+	}
+
+	if (depMap.size === 0) return [];
+
+	// Fetch parent project names for the "requiredBy" display field.
+	const parentProjectMap =
+		projectIds.length > 0
+			? await getProjects(projectIds)
+			: new Map<string, PluginGetQueryItem>();
+
+	// ── Assemble results ──────────────────────────────────────────────────────
+	return [...depMap.values()].map((dep) => ({
+		projectId: dep.projectId,
+		projectName: dep.projectMeta.title,
+		versionId: dep.resolvedVersion?.id ?? null,
+		versionNumber: dep.resolvedVersion?.version_number ?? null,
+		dependencyType: dep.dependencyType,
+		requiredBy: dep.requiredByProjectIds.map(
+			(pid) => parentProjectMap.get(pid)?.title ?? pid,
+		),
+	}));
+}
+
 export async function downloadPluginFile(
 	server: Server,
 	id: string,
@@ -707,7 +885,7 @@ export interface DownloadModpackResult {
 	success: boolean;
 	name: string | null;
 	filesDownloaded: number;
-	/** Number of .jar files skipped because their loader is incompatible with the server. */
+	/** Number of .jar files skipped because they are incompatible with the server. */
 	filesSkipped: number;
 	error?: string;
 }
@@ -844,37 +1022,36 @@ export async function downloadModpackFile(
 		};
 	}
 
-	// ── Step 4: batch-fetch version metadata for per-file loader checks ──────
-	// Collect the Modrinth version IDs that can be resolved from CDN URLs so we
-	// can validate each .jar's declared loaders before downloading it.
+	// ── Steps 4 & 5: batch-fetch version + project metadata in parallel ──────
+	// The CDN URL format is:
+	//   https://cdn.modrinth.com/data/PROJECT_ID/versions/VERSION_ID/FILENAME
+	// so both projectId and versionId are directly extractable from each file's
+	// download URL — no need to derive projectIds from versionMetaMap.
+	// Running both lookups in parallel cuts one sequential round-trip.
+	const modrinthFileIds = index.files
+		.filter((f) => f.env?.server !== "unsupported")
+		.map((f) => ({ file: f, ...parseMrpackFileIds(f) }))
+		.filter(
+			({ projectId, versionId }) =>
+				!projectId.startsWith("mrpack:") &&
+				!versionId.startsWith("sha1:"),
+		);
+
 	const modrinthVersionIds = [
-		...new Set(
-			index.files
-				.filter((f) => f.env?.server !== "unsupported")
-				.map((f) => parseMrpackFileIds(f).versionId)
-				.filter(
-					(id) =>
-						!id.startsWith("sha1:") && !id.startsWith("mrpack:"),
-				),
-		),
+		...new Set(modrinthFileIds.map((f) => f.versionId)),
+	];
+	const modrinthProjectIds = [
+		...new Set(modrinthFileIds.map((f) => f.projectId)),
 	];
 
-	const versionMetaMap =
+	const [versionMetaMap, projectMetaMap] = await Promise.all([
 		modrinthVersionIds.length > 0
-			? await getVersionsBulk(modrinthVersionIds)
-			: new Map<string, PluginGetVersionItem>();
-
-	// ── Step 5: batch-fetch project metadata for authoritative server_side ───
-	// The mrpack env field is set by the pack author and may be wrong.
-	// The Modrinth project's server_side field is set by the mod author and is
-	// the authoritative source of truth for whether a mod runs on a server.
-	const projectIds = [
-		...new Set([...versionMetaMap.values()].map((v) => v.project_id)),
-	];
-	const projectMetaMap =
-		projectIds.length > 0
-			? await getProjects(projectIds)
-			: new Map<string, PluginGetQueryItem>();
+			? getVersionsBulk(modrinthVersionIds)
+			: Promise.resolve(new Map<string, PluginGetVersionItem>()),
+		modrinthProjectIds.length > 0
+			? getProjects(modrinthProjectIds)
+			: Promise.resolve(new Map<string, PluginGetQueryItem>()),
+	]);
 
 	let filesDownloaded = 0;
 	let filesSkipped = 0;
@@ -898,37 +1075,35 @@ export async function downloadModpackFile(
 		// "minecraft" loader means resource pack / data pack — always compatible.
 		// Files from non-Modrinth hosts won't have metadata and are passed through.
 		if (file.path.toLowerCase().endsWith(".jar")) {
-			const { versionId: fileVersionId } = parseMrpackFileIds(file);
+			const { projectId: fileProjectId, versionId: fileVersionId } =
+				parseMrpackFileIds(file);
+			// Look up project metadata directly by projectId from the CDN URL —
+			// this works even if the version metadata fetch missed this file.
+			const projectMeta = projectMetaMap.get(fileProjectId);
+			if (projectMeta?.server_side === SideValue.Unsupported) {
+				console.warn(
+					`[modpack] Skipping ${file.path}: Modrinth project ` +
+						`"${projectMeta.title}" declares server_side=unsupported ` +
+						`(client-only mod).`,
+				);
+				filesSkipped++;
+				continue;
+			}
+
+			// Loader compatibility check (requires version metadata).
 			const meta = versionMetaMap.get(fileVersionId);
-			if (meta) {
-				// Authoritative server_side check: even if the mrpack env was
-				// missing or incorrectly set by the pack author, the project's
-				// own server_side declaration is the ground truth.
-				const projectMeta = projectMetaMap.get(meta.project_id);
-				if (projectMeta?.server_side === SideValue.Unsupported) {
+			if (meta && meta.loaders.length > 0) {
+				const compatible = meta.loaders.some(
+					(l) => l === "minecraft" || serverCompatible.has(l),
+				);
+				if (!compatible) {
 					console.warn(
-						`[modpack] Skipping ${file.path}: Modrinth project ` +
-							`"${projectMeta.title}" declares server_side=unsupported ` +
-							`(client-only mod).`,
+						`[modpack] Skipping ${file.path}: loaders ` +
+							`[${meta.loaders.join(", ")}] are not compatible ` +
+							`with server loader "${server.config.loaderType}".`,
 					);
 					filesSkipped++;
 					continue;
-				}
-
-				// Loader compatibility check.
-				if (meta.loaders.length > 0) {
-					const compatible = meta.loaders.some(
-						(l) => l === "minecraft" || serverCompatible.has(l),
-					);
-					if (!compatible) {
-						console.warn(
-							`[modpack] Skipping ${file.path}: loaders ` +
-								`[${meta.loaders.join(", ")}] are not compatible ` +
-								`with server loader "${server.config.loaderType}".`,
-						);
-						filesSkipped++;
-						continue;
-					}
 				}
 			}
 		}

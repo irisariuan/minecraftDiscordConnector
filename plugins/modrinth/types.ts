@@ -75,6 +75,7 @@ export interface PluginGetVersionItem {
 	version_type: PluginVersionType;
 	featured: boolean;
 	downloads: number;
+	dependencies: PluginVersionDependencyItem[];
 	files: PluginVersionFileItem[];
 }
 

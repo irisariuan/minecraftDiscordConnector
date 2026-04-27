@@ -24,8 +24,11 @@ import {
 	downloadModpackFile,
 	downloadPluginFile,
 	listPluginVersions,
+	resolveProjectDependencies,
 	searchPlugins,
 } from "../lib";
+import type { ResolvedDependency } from "../lib";
+import { sendSelectableActionMessage } from "../selectable";
 import {
 	ProjectType,
 	type PluginListVersionItem,
@@ -334,7 +337,7 @@ export default {
 									`✅ Modpack **${result.name ?? versionId}** installed successfully!`,
 									`Downloaded **${result.filesDownloaded}** file${result.filesDownloaded !== 1 ? "s" : ""}.`,
 									result.filesSkipped > 0
-										? `⚠️ Skipped **${result.filesSkipped}** file${result.filesSkipped !== 1 ? "s" : ""} incompatible with the \`${server.config.loaderType}\` loader.`
+										? `⚠️ Skipped **${result.filesSkipped}** file${result.filesSkipped !== 1 ? "s" : ""} incompatible with server.`
 										: null,
 									"🔄 Restart the server for changes to take effect.",
 								]
@@ -564,20 +567,105 @@ export default {
 							}
 						}
 
-						// Notify about dependencies
-						const filteredDeps =
-							selectedVersion?.dependencies.filter(
-								(d) => !!d.file_name,
-							);
-						if (filteredDeps && filteredDeps.length > 0) {
-							await versionInteraction.followUp({
-								content: `ℹ️ This plugin has dependencies: ${filteredDeps.map((d) => `\`${d.file_name}\` (version \`${d.version_id}\`)`).join(", ")}. You may need to download them separately.`,
-								flags: MessageFlags.Ephemeral,
-							});
-						}
-
 						versionCollector.stop();
 						searchCollector.stop();
+
+						if (selectedVersion) {
+							const installedPlugins = await getPluginsByServerId(
+								server.id,
+							);
+							const installedProjectIds = new Set(
+								installedPlugins.map((p) => p.projectId),
+							);
+							const deps = await resolveProjectDependencies(
+								[selectedVersion.project_id],
+								installedProjectIds,
+								server.config.minecraftVersion,
+								[server.config.loaderType],
+							);
+							// only required/optional deps that have a resolvable version
+							const installableDeps = deps.filter(
+								(d) => d.versionId !== null,
+							);
+							if (installableDeps.length > 0) {
+								type DepAction = "install" | "skip";
+								await sendSelectableActionMessage<
+									ResolvedDependency,
+									DepAction
+								>({
+									interaction: versionInteraction,
+									items: installableDeps,
+									getItemId: (d) => d.projectId,
+									actions: {
+										install: {
+											icon: "⬇️",
+											label: "Install",
+											isActive: true,
+										},
+										skip: {
+											icon: "⏭️",
+											label: "Skip",
+											isActive: false,
+										},
+									},
+									initialAction: (d) =>
+										d.dependencyType === "required"
+											? "install"
+											: "skip",
+									cycleAction: (_d, current) =>
+										current === "install"
+											? "skip"
+											: "install",
+									selectionTitle: `🔗 ${installableDeps.length} Dependenc${installableDeps.length === 1 ? "y" : "ies"} Found`,
+									selectionDescription: (counts) =>
+										[
+											"The plugin you just installed has dependencies.",
+											"",
+											`⬇️ Install: **${counts.install}** · ⏭️ Skip: **${counts.skip}**`,
+										].join("\n"),
+									formatField: (d, action) => ({
+										name: `${action === "install" ? "⬇️" : "⏭️"} ${d.projectName}`,
+										value: [
+											d.versionNumber
+												? `Version: \`${d.versionNumber}\``
+												: "Version: *unknown*",
+											`Type: **${d.dependencyType}**`,
+											`Required by: ${d.requiredBy.join(", ")}`,
+										].join("\n"),
+									}),
+									formatOption: (d, action) => ({
+										label: `${action === "install" ? "⬇️" : "⏭️"} ${trimTextWithSuffix(d.projectName, 80)}`,
+										description: trimTextWithSuffix(
+											`${d.dependencyType} · ${d.versionNumber ?? "unknown version"}`,
+											100,
+										),
+									}),
+									applyLabel: (counts) =>
+										counts.install > 0
+											? `Install (${counts.install})`
+											: "Nothing to Install",
+									process: async (d, _action) => {
+										const { newDownload } =
+											await downloadPluginFile(
+												server,
+												d.versionId!,
+											);
+										return newDownload;
+									},
+									formatProgressValue: (d) =>
+										`⬇️ Installing \`${d.versionNumber ?? d.projectId}\``,
+									formatResultEntry: (d) =>
+										`**${d.projectName}** ${d.versionNumber ? `\`${d.versionNumber}\`` : ""}`,
+									resultFooter: (succeeded) =>
+										(succeeded.get("install")?.length ??
+											0) > 0
+											? "🔄 Restart the server for changes to take effect."
+											: null,
+									progressTitle: "⬇️ Installing Dependencies",
+								});
+							}
+						}
+
 						return true;
 					},
 				});
