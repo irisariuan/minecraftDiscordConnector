@@ -133,9 +133,6 @@ export class DomainConcurrencyLimiter {
 			if (!res.ok) {
 				this.changeMaxConcurrent(host, -1);
 				if (res.status === 429 && retry < this.defaultMaxRetry) {
-					console.log(
-						`Received 429 from ${host}, backing off (retry ${retry + 1})...`,
-					);
 					// Record the delay but do NOT await or recurse here.
 					// The slot must be released (finally) before we wait and
 					// retry — otherwise the recursive _fetch call would queue

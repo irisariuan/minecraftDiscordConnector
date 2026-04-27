@@ -98,6 +98,9 @@ export default {
 		});
 		return await deleteFunc();
 	},
+	features: {
+		requireStoppedServer: true,
+	},
 	permissions: orPerm(
 		PermissionFlags.deletePlugin,
 		PermissionFlags.voteDeletePlugin,

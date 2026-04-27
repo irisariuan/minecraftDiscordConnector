@@ -376,5 +376,6 @@ export default {
 	),
 	features: {
 		supportedPlatforms: ["minecraft"],
+		requireStoppedServer: true,
 	},
 } satisfies CommandFile<true>;

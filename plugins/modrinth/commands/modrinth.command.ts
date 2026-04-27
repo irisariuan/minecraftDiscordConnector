@@ -25,7 +25,6 @@ import { trimTextWithSuffix } from "../../../lib/utils";
 import {
 	downloadModpackFile,
 	downloadPluginFile,
-	getPlugin,
 	listPluginVersions,
 	resolveProjectDependencies,
 	searchPlugins,
@@ -98,7 +97,8 @@ export default {
 			"plugin") as ContentType;
 		const query = interaction.options.getString("query") ?? undefined;
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
-		const forceDownload = interaction.options.getBoolean("skipcheck") ?? false;
+		const forceDownload =
+			interaction.options.getBoolean("skipcheck") ?? false;
 
 		const isModpack = contentType === "modpack";
 		const userPermission = await readPermission(
@@ -430,6 +430,14 @@ async function selectVersionToDownload({
 							(v) => v.id === existingRecord.versionId,
 						)?.version_number ?? existingRecord.versionId;
 					const newLabel = selectedVersion.version_number;
+					if (await server.isOnline.getData()) {
+						await versionInteraction.editReply({
+							content: `A different version (\`${existingLabel}\`) of this plugin is already installed, please close the server and run this command again to upgrade to \`${newLabel}\`.`,
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
 
 					const replaceMsg = await versionInteraction.followUp({
 						content: `Version \`${existingLabel}\` of this plugin is already installed. Replace it with \`${newLabel}\`?`,
