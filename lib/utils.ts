@@ -106,10 +106,7 @@ export class DomainConcurrencyLimiter {
 	}
 	private changeMaxConcurrent(host: string, change: number) {
 		const current = this.getMaxConcurrent(host);
-		const newValue =
-			change > 0
-				? Math.min(this.defaultMaxConcurrent, current + change) // recover toward default, never exceed
-				: Math.max(1, current + change); // back off on 429, never below 1
+		const newValue = Math.max(this.defaultMaxConcurrent, current + change)
 		this.maxConcurrent.set(host, newValue);
 	}
 
@@ -129,7 +126,7 @@ export class DomainConcurrencyLimiter {
 		// Use a definite-assignment assertion — res is always assigned before
 		// use because fetch() throwing causes the error to propagate before
 		// `return res` is ever reached.
-		let res!: Response;
+		let res: Response;
 		let retryDelay: number | null = null;
 		try {
 			res = await fetch(url, options);
