@@ -77,7 +77,7 @@ export class DomainConcurrencyLimiter {
 		{ active: number; pending: Array<() => void> }
 	>();
 
-	constructor(maxConcurrent = 5, maxRetry = 5) {
+	constructor(maxConcurrent = 5, maxRetry = 15) {
 		this.defaultMaxConcurrent = maxConcurrent;
 		this.defaultMaxRetry = maxRetry;
 	}
@@ -106,7 +106,7 @@ export class DomainConcurrencyLimiter {
 	}
 	private changeMaxConcurrent(host: string, change: number) {
 		const current = this.getMaxConcurrent(host);
-		const newValue = Math.max(this.defaultMaxConcurrent, current + change)
+		const newValue = Math.max(this.defaultMaxConcurrent, current + change);
 		this.maxConcurrent.set(host, newValue);
 	}
 
@@ -132,7 +132,7 @@ export class DomainConcurrencyLimiter {
 			res = await fetch(url, options);
 			if (!res.ok) {
 				this.changeMaxConcurrent(host, -1);
-				if (res.status === 429 && retry < 5) {
+				if (res.status === 429 && retry < this.defaultMaxRetry) {
 					console.log(
 						`Received 429 from ${host}, backing off (retry ${retry + 1})...`,
 					);
@@ -142,8 +142,8 @@ export class DomainConcurrencyLimiter {
 					// behind a slot that is still held by this call, causing
 					// a deadlock when all slots are occupied.
 					retryDelay =
-						Number(res.headers.get("Retry-After")) ||
-						1000 * 5 ** retry;
+						(Number(res.headers.get("Retry-After")) || 0) +
+						1000 * 2 ** retry;
 				}
 			} else {
 				this.changeMaxConcurrent(host, 1);
