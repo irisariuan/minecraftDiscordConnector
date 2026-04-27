@@ -1,4 +1,4 @@
-import type { Prisma } from "../generated/prisma/client";
+import { Prisma } from "../generated/prisma/client";
 import {
 	comparePermission,
 	PermissionFlags,

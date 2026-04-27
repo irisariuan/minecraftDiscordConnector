@@ -144,6 +144,8 @@ export interface SearchPluginProps {
 	offset?: number;
 	query?: string;
 	facets?: Partial<SearchPluginFacets>;
+	/** When true, skips the server_side:required/optional filter (needed for modpacks) */
+	skipServerSideFilter?: boolean;
 }
 
 export interface SearchPluginFacets {
@@ -159,6 +161,38 @@ export interface ListPluginVersionsProps {
 }
 
 export type DbPlugin = Awaited<ReturnType<typeof getPluginsByServerId>>[number];
+
+// ─── .mrpack types ────────────────────────────────────────────────────────────
+
+export type MrpackSideValue = "required" | "optional" | "unsupported";
+
+export interface MrpackFile {
+	/** Destination path relative to the Minecraft instance directory */
+	path: string;
+	hashes: {
+		sha1: string;
+		sha512: string;
+	};
+	/** If omitted, the file is required on both sides */
+	env?: {
+		client: MrpackSideValue;
+		server: MrpackSideValue;
+	};
+	/** HTTPS download URLs (first reachable one wins) */
+	downloads: string[];
+	fileSize: number;
+}
+
+export interface MrpackIndex {
+	formatVersion: number;
+	game: string;
+	versionId: string;
+	name: string;
+	summary?: string;
+	files: MrpackFile[];
+	/** e.g. { minecraft: "1.20.1", "fabric-loader": "0.14.21" } */
+	dependencies: Record<string, string>;
+}
 
 // ─── mcserver types ───────────────────────────────────────────────────────────
 

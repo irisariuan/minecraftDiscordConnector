@@ -1,5 +1,6 @@
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { type Entry, fromBuffer } from "yauzl";
 import { EmbedBuilder, bold, inlineCode, italic } from "discord.js";
 import { upsertNewPlugin, getPluginsByServerId } from "../../lib/db";
 import type { Server } from "../../lib/server";
@@ -17,6 +18,8 @@ import {
 	SideValue,
 	type ErrorResponse,
 	type ListPluginVersionsProps,
+	type MrpackFile,
+	type MrpackIndex,
 	type PluginGetQueryItem,
 	type PluginGetVersionItem,
 	type PluginListVersionItem,
@@ -390,7 +393,10 @@ export function buildCompatEmbed(
 	return embed;
 }
 
-function buildFacets(facets?: Partial<SearchPluginFacets>) {
+function buildFacets(
+	facets?: Partial<SearchPluginFacets>,
+	skipServerSideFilter = false,
+) {
 	const result: string[][] = [];
 	if (facets?.categories) {
 		result.push([...facets.categories.map((v) => `categories:${v}`)]);
@@ -402,10 +408,12 @@ function buildFacets(facets?: Partial<SearchPluginFacets>) {
 		result.push([...facets.project_type.map((v) => `project_type:${v}`)]);
 	}
 
-	result.push([
-		`server_side:${SideValue.Optional}`,
-		`server_side:${SideValue.Required}`,
-	]);
+	if (!skipServerSideFilter) {
+		result.push([
+			`server_side:${SideValue.Optional}`,
+			`server_side:${SideValue.Required}`,
+		]);
+	}
 	return result;
 }
 
@@ -413,11 +421,15 @@ export async function searchPlugins({
 	offset = 0,
 	query,
 	facets,
+	skipServerSideFilter = false,
 }: SearchPluginProps) {
 	const url = new URL(`${MODRINTH_API_BASE}/search`);
 	url.searchParams.set("limit", "100");
 	url.searchParams.set("offset", offset.toString());
-	url.searchParams.set("facets", JSON.stringify(buildFacets(facets)));
+	url.searchParams.set(
+		"facets",
+		JSON.stringify(buildFacets(facets, skipServerSideFilter)),
+	);
 
 	if (query) {
 		url.searchParams.set("query", query);
@@ -436,6 +448,44 @@ export async function getPlugin(slugOrId: string) {
 	if (!res?.ok) return null;
 	const data = (await res.json()) as PluginGetQueryItem;
 	return data;
+}
+
+/**
+ * Fetch multiple projects in a single Modrinth API call.
+ * Returns a map of projectId → project data for easy lookup.
+ * Any IDs that Modrinth can't resolve are silently omitted.
+ */
+export async function getProjects(
+	ids: string[],
+): Promise<Map<string, PluginGetQueryItem>> {
+	if (ids.length === 0) return new Map();
+	const url = new URL(`${MODRINTH_API_BASE}/projects`);
+	url.searchParams.set("ids", JSON.stringify(ids));
+	const res = await safeFetch(url);
+	if (!res?.ok) return new Map();
+	const data = (await res.json()) as PluginGetQueryItem[];
+	return new Map(data.map((p) => [p.id, p]));
+}
+
+/**
+ * Fetch multiple versions in a single Modrinth API call.
+ * Returns a map of versionId → version data for easy lookup.
+ * Synthetic IDs (e.g. "sha1:…" or "mrpack:…") are filtered out before the
+ * request is made and will simply be absent from the returned map.
+ */
+export async function getVersionsBulk(
+	ids: string[],
+): Promise<Map<string, PluginGetVersionItem>> {
+	const realIds = ids.filter(
+		(id) => !id.startsWith("sha1:") && !id.startsWith("mrpack:"),
+	);
+	if (realIds.length === 0) return new Map();
+	const url = new URL(`${MODRINTH_API_BASE}/versions`);
+	url.searchParams.set("ids", JSON.stringify(realIds));
+	const res = await safeFetch(url);
+	if (!res?.ok) return new Map();
+	const data = (await res.json()) as PluginGetVersionItem[];
+	return new Map(data.map((v) => [v.id, v]));
 }
 
 export async function getPluginVersionDetails(id: string) {
@@ -520,6 +570,288 @@ export async function downloadPluginFile(
 		},
 	});
 	return { filename: metadata.files[0].filename, newDownload: true };
+}
+
+// ─── Modpack helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Reads `modrinth.index.json` from a .mrpack buffer.
+ */
+async function parseMrpackIndex(buffer: Buffer): Promise<MrpackIndex | null> {
+	return new Promise((resolve) => {
+		fromBuffer(buffer, { lazyEntries: true }, (err, zipFile) => {
+			if (err) return resolve(null);
+			zipFile.readEntry();
+			zipFile.on("entry", (entry: Entry) => {
+				if (entry.fileName === "modrinth.index.json") {
+					zipFile.openReadStream(entry, (err, readStream) => {
+						if (err) return resolve(null);
+						const chunks: Buffer[] = [];
+						readStream.on("data", (chunk: Buffer) =>
+							chunks.push(chunk),
+						);
+						readStream.on("end", () => {
+							try {
+								resolve(
+									JSON.parse(
+										Buffer.concat(chunks).toString("utf-8"),
+									) as MrpackIndex,
+								);
+							} catch {
+								resolve(null);
+							}
+							zipFile.close();
+						});
+						readStream.on("error", () => resolve(null));
+					});
+				} else {
+					zipFile.readEntry();
+				}
+			});
+			zipFile.on("end", () => resolve(null));
+		});
+	});
+}
+
+/**
+ * Copies `overrides/` and `server-overrides/` from a .mrpack buffer into
+ * `serverDir`, applying them in order (server-overrides win over overrides).
+ */
+async function extractMrpackOverrides(
+	buffer: Buffer,
+	serverDir: string,
+	overrideDirs: string[],
+): Promise<void> {
+	// Process each override directory in sequence to honour layer precedence.
+	for (const prefix of overrideDirs) {
+		await new Promise<void>((resolve) => {
+			fromBuffer(buffer, { lazyEntries: true }, (err, zipFile) => {
+				if (err) return resolve();
+				zipFile.readEntry();
+				zipFile.on("entry", async (entry: Entry) => {
+					const fullPrefix = `${prefix}/`;
+					if (
+						!entry.fileName.startsWith(fullPrefix) ||
+						entry.fileName.length <= fullPrefix.length
+					) {
+						return zipFile.readEntry();
+					}
+
+					const relativePath = entry.fileName.slice(
+						fullPrefix.length,
+					);
+
+					// Skip directory entries and unsafe paths
+					if (
+						relativePath.endsWith("/") ||
+						relativePath.includes("..") ||
+						/^[A-Za-z]:[\\/]/.test(relativePath) ||
+						relativePath.startsWith("/") ||
+						relativePath.startsWith("\\")
+					) {
+						return zipFile.readEntry();
+					}
+
+					const destPath = safeJoin(serverDir, relativePath);
+					const parentDir = relativePath
+						.split("/")
+						.slice(0, -1)
+						.join("/");
+					if (parentDir) {
+						await mkdir(safeJoin(serverDir, parentDir), {
+							recursive: true,
+						}).catch(() => {});
+					}
+
+					zipFile.openReadStream(entry, (err, readStream) => {
+						if (err) return zipFile.readEntry();
+						const stream = createWriteStream(destPath);
+						readStream.on("end", () => zipFile.readEntry());
+						readStream.on("error", () => zipFile.readEntry());
+						readStream.pipe(stream);
+					});
+				});
+				zipFile.on("end", () => resolve());
+				zipFile.on("error", () => resolve());
+			});
+		});
+	}
+}
+
+/**
+ * Extracts Modrinth { projectId, versionId } from a Modrinth CDN URL.
+ * CDN pattern: https://cdn.modrinth.com/data/{projectId}/versions/{versionId}/...
+ * Falls back to synthetic IDs derived from the file's declared path + SHA1 hash
+ * so that even GitHub-hosted or other non-Modrinth files get a stable DB record.
+ */
+function parseMrpackFileIds(file: MrpackFile): {
+	projectId: string;
+	versionId: string;
+} {
+	for (const url of file.downloads) {
+		const match = url.match(
+			/cdn\.modrinth\.com\/data\/([^/]+)\/versions\/([^/]+)\//,
+		);
+		if (match?.[1] && match[2])
+			return { projectId: match[1], versionId: match[2] };
+	}
+	// Fallback: use path as a namespaced project key and SHA1 as version key.
+	// The "mrpack:" prefix prevents collisions with real Modrinth project IDs.
+	return {
+		projectId: `mrpack:${file.path}`,
+		versionId: `sha1:${file.hashes.sha1}`,
+	};
+}
+
+export interface DownloadModpackResult {
+	success: boolean;
+	name: string | null;
+	filesDownloaded: number;
+	error?: string;
+}
+
+/**
+ * Downloads and installs a Modrinth modpack version into a server directory.
+ *
+ * Steps:
+ *  1. Fetch the .mrpack file for the given version ID.
+ *  2. Parse `modrinth.index.json` to get the file manifest.
+ *  3. Download every server-side file to its declared path inside `serverDir`.
+ *  4. Apply `overrides/` then `server-overrides/` on top.
+ */
+export async function downloadModpackFile(
+	server: Server,
+	versionId: string,
+): Promise<DownloadModpackResult> {
+	const metadata = await getPluginVersionDetails(versionId);
+	if (!metadata?.files[0]) {
+		return {
+			success: false,
+			filesDownloaded: 0,
+			name: null,
+			error: "Failed to retrieve version metadata.",
+		};
+	}
+
+	// Prefer the .mrpack primary file, fall back to first file
+	const mrpackFileInfo =
+		metadata.files.find((f) => f.filename.endsWith(".mrpack")) ??
+		metadata.files[0];
+
+	const res = await safeFetch(mrpackFileInfo.url);
+	if (!res?.ok || !res.body) {
+		return {
+			success: false,
+			filesDownloaded: 0,
+			name: null,
+			error: "Failed to download .mrpack archive.",
+		};
+	}
+
+	// Buffer the whole archive (mrpack files are typically small)
+	const chunks: Buffer[] = [];
+	const promises: Promise<unknown>[] = [];
+	for await (const chunk of res.body) {
+		chunks.push(Buffer.from(chunk));
+	}
+	const buffer = Buffer.concat(chunks);
+
+	const index = await parseMrpackIndex(buffer);
+	if (!index) {
+		return {
+			success: false,
+			filesDownloaded: 0,
+			name: null,
+			error: "Failed to parse modrinth.index.json inside the .mrpack.",
+		};
+	}
+
+	let filesDownloaded = 0;
+
+	for (const file of index.files) {
+		// Skip client-only files
+		if (file.env?.server === "unsupported") continue;
+
+		// Reject path traversal attempts
+		if (
+			file.path.includes("..") ||
+			/^[A-Za-z]:[\\/]/.test(file.path) ||
+			file.path.startsWith("/") ||
+			file.path.startsWith("\\")
+		) {
+			console.warn(`[modpack] Skipping unsafe path: ${file.path}`);
+			continue;
+		}
+
+		const destPath = safeJoin(server.config.serverDir, file.path);
+		const parentDir = file.path.split("/").slice(0, -1).join("/");
+		if (parentDir) {
+			await mkdir(safeJoin(server.config.serverDir, parentDir), {
+				recursive: true,
+			}).catch(() => {});
+		}
+
+		let downloaded = false;
+		for (const url of file.downloads) {
+			const fileRes = await safeFetch(url);
+			if (!fileRes?.ok || !fileRes.body) continue;
+
+			const stream = createWriteStream(destPath);
+			for await (const chunk of fileRes.body) {
+				stream.write(chunk);
+			}
+			await new Promise<void>((resolve, reject) => {
+				stream.end();
+				stream.on("finish", resolve);
+				stream.on("error", reject);
+			}).catch(() => {});
+
+			filesDownloaded++;
+			downloaded = true;
+			break;
+		}
+
+		if (!downloaded) {
+			console.warn(`[modpack] Failed to download file: ${file.path}`);
+			continue;
+		}
+
+		// Persist a DB record so the file appears in getActivePlugins and
+		// can be managed (e.g. removed) via the standard plugin commands.
+		const { projectId, versionId: fileVersionId } =
+			parseMrpackFileIds(file);
+		promises.push(
+			upsertNewPlugin({
+				create: {
+					projectId,
+					versionId: fileVersionId,
+					filePath: destPath,
+					serverId: server.id,
+				},
+				update: { filePath: destPath, versionId: fileVersionId },
+				where: {
+					projectId_versionId_serverId: {
+						projectId,
+						versionId: fileVersionId,
+						serverId: server.id,
+					},
+				},
+			}).catch((err) => {
+				console.warn(
+					`[modpack] Failed to upsert DB record for ${file.path}: ${err}`,
+				);
+			}),
+		);
+	}
+
+	// Apply overrides in order: generic first, server-specific second
+	await extractMrpackOverrides(buffer, server.config.serverDir, [
+		"overrides",
+		"server-overrides",
+	]);
+	await Promise.all(promises);
+
+	return { success: true, filesDownloaded, name: index.name };
 }
 
 /**
