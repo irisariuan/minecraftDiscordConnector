@@ -1,26 +1,14 @@
 import { existsSync } from "node:fs";
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	ComponentType,
-	MessageFlags,
-	SlashCommandBuilder,
-	time,
-} from "discord.js";
+import { SlashCommandBuilder, time } from "discord.js";
 import type { CommandFile } from "../../../lib/commandFile";
 import { deletePluginRecord, getPluginsByServerId } from "../../../lib/db";
 import { sendPaginationMessage } from "../../../lib/pagination";
 import { getActivePlugins } from "../../../lib/serverInstance/plugin";
-import {
-	downloadPluginFile,
-	getProjects,
-	getVersionsBulk,
-} from "../lib";
+import { trimTextWithSuffix } from "../../../lib/utils";
+import { sendSelectableActionMessage } from "../selectable";
+import { downloadPluginFile, getProjects, getVersionsBulk } from "../lib";
 
-const MISSING_DELETE = "missing_delete";
-const MISSING_REDOWNLOAD = "missing_redownload";
-const MISSING_DISMISS = "missing_dismiss";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EnrichedPlugin {
 	projectId: string;
@@ -34,6 +22,18 @@ interface EnrichedPlugin {
 	onDisk: boolean;
 }
 
+type MissingAction = "redownload" | "delete" | "skip";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function isRedownloadable(p: EnrichedPlugin): boolean {
+	return (
+		!p.versionId.startsWith("sha1:") && !p.versionId.startsWith("mrpack:")
+	);
+}
+
+// ─── Command ──────────────────────────────────────────────────────────────────
+
 export default {
 	command: new SlashCommandBuilder()
 		.setName("listplugins")
@@ -45,7 +45,7 @@ export default {
 	ephemeral: true,
 
 	async execute({ interaction, server }) {
-		// ── Build enriched list ───────────────────────────────────────────
+		// ── Phase 1: build enriched list ──────────────────────────────────
 		const [dbPlugins, diskPlugins] = await Promise.all([
 			getPluginsByServerId(server.id),
 			getActivePlugins(server.config.pluginDir).catch(() => null),
@@ -81,7 +81,7 @@ export default {
 			};
 		});
 
-		// ── Paginated embed ───────────────────────────────────────────────
+		// ── Phase 2: paginated embed ──────────────────────────────────────
 		await sendPaginationMessage<EnrichedPlugin>({
 			interaction,
 			getResult: () => enriched,
@@ -117,129 +117,130 @@ export default {
 			},
 		});
 
-		// ── Missing-plugin recovery prompt ────────────────────────────────
+		// ── Phase 3: missing-plugin recovery ─────────────────────────────
 		const missing = enriched.filter((p) => !p.onDisk);
 		if (missing.length === 0) return;
 
-		// Only real Modrinth version IDs can be re-downloaded; synthetic ones
-		// written by downloadModpackFile use "sha1:" / "mrpack:" prefixes.
-		const redownloadable = missing.filter(
-			(p) =>
-				!p.versionId.startsWith("sha1:") &&
-				!p.versionId.startsWith("mrpack:"),
-		);
-		const notRedownloadable = missing.length - redownloadable.length;
+		await sendSelectableActionMessage<EnrichedPlugin, MissingAction>({
+			interaction,
+			items: missing,
+			getItemId: (p) => p.versionId,
 
-		// Trim the list to stay inside Discord's 2000-char limit.
-		const MAX_LIST = 10;
-		const listLines = missing
-			.slice(0, MAX_LIST)
-			.map((p) => `• \`${p.filename}\` (${p.projectName})`);
-		if (missing.length > MAX_LIST)
-			listLines.push(`…and ${missing.length - MAX_LIST} more`);
+			actions: {
+				redownload: {
+					icon: "🔄",
+					label: "Re-download",
+					isActive: true,
+				},
+				delete: { icon: "🗑️", label: "Delete from DB", isActive: true },
+				skip: { icon: "⏭️", label: "Skip", isActive: false },
+			},
 
-		const noteLines: string[] = [];
-		if (notRedownloadable > 0)
-			noteLines.push(
-				`ℹ️ ${notRedownloadable} file(s) are not from Modrinth and cannot be re-downloaded — they will be skipped.`,
-			);
+			initialAction: (p) =>
+				isRedownloadable(p) ? "redownload" : "delete",
 
-		const prompt = await interaction.followUp({
-			content: [
-				`⚠️ **${missing.length} plugin(s) are missing from disk:**`,
-				listLines.join("\n"),
-				...noteLines,
-				"\nWhat would you like to do?",
-			].join("\n"),
-			components: [
-				new ActionRowBuilder<ButtonBuilder>().addComponents(
-					new ButtonBuilder()
-						.setCustomId(MISSING_REDOWNLOAD)
-						.setLabel(`Re-download (${redownloadable.length})`)
-						.setStyle(ButtonStyle.Primary)
-						.setEmoji("🔄")
-						.setDisabled(redownloadable.length === 0),
-					new ButtonBuilder()
-						.setCustomId(MISSING_DELETE)
-						.setLabel(`Delete from DB (${missing.length})`)
-						.setStyle(ButtonStyle.Danger)
-						.setEmoji("🗑️"),
-					new ButtonBuilder()
-						.setCustomId(MISSING_DISMISS)
-						.setLabel("Dismiss")
-						.setStyle(ButtonStyle.Secondary),
-				),
-			],
-			flags: MessageFlags.Ephemeral,
-		});
-
-		const btn = await prompt
-			.awaitMessageComponent({
-				componentType: ComponentType.Button,
-				filter: (i) => i.user.id === interaction.user.id,
-				time: 1000 * 60 * 5,
-			})
-			.catch(() => null);
-
-		// Timed-out or dismissed — remove the buttons and exit cleanly.
-		if (!btn || btn.customId === MISSING_DISMISS) {
-			await prompt.edit({ components: [] });
-			return;
-		}
-
-		await btn.deferUpdate();
-
-		// ── Delete from DB ────────────────────────────────────────────────
-		if (btn.customId === MISSING_DELETE) {
-			await Promise.allSettled(
-				missing.map((p) =>
-					deletePluginRecord(p.projectId, p.versionId, server.id),
-				),
-			);
-			await prompt.edit({
-				content: `🗑️ Removed **${missing.length}** missing plugin record(s) from the database.`,
-				components: [],
-			});
-			return;
-		}
-
-		// ── Re-download ───────────────────────────────────────────────────
-		if (btn.customId === MISSING_REDOWNLOAD) {
-			await prompt.edit({
-				content: `🔄 Re-downloading **${redownloadable.length}** plugin(s)…`,
-				components: [],
-			});
-
-			let succeeded = 0;
-			const failedNames: string[] = [];
-
-			for (const p of redownloadable) {
-				const { newDownload } = await downloadPluginFile(
-					server,
-					p.versionId,
-					true, // force-overwrite in case a zero-byte file is present
-				);
-				if (newDownload) {
-					succeeded++;
-				} else {
-					failedNames.push(p.filename);
+			cycleAction: (p, current) => {
+				if (isRedownloadable(p)) {
+					const cycle: Record<MissingAction, MissingAction> = {
+						redownload: "skip",
+						skip: "delete",
+						delete: "redownload",
+					};
+					return cycle[current];
 				}
-			}
+				// Non-re-downloadable items only toggle delete ↔ skip
+				return current === "delete" ? "skip" : "delete";
+			},
 
-			const resultLines = [
-				`✅ **${succeeded}** plugin(s) re-downloaded successfully.`,
-			];
-			if (failedNames.length > 0)
-				resultLines.push(
-					`❌ **${failedNames.length}** failed: ${failedNames.map((n) => `\`${n}\``).join(", ")}`,
-				);
-			if (notRedownloadable > 0)
-				resultLines.push(
-					`⏭️ **${notRedownloadable}** skipped (not from Modrinth).`,
-				);
+			selectionTitle: `⚠️ ${missing.length} Plugin(s) Missing from Disk`,
 
-			await prompt.edit({ content: resultLines.join("\n") });
-		}
+			selectionDescription: (counts) =>
+				[
+					"Use the select menu to cycle each plugin's action, then click **Apply**.",
+					"",
+					`🔄 Re-download: **${counts.redownload}** · 🗑️ Delete from DB: **${counts.delete}** · ⏭️ Skip: **${counts.skip}**`,
+				].join("\n"),
+
+			formatField: (p, action) => {
+				const icons: Record<MissingAction, string> = {
+					redownload: "🔄",
+					delete: "🗑️",
+					skip: "⏭️",
+				};
+				const labels: Record<MissingAction, string> = {
+					redownload: "Re-download",
+					delete: "Delete from DB",
+					skip: "Skip",
+				};
+				return {
+					name: `${icons[action]} ${p.projectName}`,
+					value: [
+						`Version: \`${p.versionNumber}\``,
+						`File: \`${p.filename}\``,
+						`Action: **${labels[action]}**`,
+					].join("\n"),
+				};
+			},
+
+			formatOption: (p, action) => {
+				const icons: Record<MissingAction, string> = {
+					redownload: "🔄",
+					delete: "🗑️",
+					skip: "⏭️",
+				};
+				const labels: Record<MissingAction, string> = {
+					redownload: "Re-download",
+					delete: "Delete from DB",
+					skip: "Skip",
+				};
+				return {
+					label: `${icons[action]} ${labels[action]}: ${trimTextWithSuffix(p.projectName, 75)}`,
+					description: trimTextWithSuffix(
+						`${p.versionNumber} · ${p.filename}`,
+						100,
+					),
+				};
+			},
+
+			applyLabel: (counts) => {
+				const parts: string[] = [];
+				if (counts.redownload > 0)
+					parts.push(`${counts.redownload} 🔄`);
+				if (counts.delete > 0) parts.push(`${counts.delete} 🗑️`);
+				return parts.length > 0
+					? `Apply (${parts.join(", ")})`
+					: "Nothing to Apply";
+			},
+
+			process: async (p, action) => {
+				if (action === "redownload") {
+					const { newDownload } = await downloadPluginFile(
+						server,
+						p.versionId,
+						true, // force-overwrite zero-byte remnants
+					);
+					return newDownload;
+				}
+				// action === "delete"
+				return deletePluginRecord(p.projectId, p.versionId, server.id)
+					.then(() => true)
+					.catch(() => false);
+			},
+
+			formatProgressValue: (p, action) =>
+				action === "redownload"
+					? `🔄 Re-downloading \`${p.versionNumber}\``
+					: `🗑️ Deleting \`${p.versionNumber}\``,
+
+			formatResultEntry: (p) =>
+				`**${p.projectName}** \`${p.versionNumber}\``,
+
+			// Only mention a restart if at least one file was actually re-downloaded
+			resultFooter: (succeeded) =>
+				(succeeded.get("redownload")?.length ?? 0) > 0
+					? "🔄 Restart the server for changes to take effect."
+					: null,
+		});
 	},
 
 	features: {

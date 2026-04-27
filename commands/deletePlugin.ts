@@ -55,7 +55,7 @@ export default {
 		});
 		if (!payment) {
 			return await interaction.editReply({
-				content: `Failed to delete a plugin. Deleting a plugin costs ${server.settings.deletePluginFee} credits.`,
+				content: `Failed to delete plugin`,
 			});
 		}
 
