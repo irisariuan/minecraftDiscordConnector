@@ -23,7 +23,7 @@ import { safeJoin } from "../../../../lib/utils";
 import { downloadAndSave } from "../../../../lib/utils/web";
 import {
 	checkPluginCompatibility,
-	buildCompatEmbed,
+	buildCompatProjectEmbed,
 	getVanillaServerUrl,
 	findJarsByPrefix,
 	getLatestStableFabricLoader,
@@ -172,7 +172,7 @@ export async function upgradeHandler(
 
 	const compatEmbed =
 		compatResults.length > 0
-			? buildCompatEmbed(compatResults, serverTag, newVersion)
+			? buildCompatProjectEmbed(compatResults, serverTag, newVersion)
 			: new EmbedBuilder()
 					.setTitle(`⬆️ Upgrade ${serverTag} → ${newVersion}`)
 					.setDescription(

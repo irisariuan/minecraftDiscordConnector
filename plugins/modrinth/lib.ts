@@ -11,8 +11,8 @@ import {
 	safeFetch,
 	safeJoin,
 	trimTextWithSuffix,
+	separate,
 } from "../../lib/utils";
-import { downloadAndSave } from "../../lib/utils/web";
 import { createPathForPluginFile } from "../../lib/serverInstance/plugin";
 import {
 	SideValue,
@@ -26,7 +26,7 @@ import {
 	type PluginSearchQueryResponse,
 	type SearchPluginFacets,
 	type SearchPluginProps,
-	type CompatResult,
+	type CompatProject,
 	type FabricVersion,
 	type ForgePromotions,
 	type MojangManifest,
@@ -174,12 +174,12 @@ export async function checkPluginCompatibility(
 	serverId: number,
 	newMcVersion: string,
 	loaderType: string,
-): Promise<CompatResult[]> {
+): Promise<CompatProject[]> {
 	const dbPlugins = await getPluginsByServerId(serverId);
 	if (dbPlugins.length === 0) return [];
 
 	const results = await Promise.all(
-		dbPlugins.map(async (p): Promise<CompatResult> => {
+		dbPlugins.map(async (p): Promise<CompatProject> => {
 			const projectInfo = await getPlugin(p.projectId).catch(() => null);
 			const title = projectInfo?.title ?? p.projectId;
 
@@ -338,8 +338,8 @@ export function buildOutdatedPluginsEmbed(
 	return embed;
 }
 
-export function buildCompatEmbed(
-	results: CompatResult[],
+export function buildCompatProjectEmbed(
+	results: CompatProject[],
 	serverTag: string,
 	newVersion: string,
 ): EmbedBuilder {
@@ -347,7 +347,7 @@ export function buildCompatEmbed(
 	const incompatible = results.filter((r) => r.compatible === false);
 	const unknown = results.filter((r) => r.compatible === null);
 
-	const formatList = (items: CompatResult[]) =>
+	const formatList = (items: CompatProject[]) =>
 		items.length === 0
 			? italic("None")
 			: items
@@ -458,13 +458,21 @@ export async function getPlugin(slugOrId: string) {
 export async function getProjects(
 	ids: string[],
 ): Promise<Map<string, PluginGetQueryItem>> {
-	if (ids.length === 0) return new Map();
+	const m = new Map<string, PluginGetQueryItem>();
+	if (ids.length === 0) return m;
+	const idss = separate(ids, 25);
 	const url = new URL(`${MODRINTH_API_BASE}/projects`);
-	url.searchParams.set("ids", JSON.stringify(ids));
-	const res = await safeFetch(url);
-	if (!res?.ok) return new Map();
-	const data = (await res.json()) as PluginGetQueryItem[];
-	return new Map(data.map((p) => [p.id, p]));
+
+	for (const gids of idss) {
+		url.searchParams.set("ids", JSON.stringify(gids));
+		const res = await safeFetch(url);
+		if (!res?.ok) continue;
+		const data = (await res.json()) as PluginGetQueryItem[];
+		for (const item of data) {
+			m.set(item.id, item);
+		}
+	}
+	return m;
 }
 
 /**
@@ -480,12 +488,19 @@ export async function getVersionsBulk(
 		(id) => !id.startsWith("sha1:") && !id.startsWith("mrpack:"),
 	);
 	if (realIds.length === 0) return new Map();
+	const m = new Map<string, PluginGetVersionItem>();
+	const realIdss = separate(realIds, 25);
 	const url = new URL(`${MODRINTH_API_BASE}/versions`);
-	url.searchParams.set("ids", JSON.stringify(realIds));
-	const res = await safeFetch(url);
-	if (!res?.ok) return new Map();
-	const data = (await res.json()) as PluginGetVersionItem[];
-	return new Map(data.map((v) => [v.id, v]));
+	for (const gids of realIdss) {
+		url.searchParams.set("ids", JSON.stringify(gids));
+		const res = await safeFetch(url);
+		if (!res?.ok) continue;
+		const data = (await res.json()) as PluginGetVersionItem[];
+		for (const item of data) {
+			m.set(item.id, item);
+		}
+	}
+	return m;
 }
 
 export async function getPluginVersionDetails(id: string) {
@@ -704,10 +719,10 @@ export async function resolveProjectDependencies(
 
 export async function downloadPluginFile(
 	server: Server,
-	id: string,
+	versionId: string,
 	force = false,
 ): Promise<{ filename: string | null; newDownload: boolean }> {
-	const metadata = await getPluginVersionDetails(id);
+	const metadata = await getPluginVersionDetails(versionId);
 	if (!metadata || !metadata.files[0]) {
 		return { filename: null, newDownload: false };
 	}
@@ -735,13 +750,13 @@ export async function downloadPluginFile(
 		create: {
 			projectId: metadata.project_id,
 			filePath,
-			versionId: id,
+			versionId: versionId,
 			serverId: server.id,
 		},
-		update: { filePath, versionId: id },
+		update: { filePath, versionId: versionId },
 		where: {
 			projectId_versionId_serverId: {
-				versionId: id,
+				versionId: versionId,
 				serverId: server.id,
 				projectId: metadata.project_id,
 			},

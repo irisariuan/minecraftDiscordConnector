@@ -44,18 +44,24 @@ export default {
 		// ── Phase 1: gather data ──────────────────────────────────────────────
 		const checkStart = Date.now();
 		await interaction.editReply({
-			content: "🔍 Checking for plugin updates — please wait… (0s)",
+			content:
+				"🔍 Checking for plugin updates — please wait… (elapsed 0s)",
 		});
+
+		const plugins = await getPluginsByServerId(server.id);
+		let completed = 0;
+		// Keep only the most-recently updated record per projectId
+		const latestByProject = new Map<string, DbPlugin>();
+
 		const checkingTicker = setInterval(() => {
 			const elapsed = Math.floor((Date.now() - checkStart) / 1000);
 			interaction
 				.editReply({
-					content: `🔍 Checking for plugin updates — please wait… (${elapsed}s)`,
+					content: `🔍 Checking for plugin updates — please wait… (elapsed ${elapsed}s, ${completed}/${latestByProject.size} plugins checked)`,
 				})
 				.catch(() => {});
 		}, 1000);
 
-		const plugins = await getPluginsByServerId(server.id);
 		if (plugins.length === 0) {
 			clearInterval(checkingTicker);
 			return await interaction.editReply({
@@ -64,8 +70,6 @@ export default {
 			});
 		}
 
-		// Keep only the most-recently updated record per projectId
-		const latestByProject = new Map<string, DbPlugin>();
 		for (const plugin of plugins) {
 			const existing = latestByProject.get(plugin.projectId);
 			if (!existing || plugin.updatedAt > existing.updatedAt) {
@@ -73,49 +77,64 @@ export default {
 			}
 		}
 
-		const richUpdates: RichUpdateEntry[] = [];
-		const failedChecks: string[] = [];
+		const checkResults = await Promise.all(
+			[...latestByProject.entries()].map(async ([projectId, plugin]) => {
+				try {
+					const [versions, projectDetails] = await Promise.all([
+						listPluginVersions(projectId, {
+							loaders: [server.config.loaderType],
+							game_versions: [server.config.minecraftVersion],
+						}),
+						getPlugin(projectId),
+					]);
 
-		for (const [projectId, plugin] of latestByProject.entries()) {
-			const [versions, currentVersionDetails, projectDetails] =
-				await Promise.all([
-					listPluginVersions(projectId, {
-						loaders: [server.config.loaderType],
-						game_versions: [server.config.minecraftVersion],
-					}),
-					getPluginVersionDetails(plugin.versionId),
-					getPlugin(projectId),
-				]);
+					const latest = versions?.[0];
+					if (!versions || versions.length === 0 || !latest) {
+						return { kind: "failed", projectId } as const;
+					}
 
-			if (!versions || versions.length === 0) {
-				failedChecks.push(projectId);
-				continue;
-			}
+					// Already up-to-date — skip silently
+					if (latest.id === plugin.versionId) {
+						return { kind: "current" } as const;
+					}
 
-			const latest = versions[0];
-			if (!latest) {
-				failedChecks.push(projectId);
-				continue;
-			}
+					const currentVersionDetails =
+						versions.find((v) => v.id === plugin.versionId) ??
+						(await getPluginVersionDetails(plugin.versionId));
 
-			// Already up-to-date — skip silently
-			if (latest.id === plugin.versionId) continue;
+					return {
+						kind: "update",
+						entry: {
+							plugin,
+							projectTitle: projectDetails?.title ?? projectId,
+							currentVersionNumber:
+								currentVersionDetails?.version_number ??
+								plugin.versionId,
+							currentVersionDate:
+								currentVersionDetails?.date_published
+									? new Date(
+											currentVersionDetails.date_published,
+										).getTime()
+									: null,
+							newVersionId: latest.id,
+							newVersionNumber: latest.version_number,
+							newVersionDate: latest.date_published,
+							newFilename: latest.files[0]?.filename ?? "unknown",
+							newFileSize: latest.files[0]?.size ?? null,
+						} satisfies RichUpdateEntry,
+					} as const;
+				} finally {
+					completed++;
+				}
+			}),
+		);
 
-			richUpdates.push({
-				plugin,
-				projectTitle: projectDetails?.title ?? projectId,
-				currentVersionNumber:
-					currentVersionDetails?.version_number ?? plugin.versionId,
-				currentVersionDate: currentVersionDetails?.date_published
-					? new Date(currentVersionDetails.date_published).getTime()
-					: null,
-				newVersionId: latest.id,
-				newVersionNumber: latest.version_number,
-				newVersionDate: latest.date_published,
-				newFilename: latest.files[0]?.filename ?? "unknown",
-				newFileSize: latest.files[0]?.size ?? null,
-			});
-		}
+		const richUpdates = checkResults.flatMap((r) =>
+			r.kind === "update" ? [r.entry] : [],
+		);
+		const failedChecks = checkResults.flatMap((r) =>
+			r.kind === "failed" ? [r.projectId] : [],
+		);
 
 		clearInterval(checkingTicker);
 		const project = await getProjects(failedChecks);
@@ -153,7 +172,7 @@ export default {
 			selectionTitle: "🔄 Plugin Updates",
 			selectionDescription: (counts) => {
 				const lines: string[] = [
-					`**${counts.update}** update${counts.update !== 1 ? "s" : ""} queued · **${counts.skip}** skipped`,
+					`**${counts.update}** update${counts.update !== 1 ? "s" : ""} queued | **${counts.skip}** skipped | ${latestByProject.size} total checked`,
 					"Select plugins to toggle their action, then click **Apply** when ready.",
 				];
 				if (failedChecks.length > 0) {

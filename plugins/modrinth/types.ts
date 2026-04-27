@@ -91,16 +91,6 @@ export interface PluginVersionFileItem {
 	file_type: string;
 }
 
-/**
- * @deprecated The extra fields (`game_versions`, `dependencies`, `loaders`)
- * were incorrectly modelled here — per the Modrinth API those fields live on
- * the *version* object, not on individual file entries.  Use
- * `PluginGetVersionItem` fields directly instead.
- *
- * Kept as a type alias for backwards compatibility.
- */
-export type PluginGetVersionFileItem = PluginVersionFileItem;
-
 export interface PluginGetQueryItem extends PluginAPIResponseCommonItem {
 	body: string;
 	status: ProjectStatus;
@@ -237,7 +227,7 @@ export interface ForgePromotions {
 	promos: Record<string, string>;
 }
 
-export interface CompatResult {
+export interface CompatProject {
 	projectId: string;
 	title: string;
 	currentVersion: string;

@@ -52,6 +52,114 @@ export function getRandomOtp(): string {
 		.padStart(6, "0");
 }
 
+export function separate<T>(arr: T[], m: number): T[][] {
+	if (arr.length <= m) return [arr];
+	const final: T[][] = [];
+	let size = 0;
+	while (size < arr.length) {
+		const chunk = arr.slice(size, size + m);
+		final.push(chunk);
+		size += chunk.length;
+	}
+	return final;
+}
+
+/**
+ * Limits the number of concurrent fetch requests to the same hostname.
+ * Requests that exceed the cap are queued and released as active ones finish.
+ */
+export class DomainConcurrencyLimiter {
+	private readonly defaultMaxConcurrent: number;
+	private readonly maxConcurrent: Map<string, number> = new Map();
+	private readonly queues = new Map<
+		string,
+		{ active: number; pending: Array<() => void> }
+	>();
+
+	constructor(maxConcurrent = 5) {
+		this.defaultMaxConcurrent = maxConcurrent;
+	}
+
+	private hostname(url: string | URL): string {
+		try {
+			return new URL(url).hostname;
+		} catch {
+			return String(url);
+		}
+	}
+
+	private slot(host: string) {
+		let q = this.queues.get(host);
+		if (!q) {
+			q = { active: 0, pending: [] };
+			this.queues.set(host, q);
+		}
+		return q;
+	}
+	private getMaxConcurrent(host: string): number {
+		const r = this.maxConcurrent.get(host);
+		if (r !== undefined) return r;
+		this.maxConcurrent.set(host, this.defaultMaxConcurrent);
+		return this.defaultMaxConcurrent;
+	}
+	private changeMaxConcurrent(host: string, change: number) {
+		const current = this.getMaxConcurrent(host);
+		const newValue = Math.max(this.defaultMaxConcurrent, current + change);
+		this.maxConcurrent.set(host, newValue);
+	}
+
+	private async _fetch(
+		url: string | URL,
+		options?: RequestInit,
+		retry = 0,
+	): Promise<Response> {
+		const host = this.hostname(url);
+		const q = this.slot(host);
+
+		if (q.active >= this.getMaxConcurrent(host)) {
+			await new Promise<void>((resolve) => q.pending.push(resolve));
+		}
+
+		q.active++;
+		try {
+			const res = await fetch(url, options);
+			if (!res.ok) {
+				this.changeMaxConcurrent(host, -1);
+				if (res.status === 429 && retry < 3) {
+					// Too Many Requests - wait and retry
+					const retryAfter =
+						Number(res.headers.get("Retry-After")) ||
+						1000 * 2 ** retry;
+					await new Promise((r) => setTimeout(r, retryAfter));
+					return await this._fetch(url, options, retry + 1);
+				}
+			} else {
+				this.changeMaxConcurrent(host, 1);
+			}
+			return res;
+		} finally {
+			q.active--;
+			q.pending.shift()?.();
+		}
+	}
+
+	async fetch(url: string | URL, options?: RequestInit): Promise<Response> {
+		return this._fetch(url, options);
+	}
+
+	/** Snapshot of per-domain concurrency state, useful for debugging. */
+	stats(): Record<string, { active: number; queued: number }> {
+		const out: Record<string, { active: number; queued: number }> = {};
+		for (const [host, q] of this.queues) {
+			out[host] = { active: q.active, queued: q.pending.length };
+		}
+		return out;
+	}
+}
+
+/** Global limiter — max 5 concurrent requests per domain. */
+export const fetchLimiter = new DomainConcurrencyLimiter(5);
+
 export async function safeFetch(
 	url: string | URL,
 	options?: RequestInit,
@@ -59,28 +167,24 @@ export async function safeFetch(
 	timeout: null | number = null,
 	cache = false,
 ): Promise<Response | null> {
+	let cancel: (() => void) | undefined;
+	const opts: RequestInit = {
+		...options,
+		...(cache ? { cache: "force-cache" } : {}),
+	};
+
 	if (timeout) {
-		const { signal, cancel } = newTimeoutSignal(timeout);
-		const opts: RequestInit = {
-			...options,
-			signal,
-			cache: cache ? "force-cache" : "default",
-		};
-		try {
-			try {
-				return await fetch(url, opts);
-			} finally {
-				cancel();
-				return null;
-			}
-		} catch (err) {
-			if (logError) console.error(`Fetch error (${url}): ${err}`);
-			return null;
-		}
+		const tc = newTimeoutSignal(timeout);
+		opts.signal = tc.signal;
+		cancel = tc.cancel;
 	}
+
 	try {
-		return await fetch(url, options);
+		const res = await fetchLimiter.fetch(url, opts);
+		cancel?.();
+		return res;
 	} catch (err) {
+		cancel?.();
 		if (logError) console.error(`Fetch error (${url}): ${err}`);
 		return null;
 	}
@@ -529,7 +633,10 @@ export function joinPath(...segments: string[]): string {
 		.join("/");
 }
 
-export function joinPathWithBase(base: string, ...segments: string[]): string | null {
+export function joinPathWithBase(
+	base: string,
+	...segments: string[]
+): string | null {
 	const joined = joinPathSafe(...segments);
 	if (joined === null) return null;
 	return join(base, joined);

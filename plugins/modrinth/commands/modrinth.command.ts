@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import {
+	ChatInputCommandInteraction,
 	ComponentType,
+	MessageComponentInteraction,
 	MessageFlags,
 	SlashCommandBuilder,
 	time,
@@ -23,6 +25,7 @@ import { trimTextWithSuffix } from "../../../lib/utils";
 import {
 	downloadModpackFile,
 	downloadPluginFile,
+	getPlugin,
 	listPluginVersions,
 	resolveProjectDependencies,
 	searchPlugins,
@@ -34,6 +37,8 @@ import {
 	type PluginListVersionItem,
 	type PluginSearchQueryItem,
 } from "../types";
+import type { Server } from "../../../lib/server";
+import { skip } from "@prisma/client/runtime/client";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -81,8 +86,10 @@ export default {
 				.setDescription(
 					"Only show stable releases when viewing versions",
 				),
+		)
+		.addBooleanOption((option) =>
+			option.setName("skipcheck").setDescription("Skip pre-checks"),
 		),
-
 	requireServer: true,
 	ephemeral: true,
 
@@ -91,13 +98,13 @@ export default {
 			"plugin") as ContentType;
 		const query = interaction.options.getString("query") ?? undefined;
 		const onlyRelease = interaction.options.getBoolean("release") ?? false;
+		const forceDownload = interaction.options.getBoolean("skipcheck") ?? false;
 
 		const isModpack = contentType === "modpack";
 		const userPermission = await readPermission(
 			interaction.user,
 			server.id,
 		);
-
 		// ── Outer: Search results ─────────────────────────────────────────
 		let searchCollector: Awaited<ReturnType<typeof sendPaginationMessage>>;
 
@@ -115,15 +122,31 @@ export default {
 						query: filter ?? query,
 						facets: isModpack
 							? {
-									versions: [server.config.minecraftVersion],
+									...(forceDownload
+										? {}
+										: {
+												versions: [
+													server.config
+														.minecraftVersion,
+												],
+											}),
 									project_type: [ProjectType.Modpack],
 								}
 							: {
-									categories: [server.config.loaderType],
-									versions: [server.config.minecraftVersion],
+									...(forceDownload
+										? {}
+										: {
+												categories: [
+													server.config.loaderType,
+												],
+												versions: [
+													server.config
+														.minecraftVersion,
+												],
+											}),
 									project_type: [ProjectType.Mod, "plugin"],
 								},
-						skipServerSideFilter: isModpack,
+						skipServerSideFilter: isModpack || forceDownload,
 					});
 					if ("error" in resp) continue;
 					results.push(...resp.hits);
@@ -190,484 +213,17 @@ export default {
 					flags: MessageFlags.Ephemeral,
 				});
 
-				let versionCollector: Awaited<
-					ReturnType<typeof sendPaginationMessage>
-				>;
-
-				versionCollector = await sendPaginationMessage<
-					PluginListVersionItem<true>
-				>({
+				await selectVersionToDownload({
 					interaction: menuInteraction,
-
-					getResult: async () => {
-						const versions = await listPluginVersions(slug, {
-							loaders: [server.config.loaderType],
-							game_versions: [server.config.minecraftVersion],
-						});
-						return (versions ?? []).filter(
-							(v) => !onlyRelease || v.version_type === "release",
-						);
-					},
-
-					formatter: (version) => {
-						const compatible =
-							version.game_versions.includes(
-								server.config.minecraftVersion,
-							) &&
-							version.loaders.includes(server.config.loaderType);
-						return {
-							name: version.version_number,
-							value: [
-								`ID: \`${version.id}\``,
-								`Published: ${time(new Date(version.date_published))}`,
-								compatible
-									? "✅ Compatible"
-									: "❌ Not compatible",
-								`Type: \`${version.version_type}\``,
-							].join(" · "),
-						};
-					},
-
-					filterFunc: (filter) => (version) => {
-						if (!filter) return true;
-						return (
-							version.version_number
-								.toLowerCase()
-								.includes(filter.toLowerCase()) ||
-							version.id === filter
-						);
-					},
-
-					options: {
-						title: `Versions of \`${slug}\``,
-						notFoundMessage: "No versions found for this server.",
-					},
-
-					selectMenuOptions: { showSelectMenu: true },
-					selectMenuTransform: (version) => ({
-						label: version.version_number,
-						description: `${version.version_type} · ${time(new Date(version.date_published))}`,
-						value: version.id,
-					}),
-
-					interactionFilter: (i) => i.user.id === interaction.user.id,
-
-					// ── Download the selected version ─────────────────────
-					onItemSelected: async (
-						versionInteraction,
-						versionResult,
-					) => {
-						await versionInteraction.deferUpdate();
-						const versionId = versionInteraction.values[0];
-						if (!versionId) return false;
-
-						// ── Permission check ──────────────────────────────
-						if (
-							!comparePermission(
-								userPermission,
-								PermissionFlags.downloadPlugin,
-							)
-						) {
-							const request = await versionInteraction.followUp({
-								content: `Please ask a staff member to approve downloading version \`${versionId}\`.`,
-								components: [createRequestComponent()],
-							});
-
-							const staffResult = await request
-								.awaitMessageComponent({
-									componentType: ComponentType.Button,
-									filter: async (i) =>
-										comparePermission(
-											await readPermission(
-												i.user,
-												server.id,
-											),
-											PermissionFlags.downloadPlugin,
-										),
-									time: 1000 * 60 * 10,
-								})
-								.catch(() => null);
-
-							if (!staffResult) {
-								await request.edit({
-									content: "Download request timed out.",
-									components: [],
-								});
-								return false;
-							}
-							if (
-								staffResult.customId === RequestComponentId.Deny
-							) {
-								await request.edit({
-									content: "Download request denied.",
-									components: [],
-								});
-								return false;
-							}
-							await request.edit({
-								content: `Request approved. Downloading \`${versionId}\`…`,
-								components: [],
-							});
-						}
-
-						// ── Modpack download flow ─────────────────────────
-						if (isModpack) {
-							await versionInteraction.editReply({
-								content: `Downloading and installing modpack version \`${versionId}\`… This may take a while.`,
-								components: [],
-								embeds: [],
-							});
-
-							const result = await downloadModpackFile(
-								server,
-								versionId,
-							);
-
-							if (!result.success) {
-								await versionInteraction.editReply({
-									content: `Failed to install modpack: ${result.error ?? "Unknown error."}`,
-									components: [],
-									embeds: [],
-								});
-								return false;
-							}
-
-							await versionInteraction.editReply({
-								content: [
-									`✅ Modpack **${result.name ?? versionId}** installed successfully!`,
-									`Downloaded **${result.filesDownloaded}** file${result.filesDownloaded !== 1 ? "s" : ""}.`,
-									result.filesSkipped > 0
-										? `⚠️ Skipped **${result.filesSkipped}** file${result.filesSkipped !== 1 ? "s" : ""} incompatible with server.`
-										: null,
-									"🔄 Restart the server for changes to take effect.",
-								]
-									.filter(Boolean)
-									.join("\n"),
-								components: [],
-								embeds: [],
-							});
-
-							versionCollector.stop();
-							searchCollector.stop();
-							return true;
-						}
-
-						// ── Plugin download flow ──────────────────────────
-						const allVersions = await versionResult.getData();
-						const selectedVersion = allVersions?.find(
-							(v) => v.id === versionId,
-						);
-
-						// Check for an existing installed version of the same project
-						let upgradeHandled = false;
-						if (selectedVersion?.project_id) {
-							const serverPlugins = await getPluginsByServerId(
-								server.id,
-							);
-							const existingRecord = serverPlugins.find(
-								(p) =>
-									p.projectId ===
-										selectedVersion.project_id &&
-									p.versionId !== versionId,
-							);
-
-							if (existingRecord) {
-								const existingLabel =
-									allVersions?.find(
-										(v) =>
-											v.id === existingRecord.versionId,
-									)?.version_number ??
-									existingRecord.versionId;
-								const newLabel = selectedVersion.version_number;
-
-								const replaceMsg =
-									await versionInteraction.followUp({
-										content: `Version \`${existingLabel}\` of this plugin is already installed. Replace it with \`${newLabel}\`?`,
-										components: [
-											createRequestComponent({
-												showDeny: false,
-												showCancel: true,
-											}),
-										],
-										flags: MessageFlags.Ephemeral,
-									});
-
-								const confirm = await replaceMsg
-									.awaitMessageComponent({
-										componentType: ComponentType.Button,
-										filter: (i) =>
-											i.user.id === interaction.user.id,
-										time: 1000 * 60 * 2,
-									})
-									.catch(() => null);
-
-								if (!confirm) {
-									await replaceMsg
-										.edit({ components: [] })
-										.catch(() => {});
-									await versionInteraction.editReply({
-										content:
-											"Plugin replacement cancelled.",
-										components: [],
-										embeds: [],
-									});
-									return false;
-								}
-
-								await confirm.update({ components: [] });
-
-								if (
-									confirm.customId ===
-									RequestComponentId.Cancel
-								) {
-									await versionInteraction.editReply({
-										content:
-											"Plugin replacement cancelled.",
-										components: [],
-										embeds: [],
-									});
-									return false;
-								}
-
-								const { newDownload: upgraded } =
-									await downloadPluginFile(
-										server,
-										versionId,
-										true,
-									);
-
-								if (!upgraded) {
-									await versionInteraction.editReply({
-										content:
-											"Failed to download the new plugin version.",
-										components: [],
-										embeds: [],
-									});
-									return false;
-								}
-
-								if (
-									existingRecord.filePath &&
-									existsSync(existingRecord.filePath)
-								) {
-									await rm(existingRecord.filePath).catch(
-										() => {},
-									);
-								}
-								await deletePluginRecord(
-									existingRecord.projectId,
-									existingRecord.versionId,
-									server.id,
-								);
-
-								await versionInteraction.editReply({
-									content: `Plugin upgraded from \`${existingLabel}\` → \`${newLabel}\` successfully! Restart the server to apply.`,
-									components: [],
-									embeds: [],
-								});
-								upgradeHandled = true;
-							}
-						}
-
-						if (!upgradeHandled) {
-							const { newDownload, filename } =
-								await downloadPluginFile(server, versionId);
-
-							if (!newDownload && filename === null) {
-								await versionInteraction.editReply({
-									content: "Failed to download plugin.",
-									components: [],
-									embeds: [],
-								});
-								return false;
-							}
-
-							if (!newDownload && filename !== null) {
-								// Same file already on disk — offer to replace
-								const confirmMsg =
-									await versionInteraction.followUp({
-										content: `Plugin \`${filename}\` already exists on the server. Replace it?`,
-										components: [
-											createRequestComponent({
-												showDeny: false,
-												showCancel: true,
-											}),
-										],
-										flags: MessageFlags.Ephemeral,
-									});
-
-								const confirmation = await confirmMsg
-									.awaitMessageComponent({
-										componentType: ComponentType.Button,
-										filter: (i) =>
-											i.user.id === interaction.user.id,
-										time: 1000 * 60 * 2,
-									})
-									.catch(() => null);
-
-								if (!confirmation) {
-									await confirmMsg
-										.edit({ components: [] })
-										.catch(() => {});
-									await versionInteraction.editReply({
-										content:
-											"Plugin replacement cancelled.",
-										components: [],
-										embeds: [],
-									});
-									return false;
-								}
-
-								await confirmation.update({
-									components: [],
-								});
-
-								if (
-									confirmation.customId ===
-									RequestComponentId.Cancel
-								) {
-									await versionInteraction.editReply({
-										content:
-											"Plugin replacement cancelled.",
-										components: [],
-										embeds: [],
-									});
-									return false;
-								}
-
-								const { newDownload: replaced } =
-									await downloadPluginFile(
-										server,
-										versionId,
-										true,
-									);
-								if (!replaced) {
-									await versionInteraction.editReply({
-										content:
-											"Failed to replace the plugin.",
-										components: [],
-										embeds: [],
-									});
-									return false;
-								}
-
-								await versionInteraction.editReply({
-									content:
-										"Plugin replaced successfully! Restart the server to apply.",
-									components: [],
-									embeds: [],
-								});
-							} else {
-								await versionInteraction.editReply({
-									content:
-										"Plugin downloaded successfully! Restart the server to apply.",
-									components: [],
-									embeds: [],
-								});
-							}
-						}
-
-						versionCollector.stop();
+					slug,
+					server,
+					userPermission,
+					onlyRelease,
+					isModpack,
+					onFinish: () => {
 						searchCollector.stop();
-
-						if (selectedVersion) {
-							const installedPlugins = await getPluginsByServerId(
-								server.id,
-							);
-							const installedProjectIds = new Set(
-								installedPlugins.map((p) => p.projectId),
-							);
-							const deps = await resolveProjectDependencies(
-								[selectedVersion.project_id],
-								installedProjectIds,
-								server.config.minecraftVersion,
-								[server.config.loaderType],
-							);
-							// only required/optional deps that have a resolvable version
-							const installableDeps = deps.filter(
-								(d) => d.versionId !== null,
-							);
-							if (installableDeps.length > 0) {
-								type DepAction = "install" | "skip";
-								await sendSelectableActionMessage<
-									ResolvedDependency,
-									DepAction
-								>({
-									interaction: versionInteraction,
-									items: installableDeps,
-									getItemId: (d) => d.projectId,
-									actions: {
-										install: {
-											icon: "⬇️",
-											label: "Install",
-											isActive: true,
-										},
-										skip: {
-											icon: "⏭️",
-											label: "Skip",
-											isActive: false,
-										},
-									},
-									initialAction: (d) =>
-										d.dependencyType === "required"
-											? "install"
-											: "skip",
-									cycleAction: (_d, current) =>
-										current === "install"
-											? "skip"
-											: "install",
-									selectionTitle: `🔗 ${installableDeps.length} Dependenc${installableDeps.length === 1 ? "y" : "ies"} Found`,
-									selectionDescription: (counts) =>
-										[
-											"The plugin you just installed has dependencies.",
-											"",
-											`⬇️ Install: **${counts.install}** · ⏭️ Skip: **${counts.skip}**`,
-										].join("\n"),
-									formatField: (d, action) => ({
-										name: `${action === "install" ? "⬇️" : "⏭️"} ${d.projectName}`,
-										value: [
-											d.versionNumber
-												? `Version: \`${d.versionNumber}\``
-												: "Version: *unknown*",
-											`Type: **${d.dependencyType}**`,
-											`Required by: ${d.requiredBy.join(", ")}`,
-										].join("\n"),
-									}),
-									formatOption: (d, action) => ({
-										label: `${action === "install" ? "⬇️" : "⏭️"} ${trimTextWithSuffix(d.projectName, 80)}`,
-										description: trimTextWithSuffix(
-											`${d.dependencyType} · ${d.versionNumber ?? "unknown version"}`,
-											100,
-										),
-									}),
-									applyLabel: (counts) =>
-										counts.install > 0
-											? `Install (${counts.install})`
-											: "Nothing to Install",
-									process: async (d, _action) => {
-										const { newDownload } =
-											await downloadPluginFile(
-												server,
-												d.versionId!,
-											);
-										return newDownload;
-									},
-									formatProgressValue: (d) =>
-										`⬇️ Installing \`${d.versionNumber ?? d.projectId}\``,
-									formatResultEntry: (d) =>
-										`**${d.projectName}** ${d.versionNumber ? `\`${d.versionNumber}\`` : ""}`,
-									resultFooter: (succeeded) =>
-										(succeeded.get("install")?.length ??
-											0) > 0
-											? "🔄 Restart the server for changes to take effect."
-											: null,
-									progressTitle: "⬇️ Installing Dependencies",
-								});
-							}
-						}
-
-						return true;
 					},
+					skipCheck: forceDownload,
 				});
 
 				// The version browser is open; stop the search select menu
@@ -686,3 +242,457 @@ export default {
 		supportedPlatforms: ["minecraft"],
 	},
 } satisfies CommandFile<true>;
+
+async function selectVersionToDownload({
+	interaction,
+	slug,
+	server,
+	userPermission,
+	onlyRelease,
+	isModpack,
+	onFinish,
+	skipCheck,
+}: {
+	interaction: ChatInputCommandInteraction | MessageComponentInteraction;
+	slug: string;
+	server: Server;
+	userPermission: number;
+	onlyRelease: boolean;
+	isModpack: boolean;
+	skipCheck?: boolean;
+	onFinish?: () => void;
+}) {
+	const collector = await sendPaginationMessage<PluginListVersionItem<true>>({
+		interaction,
+
+		getResult: async () => {
+			const versions = await listPluginVersions(
+				slug,
+				skipCheck
+					? {}
+					: {
+							loaders: [server.config.loaderType],
+							game_versions: [server.config.minecraftVersion],
+						},
+			);
+			return (versions ?? []).filter(
+				(v) => !onlyRelease || v.version_type === "release",
+			);
+		},
+
+		formatter: (version) => {
+			const compatible =
+				version.game_versions.includes(
+					server.config.minecraftVersion,
+				) && version.loaders.includes(server.config.loaderType);
+			return {
+				name: version.version_number,
+				value: [
+					`ID: \`${version.id}\``,
+					`Published: ${time(new Date(version.date_published))}`,
+					compatible ? "✅ Compatible" : "❌ Not compatible",
+					`Type: \`${version.version_type}\``,
+				].join(" · "),
+			};
+		},
+
+		filterFunc: (filter) => (version) => {
+			if (!filter) return true;
+			return (
+				version.version_number
+					.toLowerCase()
+					.includes(filter.toLowerCase()) || version.id === filter
+			);
+		},
+
+		options: {
+			title: `Versions of \`${slug}\``,
+			notFoundMessage: "No versions found for this server.",
+		},
+
+		selectMenuOptions: { showSelectMenu: true },
+		selectMenuTransform: (version) => ({
+			label: version.version_number,
+			description: version.version_type,
+			value: version.id,
+		}),
+
+		interactionFilter: (i) => i.user.id === interaction.user.id,
+
+		// ── Download the selected version ─────────────────────
+		onItemSelected: async (versionInteraction, versionResult) => {
+			await versionInteraction.deferUpdate();
+			const versionId = versionInteraction.values[0];
+			if (!versionId) return false;
+
+			// ── Permission check ──────────────────────────────
+			if (
+				!comparePermission(
+					userPermission,
+					PermissionFlags.downloadPlugin,
+				)
+			) {
+				const request = await versionInteraction.followUp({
+					content: `Please ask a staff member to approve downloading version \`${versionId}\`.`,
+					components: [createRequestComponent()],
+				});
+
+				const staffResult = await request
+					.awaitMessageComponent({
+						componentType: ComponentType.Button,
+						filter: async (i) =>
+							comparePermission(
+								await readPermission(i.user, server.id),
+								PermissionFlags.downloadPlugin,
+							),
+						time: 1000 * 60 * 10,
+					})
+					.catch(() => null);
+
+				if (!staffResult) {
+					await request.edit({
+						content: "Download request timed out.",
+						components: [],
+					});
+					return false;
+				}
+				if (staffResult.customId === RequestComponentId.Deny) {
+					await request.edit({
+						content: "Download request denied.",
+						components: [],
+					});
+					return false;
+				}
+				await request.edit({
+					content: `Request approved. Downloading \`${versionId}\`…`,
+					components: [],
+				});
+			}
+
+			// ── Modpack download flow ─────────────────────────
+			if (isModpack) {
+				await versionInteraction.editReply({
+					content: `Downloading and installing modpack version \`${versionId}\`… This may take a while.`,
+					components: [],
+					embeds: [],
+				});
+
+				const result = await downloadModpackFile(server, versionId);
+
+				if (!result.success) {
+					await versionInteraction.editReply({
+						content: `Failed to install modpack: ${result.error ?? "Unknown error."}`,
+						components: [],
+						embeds: [],
+					});
+					return false;
+				}
+
+				await versionInteraction.editReply({
+					content: [
+						`✅ Modpack **${result.name ?? versionId}** installed successfully!`,
+						`Downloaded **${result.filesDownloaded}** file${result.filesDownloaded !== 1 ? "s" : ""}.`,
+						result.filesSkipped > 0
+							? `⚠️ Skipped **${result.filesSkipped}** file${result.filesSkipped !== 1 ? "s" : ""} incompatible with server.`
+							: null,
+						"🔄 Restart the server for changes to take effect.",
+					]
+						.filter(Boolean)
+						.join("\n"),
+					components: [],
+					embeds: [],
+				});
+
+				onFinish?.();
+				collector.stop();
+				return true;
+			}
+
+			// ── Plugin download flow ──────────────────────────
+			const allVersions = await versionResult.getData();
+			const selectedVersion = allVersions?.find(
+				(v) => v.id === versionId,
+			);
+
+			// Check for an existing installed version of the same project
+			let upgradeHandled = false;
+			if (selectedVersion?.project_id) {
+				const serverPlugins = await getPluginsByServerId(server.id);
+				const existingRecord = serverPlugins.find(
+					(p) =>
+						p.projectId === selectedVersion.project_id &&
+						p.versionId !== versionId,
+				);
+
+				if (existingRecord) {
+					const existingLabel =
+						allVersions?.find(
+							(v) => v.id === existingRecord.versionId,
+						)?.version_number ?? existingRecord.versionId;
+					const newLabel = selectedVersion.version_number;
+
+					const replaceMsg = await versionInteraction.followUp({
+						content: `Version \`${existingLabel}\` of this plugin is already installed. Replace it with \`${newLabel}\`?`,
+						components: [
+							createRequestComponent({
+								showDeny: false,
+								showCancel: true,
+							}),
+						],
+						flags: MessageFlags.Ephemeral,
+					});
+
+					const confirm = await replaceMsg
+						.awaitMessageComponent({
+							componentType: ComponentType.Button,
+							filter: (i) => i.user.id === interaction.user.id,
+							time: 1000 * 60 * 2,
+						})
+						.catch(() => null);
+
+					if (!confirm) {
+						await replaceMsg
+							.edit({ components: [] })
+							.catch(() => {});
+						await versionInteraction.editReply({
+							content: "Plugin replacement cancelled.",
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
+
+					await confirm.update({ components: [] });
+
+					if (confirm.customId === RequestComponentId.Cancel) {
+						await versionInteraction.editReply({
+							content: "Plugin replacement cancelled.",
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
+
+					const { newDownload: upgraded } = await downloadPluginFile(
+						server,
+						versionId,
+						true,
+					);
+
+					if (!upgraded) {
+						await versionInteraction.editReply({
+							content:
+								"Failed to download the new plugin version.",
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
+
+					if (
+						existingRecord.filePath &&
+						existsSync(existingRecord.filePath)
+					) {
+						await rm(existingRecord.filePath).catch(() => {});
+					}
+					await deletePluginRecord(
+						existingRecord.projectId,
+						existingRecord.versionId,
+						server.id,
+					);
+
+					await versionInteraction.editReply({
+						content: `Plugin upgraded from \`${existingLabel}\` → \`${newLabel}\` successfully! Restart the server to apply.`,
+						components: [],
+						embeds: [],
+					});
+					upgradeHandled = true;
+				}
+			}
+
+			if (!upgradeHandled) {
+				const { newDownload, filename } = await downloadPluginFile(
+					server,
+					versionId,
+				);
+
+				if (!newDownload && filename === null) {
+					await versionInteraction.editReply({
+						content: "Failed to download plugin.",
+						components: [],
+						embeds: [],
+					});
+					return false;
+				}
+
+				if (!newDownload && filename !== null) {
+					// Same file already on disk — offer to replace
+					const confirmMsg = await versionInteraction.followUp({
+						content: `Plugin \`${filename}\` already exists on the server. Replace it?`,
+						components: [
+							createRequestComponent({
+								showDeny: false,
+								showCancel: true,
+							}),
+						],
+						flags: MessageFlags.Ephemeral,
+					});
+
+					const confirmation = await confirmMsg
+						.awaitMessageComponent({
+							componentType: ComponentType.Button,
+							filter: (i) => i.user.id === interaction.user.id,
+							time: 1000 * 60 * 2,
+						})
+						.catch(() => null);
+
+					if (!confirmation) {
+						await confirmMsg
+							.edit({ components: [] })
+							.catch(() => {});
+						await versionInteraction.editReply({
+							content: "Plugin replacement cancelled.",
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
+
+					await confirmation.update({
+						components: [],
+					});
+
+					if (confirmation.customId === RequestComponentId.Cancel) {
+						await versionInteraction.editReply({
+							content: "Plugin replacement cancelled.",
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
+
+					const { newDownload: replaced } = await downloadPluginFile(
+						server,
+						versionId,
+						true,
+					);
+					if (!replaced) {
+						await versionInteraction.editReply({
+							content: "Failed to replace the plugin.",
+							components: [],
+							embeds: [],
+						});
+						return false;
+					}
+
+					await versionInteraction.editReply({
+						content:
+							"Plugin replaced successfully! Restart the server to apply.",
+						components: [],
+						embeds: [],
+					});
+				} else {
+					await versionInteraction.editReply({
+						content:
+							"Plugin downloaded successfully! Restart the server to apply.",
+						components: [],
+						embeds: [],
+					});
+				}
+			}
+
+			if (selectedVersion) {
+				const installedPlugins = await getPluginsByServerId(server.id);
+				const installedProjectIds = new Set(
+					installedPlugins.map((p) => p.projectId),
+				);
+				const deps = await resolveProjectDependencies(
+					[selectedVersion.project_id],
+					installedProjectIds,
+					server.config.minecraftVersion,
+					[server.config.loaderType],
+				);
+				// only required/optional deps that have a resolvable version
+				const installableDeps = deps.filter(
+					(d) => d.versionId !== null,
+				);
+				if (installableDeps.length > 0) {
+					type DepAction = "install" | "skip";
+					await sendSelectableActionMessage<
+						ResolvedDependency,
+						DepAction
+					>({
+						interaction: versionInteraction,
+						items: installableDeps,
+						getItemId: (d) => d.projectId,
+						actions: {
+							install: {
+								icon: "⬇️",
+								label: "Install",
+								isActive: true,
+							},
+							skip: {
+								icon: "⏭️",
+								label: "Skip",
+								isActive: false,
+							},
+						},
+						initialAction: (d) =>
+							d.dependencyType === "required"
+								? "install"
+								: "skip",
+						cycleAction: (_d, current) =>
+							current === "install" ? "skip" : "install",
+						selectionTitle: `🔗 ${installableDeps.length} Dependenc${installableDeps.length === 1 ? "y" : "ies"} Found`,
+						selectionDescription: (counts) =>
+							[
+								"The plugin you just installed has dependencies.",
+								"",
+								`⬇️ Install: **${counts.install}** · ⏭️ Skip: **${counts.skip}**`,
+							].join("\n"),
+						formatField: (d, action) => ({
+							name: `${action === "install" ? "⬇️" : "⏭️"} ${d.projectName}`,
+							value: [
+								d.versionNumber
+									? `Version: \`${d.versionNumber}\``
+									: "Version: *unknown*",
+								`Type: **${d.dependencyType}**`,
+								`Required by: ${d.requiredBy.join(", ")}`,
+							].join("\n"),
+						}),
+						formatOption: (d, action) => ({
+							label: `${action === "install" ? "⬇️" : "⏭️"} ${trimTextWithSuffix(d.projectName, 80)}`,
+							description: trimTextWithSuffix(
+								`${d.dependencyType} · ${d.versionNumber ?? "unknown version"}`,
+								100,
+							),
+						}),
+						applyLabel: (counts) =>
+							counts.install > 0
+								? `Install (${counts.install})`
+								: "Nothing to Install",
+						process: async (d, _action) => {
+							const { newDownload } = await downloadPluginFile(
+								server,
+								d.versionId!,
+							);
+							return newDownload;
+						},
+						formatProgressValue: (d) =>
+							`⬇️ Installing \`${d.versionNumber ?? d.projectId}\``,
+						formatResultEntry: (d) =>
+							`**${d.projectName}** ${d.versionNumber ? `\`${d.versionNumber}\`` : ""}`,
+						resultFooter: (succeeded) =>
+							(succeeded.get("install")?.length ?? 0) > 0
+								? "🔄 Restart the server for changes to take effect."
+								: null,
+						progressTitle: "⬇️ Installing Dependencies",
+					});
+				}
+			}
+
+			return true;
+		},
+	});
+	return collector;
+}
