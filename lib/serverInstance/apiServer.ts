@@ -14,7 +14,7 @@ import { TicketEffectType } from "../ticket";
 
 const verifySchema = z.object({
 	serverPort: z.number(),
-	uuid: z.uuid(),
+	uuid: z.string(),
 	playerName: z.string(),
 });
 export const playSchema = verifySchema.extend({
