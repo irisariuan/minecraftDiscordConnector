@@ -184,6 +184,32 @@ export type AppRequestMap = {
 		params: SpendCreditParams;
 		result: PartialTransaction | null;
 	};
+	/** Whether a user can afford a cost (incl. permission bypasses). */
+	"credit:canSpend": {
+		params: { userId: string; cost: number };
+		result: boolean;
+	};
+	/** Apply a silent credit delta and DM the user (server-side enforcement). */
+	"credit:charge": {
+		params: {
+			discordId: string;
+			change: number;
+			reason: string;
+			serverId?: number;
+			silent?: boolean;
+		};
+		result: boolean;
+	};
+	/** The effect-type strings a user currently has active (e.g. "free_play"). */
+	"ticket:getActiveEffectTypes": {
+		params: { userId: string };
+		result: string[];
+	};
+	/** Delete all managed-artifact records pointing at a file path. */
+	"artifact:deleteByPath": {
+		params: { filePath: string };
+		result: number;
+	};
 	/** Read a whitelisted environment variable. */
 	"env:get": { params: { key: PluginEnvKey }; result: string | undefined };
 	/** Read a value from a plugin's namespaced state store. */

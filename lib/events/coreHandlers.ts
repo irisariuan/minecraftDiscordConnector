@@ -1,8 +1,9 @@
-import { spendCredit } from "../credit";
+import { canSpendCredit, spendCredit } from "../credit";
 import {
 	createIdentityLink,
 	createServer,
 	deleteIdentityLink,
+	deleteServerArtifactByPath,
 	deleteServerArtifactRecord,
 	getAllServers,
 	getIdentitiesByDiscordId,
@@ -15,6 +16,7 @@ import {
 } from "../db";
 import { CF_KEY, UPDATE_URL } from "../env";
 import { readPermission } from "../permission";
+import { ticketEffectManager } from "../ticket/effect";
 import {
 	storeDelete,
 	storeGet,
@@ -79,6 +81,21 @@ export function registerCoreDataHandlers() {
 	appEvents.handle("settings:get", () => settings);
 
 	appEvents.handle("credit:spend", (params) => spendCredit(params));
+
+	appEvents.handle("credit:canSpend", ({ userId, cost }) =>
+		canSpendCredit(userId, cost),
+	);
+
+	appEvents.handle("ticket:getActiveEffectTypes", ({ userId }) =>
+		ticketEffectManager
+			.getUserActiveEffects(userId)
+			.map((entry) => entry.ticket.effect.effect as string),
+	);
+
+	appEvents.handle("artifact:deleteByPath", async ({ filePath }) => {
+		const { count } = await deleteServerArtifactByPath(filePath);
+		return count;
+	});
 
 	const pluginEnv: Record<PluginEnvKey, string | undefined> = {
 		CF_KEY,

@@ -172,26 +172,15 @@ export {
 	PermissionFlags,
 } from "../lib/permission";
 export {
-	findHighestAvailableVersion,
-	getPaperProject,
-	getPaperVersionBuild,
-} from "../lib/serverInstance/jar";
-export {
-	createPathForPluginFile,
-	getActivePlugins,
-} from "../lib/serverInstance/plugin";
-export {
-	fetchVersionOptionsForLoader,
-	KNOWN_LOADERS,
-} from "../lib/serverLoader";
-export {
 	ensureSuffix,
 	formatFileSize,
 	getNextTimestamp,
+	getRandomOtp,
+	joinPath,
 	removeSuffix,
 	safeFetch,
 	safeJoin,
 	separate,
 	trimTextWithSuffix,
 } from "../lib/utils";
-export { downloadAndSave } from "../lib/utils/web";
+export { buildInit, downloadAndSave } from "../lib/utils/web";

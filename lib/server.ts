@@ -410,7 +410,7 @@ export class Server {
 export async function createServerManager(client: Client) {
 	const manager = new ServerManager(client);
 	await manager.loadServers();
-	registerServerRuntimeHandlers(manager);
+	registerServerRuntimeHandlers(manager, client);
 	return manager;
 }
 
@@ -586,8 +586,8 @@ export class ServerManager {
 	}
 }
 
-/** Register runtime data channels that need a live {@link ServerManager}. */
-function registerServerRuntimeHandlers(manager: ServerManager) {
+/** Register runtime data channels that need a live {@link ServerManager}/client. */
+function registerServerRuntimeHandlers(manager: ServerManager, client: Client) {
 	appEvents.handle("server:getActiveByPort", async ({ port }) => {
 		const server = await manager.getActiveServerFromPort(port);
 		if (!server) return null;
@@ -599,6 +599,24 @@ function registerServerRuntimeHandlers(manager: ServerManager) {
 			settings: server.settings,
 		};
 	});
+
+	appEvents.handle(
+		"credit:charge",
+		async ({ discordId, change, reason, serverId, silent = true }) => {
+			await changeCredit({ userId: discordId, change, serverId, reason });
+			const user = await client.users.fetch(discordId).catch(() => null);
+			if (user) {
+				await sendCreditNotification({
+					user,
+					creditChanged: change,
+					reason,
+					serverId,
+					silent,
+				});
+			}
+			return true;
+		},
+	);
 }
 
 export interface TagPair {
