@@ -66,6 +66,44 @@ export const data = {
 	},
 };
 
+/**
+ * A typed handle to a plugin's private, persistent key/value store.
+ * Returned by {@link createStore}. Values are JSON-serialised by the core.
+ */
+export interface PluginStore {
+	get<T>(key: string): Promise<T | null>;
+	getAll<T = unknown>(): Promise<Record<string, T>>;
+	set<T>(key: string, value: T): Promise<void>;
+	delete(key: string): Promise<void>;
+}
+
+/**
+ * Create a persistent, namespaced state store for a plugin. Use a stable,
+ * unique namespace (letters, digits, `_`, `-`) — typically the plugin's name.
+ * State survives restarts and is backed by a JSON file managed by the core.
+ *
+ * @example
+ * ```ts
+ * const store = createStore("myPlugin");
+ * await store.set("cursor", 42);
+ * const cursor = await store.get<number>("cursor");
+ * ```
+ */
+export function createStore(namespace: string): PluginStore {
+	return {
+		get: <T>(key: string) =>
+			data.request("store:get", { namespace, key }) as Promise<T | null>,
+		getAll: <T = unknown>() =>
+			data.request("store:getAll", { namespace }) as Promise<
+				Record<string, T>
+			>,
+		set: <T>(key: string, value: T) =>
+			data.request("store:set", { namespace, key, value }),
+		delete: (key: string) =>
+			data.request("store:delete", { namespace, key }),
+	};
+}
+
 // ─── Types safe for plugin use (erased at runtime) ────────────────────────────
 
 export type {
@@ -74,13 +112,15 @@ export type {
 	CommandCalledPayload,
 	CreditChangedPayload,
 	DbServer,
+	IdentityLinkRecord,
+	LinkIdentityParams,
 	PermissionValue,
 	PluginEnvKey,
+	ServerArtifactRecord,
 	ServerCreateData,
 	ServerUpdateData,
 	SettingsChangedPayload,
-	TrackedPlugin,
-	TrackPluginParams,
+	TrackArtifactParams,
 } from "../lib/events/appEvents";
 export type { CommandFile, ExecuteParams } from "../lib/commandFile";
 export type {
@@ -90,8 +130,28 @@ export type {
 	UserCredit,
 } from "../lib/credit";
 export type { Permission } from "../lib/permission";
-export type { Server, ServerGameType, ServerManager } from "../lib/server";
+export type { Server, ServerManager } from "../lib/server";
 export type { GlobalSettings, ServerSettings } from "../lib/settings";
+
+// ─── Game-plugin extension contracts ──────────────────────────────────────────
+
+export { defineGamePlugin, defaultParseOutput } from "../lib/plugin/contract";
+export type {
+	CapabilityName,
+	ConfigValidation,
+	GamePlugin,
+	GenericServerConfig,
+	LogLevel,
+	ParsedLogLine,
+	PlayerInfo,
+	PluginStateStore,
+	ServerCapabilities,
+	ServerLifecycle,
+	ServerProcessHandle,
+	ServerRuntimeContext,
+	TerminateOptions,
+	TerminateResult,
+} from "../lib/plugin/contract";
 
 // ─── Pure helpers & UI components (no data access) ────────────────────────────
 

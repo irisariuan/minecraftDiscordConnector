@@ -193,38 +193,93 @@ export async function upsertSetting(data: Prisma.SettingUpsertArgs) {
 	return await prisma.setting.upsert(data);
 }
 
-export async function upsertNewPlugin(data: Prisma.PluginUpsertArgs) {
-	return await prisma.plugin.upsert(data);
+// ─── Server artifacts (generic mods/plugins/packages) ─────────────────────────
+
+export interface UpsertServerArtifactData {
+	provider: string;
+	artifactId: string;
+	versionId: string;
+	serverId: number;
+	filePath: string;
+	metadata?: Record<string, unknown>;
 }
-export async function getPluginByIds(
-	projectId: string,
-	versionId: string,
-	serverId: number,
-) {
-	return await prisma.plugin.findUnique({
+
+export async function upsertServerArtifact({
+	provider,
+	artifactId,
+	versionId,
+	serverId,
+	filePath,
+	metadata,
+}: UpsertServerArtifactData) {
+	const json = metadata as Prisma.InputJsonValue | undefined;
+	return await prisma.serverArtifact.upsert({
+		create: {
+			provider,
+			artifactId,
+			versionId,
+			serverId,
+			filePath,
+			...(json !== undefined ? { metadata: json } : {}),
+		},
+		update: {
+			filePath,
+			...(json !== undefined ? { metadata: json } : {}),
+		},
 		where: {
-			projectId_versionId_serverId: { projectId, versionId, serverId },
+			provider_artifactId_versionId_serverId: {
+				provider,
+				artifactId,
+				versionId,
+				serverId,
+			},
 		},
 	});
 }
-export async function deletePluginByPath(path: string) {
-	return await prisma.plugin.deleteMany({ where: { filePath: path } });
-}
 
-export async function getPluginsByServerId(serverId: number) {
-	return await prisma.plugin.findMany({ where: { serverId } });
-}
-
-export async function deletePluginRecord(
-	projectId: string,
+export async function getServerArtifact(
+	provider: string,
+	artifactId: string,
 	versionId: string,
 	serverId: number,
 ) {
-	return await prisma.plugin
+	return await prisma.serverArtifact.findUnique({
+		where: {
+			provider_artifactId_versionId_serverId: {
+				provider,
+				artifactId,
+				versionId,
+				serverId,
+			},
+		},
+	});
+}
+
+export async function deleteServerArtifactByPath(path: string) {
+	return await prisma.serverArtifact.deleteMany({ where: { filePath: path } });
+}
+
+export async function getServerArtifactsByServerId(
+	serverId: number,
+	provider?: string,
+) {
+	return await prisma.serverArtifact.findMany({
+		where: { serverId, ...(provider ? { provider } : {}) },
+	});
+}
+
+export async function deleteServerArtifactRecord(
+	provider: string,
+	artifactId: string,
+	versionId: string,
+	serverId: number,
+) {
+	return await prisma.serverArtifact
 		.delete({
 			where: {
-				projectId_versionId_serverId: {
-					projectId,
+				provider_artifactId_versionId_serverId: {
+					provider,
+					artifactId,
 					versionId,
 					serverId,
 				},
@@ -232,6 +287,10 @@ export async function deletePluginRecord(
 		})
 		.catch(() => null);
 }
+
+export type ServerArtifactRecord = Awaited<
+	ReturnType<typeof getServerArtifactsByServerId>
+>[number];
 
 export async function getUserTickets(
 	userId: string,
@@ -333,33 +392,88 @@ export async function deleteRawUserTicket(data: Prisma.UserTicketDeleteArgs) {
 	return await prisma.userTicket.delete(data);
 }
 
-export async function createPlayer(data: Prisma.PlayerCreateArgs) {
-	return await prisma.player.create(data);
+// ─── Identity links (generic external-identity ↔ Discord) ─────────────────────
+
+export interface CreateIdentityLinkData {
+	pluginId: string;
+	externalId: string;
+	discordId: string;
+	serverId?: number;
+	metadata?: Record<string, unknown>;
 }
-export async function hasPlayer(uuid: string) {
-	const count = await prisma.player.count({ where: { uuid } });
+
+export async function createIdentityLink({
+	pluginId,
+	externalId,
+	discordId,
+	serverId,
+	metadata,
+}: CreateIdentityLinkData) {
+	const json = metadata as Prisma.InputJsonValue | undefined;
+	return await prisma.identityLink.create({
+		data: {
+			pluginId,
+			externalId,
+			discordId,
+			serverId,
+			...(json !== undefined ? { metadata: json } : {}),
+		},
+	});
+}
+
+export async function hasIdentityLink(pluginId: string, externalId: string) {
+	const count = await prisma.identityLink.count({
+		where: { pluginId, externalId },
+	});
 	return count > 0;
 }
-export async function getPlayerByUuid(uuid: string) {
-	return await prisma.player.findUnique({ where: { uuid } });
+
+export async function getIdentityByExternalId(
+	pluginId: string,
+	externalId: string,
+) {
+	return await prisma.identityLink.findUnique({
+		where: { pluginId_externalId: { pluginId, externalId } },
+	});
 }
-export async function updatePlayerName(uuid: string, name: string) {
+
+export async function getIdentitiesByDiscordId(
+	pluginId: string,
+	discordId: string,
+) {
+	return await prisma.identityLink.findMany({
+		where: { pluginId, discordId },
+	});
+}
+
+export async function updateIdentityMetadata(
+	pluginId: string,
+	externalId: string,
+	metadata: Record<string, unknown>,
+) {
 	try {
-		return await prisma.player.update({
-			where: { uuid },
-			data: { playername: name },
+		return await prisma.identityLink.update({
+			where: { pluginId_externalId: { pluginId, externalId } },
+			data: { metadata: metadata as Prisma.InputJsonValue },
 		});
 	} catch (e) {
-		console.error(`Failed to update player name for uuid ${uuid}:`, e);
+		console.error(
+			`Failed to update identity metadata for ${pluginId}:${externalId}:`,
+			e,
+		);
 		return null;
 	}
 }
-export async function getPlayerByName(name: string) {
-	return await prisma.player.findMany({ where: { playername: name } });
+
+export async function deleteIdentityLink(pluginId: string, externalId: string) {
+	return await prisma.identityLink
+		.delete({ where: { pluginId_externalId: { pluginId, externalId } } })
+		.catch(() => null);
 }
-export async function deletePlayerByUuid(uuid: string) {
-	return await prisma.player.delete({ where: { uuid } });
-}
+
+export type IdentityLinkRecord = NonNullable<
+	Awaited<ReturnType<typeof getIdentityByExternalId>>
+>;
 
 // ─── Server Access (allowlist) ────────────────────────────────────────────────
 

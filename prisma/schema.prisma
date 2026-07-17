@@ -50,21 +50,24 @@ model Permission {
 
 model Server {
     id            Int            @id @default(autoincrement())
-    port          Int[]          @default([25565])
+    port          Int[]          @default([])
     path          String         @unique
-    pluginPath    String         @unique
-    gameType      String         @default("minecraft")
     startupScript String?
-    apiPort       Int?
-    loaderType    String
-    modType       String
-    version       String
     tag           String?
+
+    /// The game plugin that owns this server (e.g. "minecraft").
+    pluginId String @default("minecraft")
+    /// Generic runtime/version label surfaced by the plugin (e.g. MC version).
+    runtimeVersion String?
+    /// Plugin-specific configuration, validated at the plugin boundary.
+    config Json @default("{}")
+
     transactions  Transaction[]
     permissions   Permission[]
-    plugins       Plugin[]
+    artifacts     ServerArtifact[]
     settings      Setting[]
     serverAccess  ServerAccess[]
+    identityLinks IdentityLink[]
 }
 
 model Setting {
@@ -77,11 +80,18 @@ model Setting {
     @@id([serverId, name, type])
 }
 
-model Plugin {
+/// Generic managed server artifact (mod/plugin/package/…) for any game type.
+/// Provider-specific meaning (e.g. Modrinth project/version ids) lives in the
+/// owning game plugin; core only tracks the generic identity + file + metadata.
+model ServerArtifact {
     id Int @unique @default(autoincrement())
 
-    projectId String
-    versionId String
+    /// Source/provider namespace, e.g. "modrinth", "github", "custom".
+    provider   String
+    /// Provider-scoped artifact identifier (e.g. Modrinth projectId).
+    artifactId String
+    /// Provider-scoped version identifier (e.g. Modrinth versionId).
+    versionId  String
 
     serverId Int
     server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -89,8 +99,10 @@ model Plugin {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
     filePath  String
+    /// Provider-specific extra data (opaque to core).
+    metadata  Json     @default("{}")
 
-    @@id([projectId, versionId, serverId])
+    @@id([provider, artifactId, versionId, serverId])
 }
 
 model Ticket {
@@ -144,9 +156,25 @@ model ServerAccess {
     @@index([userId])
 }
 
-model Player {
-    // playername may change
-    playername String
-    uuid       String @id
-    discordId  String
+/// Generic external-identity ↔ Discord mapping. A game plugin gives the
+/// identity meaning (Minecraft stores the player UUID as `externalId` and the
+/// playername in `metadata`). Replaces the former Minecraft-only `Player` model.
+model IdentityLink {
+    id Int @id @default(autoincrement())
+
+    /// Owning game plugin (e.g. "minecraft").
+    pluginId String
+    /// Provider-scoped external identity (e.g. a Minecraft UUID).
+    externalId String
+    /// The linked Discord user id.
+    discordId String
+    /// Plugin-specific extra data (e.g. { playername }).
+    metadata Json @default("{}")
+
+    /// Optional server scope; null means the link is global to the plugin.
+    serverId Int?
+    server   Server? @relation(fields: [serverId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+    @@unique([pluginId, externalId])
+    @@index([discordId])
 }

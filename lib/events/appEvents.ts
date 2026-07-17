@@ -3,12 +3,13 @@ import type { PartialTransaction, SpendCreditParams } from "../credit";
 import type {
 	createServer,
 	DbServer,
-	getPluginsByServerId,
+	IdentityLinkRecord,
+	ServerArtifactRecord,
 	updateServer,
 } from "../db";
 import type { readPermission } from "../permission";
 import type { Server, ServerManager } from "../server";
-import type { GlobalSettings } from "../settings";
+import type { GlobalSettings, ServerSettings } from "../settings";
 import { EventBus } from "./bus";
 
 // ─── Broadcast event payloads ─────────────────────────────────────────────────
@@ -47,6 +48,12 @@ export interface CreditChangedPayload {
 
 // ─── Broadcast event map ──────────────────────────────────────────────────────
 
+/** Fired when the set of online servers transitions between "none" and "some". */
+export interface ServerStatusChangedPayload {
+	/** True when at least one managed server is currently online. */
+	anyOnline: boolean;
+}
+
 export type AppEventMap = {
 	/** Emitted after any slash command starts executing. */
 	commandCalled: CommandCalledPayload;
@@ -54,20 +61,30 @@ export type AppEventMap = {
 	settingsChanged: SettingsChangedPayload;
 	/** Emitted whenever a user's credit balance changes. */
 	creditChanged: CreditChangedPayload;
+	/** Emitted when the "any server online" state flips (plugins may open/close
+	 *  their own callback servers in response). */
+	serverStatusChanged: ServerStatusChangedPayload;
 };
 
 // ─── Request/response (data access) channels ──────────────────────────────────
 
-/** A plugin record as stored in the database. */
-export type TrackedPlugin = Awaited<
-	ReturnType<typeof getPluginsByServerId>
->[number];
+export type { ServerArtifactRecord, IdentityLinkRecord };
 
-export interface TrackPluginParams {
-	projectId: string;
+export interface TrackArtifactParams {
+	provider: string;
+	artifactId: string;
 	versionId: string;
 	serverId: number;
 	filePath: string;
+	metadata?: Record<string, unknown>;
+}
+
+export interface LinkIdentityParams {
+	pluginId: string;
+	externalId: string;
+	discordId: string;
+	serverId?: number;
+	metadata?: Record<string, unknown>;
 }
 
 /** Environment variables the core is willing to expose to plugins. */
@@ -83,17 +100,54 @@ export type PermissionValue = Awaited<ReturnType<typeof readPermission>>;
 export type { DbServer };
 
 export type AppRequestMap = {
-	/** All tracked plugin records for a server. */
-	"db:getPluginsByServerId": {
-		params: { serverId: number };
-		result: TrackedPlugin[];
+	/** All managed artifacts for a server, optionally filtered by provider. */
+	"artifact:list": {
+		params: { serverId: number; provider?: string };
+		result: ServerArtifactRecord[];
 	};
-	/** Create or update a tracked plugin record. */
-	"db:trackPlugin": { params: TrackPluginParams; result: TrackedPlugin };
-	/** Delete a tracked plugin record; null when it did not exist. */
-	"db:deletePluginRecord": {
-		params: { projectId: string; versionId: string; serverId: number };
-		result: TrackedPlugin | null;
+	/** Create or update a managed artifact record. */
+	"artifact:track": {
+		params: TrackArtifactParams;
+		result: ServerArtifactRecord;
+	};
+	/** Delete a managed artifact record; null when it did not exist. */
+	"artifact:delete": {
+		params: {
+			provider: string;
+			artifactId: string;
+			versionId: string;
+			serverId: number;
+		};
+		result: ServerArtifactRecord | null;
+	};
+	/** Look up one identity link by its external id. */
+	"identity:getByExternal": {
+		params: { pluginId: string; externalId: string };
+		result: IdentityLinkRecord | null;
+	};
+	/** All identity links a Discord user holds for a plugin. */
+	"identity:getByDiscord": {
+		params: { pluginId: string; discordId: string };
+		result: IdentityLinkRecord[];
+	};
+	/** Create an identity link. */
+	"identity:link": {
+		params: LinkIdentityParams;
+		result: IdentityLinkRecord;
+	};
+	/** Remove an identity link; false when it did not exist. */
+	"identity:unlink": {
+		params: { pluginId: string; externalId: string };
+		result: boolean;
+	};
+	/** Update an identity link's metadata; null when it did not exist. */
+	"identity:updateMetadata": {
+		params: {
+			pluginId: string;
+			externalId: string;
+			metadata: Record<string, unknown>;
+		};
+		result: IdentityLinkRecord | null;
 	};
 	/** All server records. */
 	"db:getAllServers": { params: undefined; result: DbServer[] };
@@ -111,6 +165,18 @@ export type AppRequestMap = {
 		params: { user: string | { id: string }; serverId?: number };
 		result: PermissionValue;
 	};
+	/** A generic runtime snapshot of the online server bound to a port, or null.
+	 *  Used by game plugins that expose an inbound callback server. */
+	"server:getActiveByPort": {
+		params: { port: number };
+		result: {
+			id: number;
+			pluginId: string;
+			tag: string | null;
+			config: Record<string, unknown>;
+			settings: ServerSettings;
+		} | null;
+	};
 	/** Snapshot of the current global settings. */
 	"settings:get": { params: undefined; result: GlobalSettings };
 	/** Charge a user credits (full spendCredit flow incl. ticket selection). */
@@ -120,6 +186,26 @@ export type AppRequestMap = {
 	};
 	/** Read a whitelisted environment variable. */
 	"env:get": { params: { key: PluginEnvKey }; result: string | undefined };
+	/** Read a value from a plugin's namespaced state store. */
+	"store:get": {
+		params: { namespace: string; key: string };
+		result: unknown;
+	};
+	/** Read all values in a plugin's namespaced state store. */
+	"store:getAll": {
+		params: { namespace: string };
+		result: Record<string, unknown>;
+	};
+	/** Write a value to a plugin's namespaced state store. */
+	"store:set": {
+		params: { namespace: string; key: string; value: unknown };
+		result: void;
+	};
+	/** Delete a value from a plugin's namespaced state store. */
+	"store:delete": {
+		params: { namespace: string; key: string };
+		result: void;
+	};
 };
 
 /**
