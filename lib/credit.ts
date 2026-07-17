@@ -14,6 +14,7 @@ import {
 	type User,
 } from "discord.js";
 import { getUserById, newTransaction, setUserCredits } from "./db";
+import { appEvents } from "./events/appEvents";
 import {
 	orPerm,
 	comparePermission,
@@ -127,6 +128,13 @@ export async function setCredit({
 		timestamp: new Date(),
 	});
 	await setUserCredits(userId, credit);
+	appEvents.emit("creditChanged", {
+		userId,
+		change: credit - userCreditFetched.currentCredit,
+		newCredit: credit,
+		reason,
+		serverId,
+	});
 	return userCreditFetched.currentCredit;
 }
 
@@ -182,6 +190,13 @@ export async function changeCredit({
 		timestamp: new Date(),
 	});
 	await setUserCredits(userId, userCreditFetched.currentCredit + change);
+	appEvents.emit("creditChanged", {
+		userId,
+		change,
+		newCredit: userCreditFetched.currentCredit + change,
+		reason,
+		serverId,
+	});
 
 	return userCreditFetched.currentCredit + change;
 }

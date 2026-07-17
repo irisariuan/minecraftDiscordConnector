@@ -10,17 +10,17 @@ import {
 	type ChatInputCommandInteraction,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import type { ExecuteParams } from "../../../../lib/commandFile";
 import { existsSync } from "node:fs";
-import { selectServerById, updateServer } from "../../../../lib/db";
 import {
+	data,
+	downloadAndSave,
+	fetchVersionOptionsForLoader,
+	getPaperVersionBuild,
 	runPhasedInput,
+	safeJoin,
+	type ExecuteParams,
 	type PhasedPhase,
-} from "../../../../lib/component/phasedInput";
-import { fetchVersionOptionsForLoader } from "../../../../lib/serverLoader";
-import { getPaperVersionBuild } from "../../../../lib/serverInstance/jar";
-import { safeJoin } from "../../../../lib/utils";
-import { downloadAndSave } from "../../../../lib/utils/web";
+} from "../../../api";
 import {
 	checkPluginCompatibility,
 	buildCompatProjectEmbed,
@@ -120,7 +120,7 @@ export async function upgradeHandler(
 	const newVersion = phaseValues[0]!.version!;
 	const loaderVersionOverride = phaseValues[1]!.loaderversion?.trim() || null;
 
-	const dbServer = await selectServerById(serverId);
+	const dbServer = await data.request("db:getServerById", { id: serverId });
 	if (!dbServer) {
 		return interaction.editReply({
 			content: `❌ Server with ID \`${serverId}\` not found.`,
@@ -345,11 +345,14 @@ export async function upgradeHandler(
 
 	// ── Update DB record ────────────────────────────────────────────
 	try {
-		const updated = await updateServer(serverId, {
-			version: newVersion,
-			...(newStartupScript !== null && {
-				startupScript: newStartupScript,
-			}),
+		const updated = await data.request("db:updateServer", {
+			id: serverId,
+			data: {
+				version: newVersion,
+				...(newStartupScript !== null && {
+					startupScript: newStartupScript,
+				}),
+			},
 		});
 		await serverManager.addOrReloadServer(updated);
 	} catch (err) {

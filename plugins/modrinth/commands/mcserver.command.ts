@@ -1,6 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../../../lib/commandFile";
-import { PermissionFlags } from "../../../lib/permission";
+import { PermissionFlags, type CommandFile } from "../../api";
 
 import { createHandler, createSubcommandBuilder } from "./mcserver/create";
 import { upgradeHandler, upgradeSubcommandBuilder } from "./mcserver/upgrade";

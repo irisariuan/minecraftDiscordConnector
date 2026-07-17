@@ -1,10 +1,12 @@
 import { existsSync } from "node:fs";
 import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
-import type { CommandFile } from "../../../lib/commandFile";
-import { deletePluginRecord, getPluginsByServerId } from "../../../lib/db";
-import { sendPaginationMessage } from "../../../lib/pagination";
-import { getActivePlugins } from "../../../lib/serverInstance/plugin";
-import { trimTextWithSuffix } from "../../../lib/utils";
+import {
+	data,
+	getActivePlugins,
+	sendPaginationMessage,
+	trimTextWithSuffix,
+	type CommandFile,
+} from "../../api";
 import { sendSelectableActionMessage } from "../selectable";
 import {
 	downloadPluginFile,
@@ -53,7 +55,7 @@ export default {
 	async execute({ interaction, server }) {
 		// ── Phase 1: build enriched list ──────────────────────────────────
 		const [dbPlugins, diskPlugins] = await Promise.all([
-			getPluginsByServerId(server.id),
+			data.request("db:getPluginsByServerId", { serverId: server.id }),
 			getActivePlugins(server.config.pluginDir).catch(() => null),
 		]);
 
@@ -232,11 +234,12 @@ export default {
 						return newDownload;
 					}
 					// action === "delete"
-					return deletePluginRecord(
-						p.projectId,
-						p.versionId,
-						server.id,
-					)
+					return data
+						.request("db:deletePluginRecord", {
+							projectId: p.projectId,
+							versionId: p.versionId,
+							serverId: server.id,
+						})
 						.then(() => true)
 						.catch(() => false);
 				},

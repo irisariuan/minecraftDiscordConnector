@@ -8,20 +8,18 @@ import {
 	SlashCommandBuilder,
 	time,
 } from "discord.js";
-import type { CommandFile } from "../../../lib/commandFile";
 import {
-	createRequestComponent,
-	RequestComponentId,
-} from "../../../lib/component/request";
-import { deletePluginRecord, getPluginsByServerId } from "../../../lib/db";
-import { sendPaginationMessage } from "../../../lib/pagination";
-import {
-	orPerm,
 	comparePermission,
+	createRequestComponent,
+	data,
+	orPerm,
 	PermissionFlags,
-	readPermission,
-} from "../../../lib/permission";
-import { trimTextWithSuffix } from "../../../lib/utils";
+	RequestComponentId,
+	sendPaginationMessage,
+	trimTextWithSuffix,
+	type CommandFile,
+	type Server,
+} from "../../api";
 import {
 	downloadModpackFile,
 	downloadPluginFile,
@@ -35,7 +33,6 @@ import {
 	type PluginListVersionItem,
 	type PluginSearchQueryItem,
 } from "../types";
-import type { Server } from "../../../lib/server";
 import { offerDependencyInstall } from "./deps";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -100,10 +97,10 @@ export default {
 			interaction.options.getBoolean("skipcheck") ?? false;
 
 		const isModpack = contentType === "modpack";
-		const userPermission = await readPermission(
-			interaction.user,
-			server.id,
-		);
+		const userPermission = await data.request("permission:read", {
+			user: interaction.user,
+			serverId: server.id,
+		});
 		// ── Outer: Search results ─────────────────────────────────────────
 		let searchCollector: Awaited<ReturnType<typeof sendPaginationMessage>>;
 
@@ -341,7 +338,10 @@ async function selectVersionToDownload({
 						componentType: ComponentType.Button,
 						filter: async (i) =>
 							comparePermission(
-								await readPermission(i.user, server.id),
+								await data.request("permission:read", {
+									user: i.user,
+									serverId: server.id,
+								}),
 								PermissionFlags.downloadPlugin,
 							),
 						time: 1000 * 60 * 10,
@@ -423,7 +423,10 @@ async function selectVersionToDownload({
 			// Check for an existing installed version of the same project
 			let upgradeHandled = false;
 			if (selectedVersion?.project_id) {
-				const serverPlugins = await getPluginsByServerId(server.id);
+				const serverPlugins = await data.request(
+					"db:getPluginsByServerId",
+					{ serverId: server.id },
+				);
 				const existingRecord = serverPlugins.find(
 					(p) =>
 						p.projectId === selectedVersion.project_id &&
@@ -509,11 +512,11 @@ async function selectVersionToDownload({
 					) {
 						await rm(existingRecord.filePath).catch(() => {});
 					}
-					await deletePluginRecord(
-						existingRecord.projectId,
-						existingRecord.versionId,
-						server.id,
-					);
+					await data.request("db:deletePluginRecord", {
+						projectId: existingRecord.projectId,
+						versionId: existingRecord.versionId,
+						serverId: server.id,
+					});
 
 					await versionInteraction.editReply({
 						content: `Plugin upgraded from \`${existingLabel}\` → \`${newLabel}\` successfully! Restart the server to apply.`,
@@ -616,7 +619,10 @@ async function selectVersionToDownload({
 			}
 
 			if (selectedVersion) {
-				const installedPlugins = await getPluginsByServerId(server.id);
+				const installedPlugins = await data.request(
+					"db:getPluginsByServerId",
+					{ serverId: server.id },
+				);
 				const installedProjectIds = new Set(
 					installedPlugins.map((p) => p.projectId),
 				);

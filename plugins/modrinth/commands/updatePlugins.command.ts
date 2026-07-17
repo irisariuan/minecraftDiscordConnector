@@ -8,19 +8,17 @@ import {
 } from "discord.js";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import type { CommandFile } from "../../../lib/commandFile";
-import {
-	createRequestComponent,
-	RequestComponentId,
-} from "../../../lib/component/request";
-import { deletePluginRecord, getPluginsByServerId } from "../../../lib/db";
 import {
 	comparePermission,
+	createRequestComponent,
+	data,
+	formatFileSize,
 	orPerm,
 	PermissionFlags,
-	readPermission,
-} from "../../../lib/permission";
-import { formatFileSize, safeJoin } from "../../../lib/utils";
+	RequestComponentId,
+	safeJoin,
+	type CommandFile,
+} from "../../api";
 import { sendSelectableActionMessage, truncateList } from "../selectable";
 import {
 	downloadPluginFile,
@@ -48,7 +46,9 @@ export default {
 				"🔍 Checking for plugin updates — please wait… (elapsed 0s)",
 		});
 
-		const plugins = await getPluginsByServerId(server.id);
+		const plugins = await data.request("db:getPluginsByServerId", {
+			serverId: server.id,
+		});
 		let completed = 0;
 		// Keep only the most-recently updated record per projectId
 		const latestByProject = new Map<string, DbPlugin>();
@@ -253,7 +253,10 @@ export default {
 			// ── Permission gate / staff approval ──────────────────────────
 			onBeforeProcess: async (toProcess, msg) => {
 				const hasPermission = comparePermission(
-					await readPermission(interaction.user, server.id),
+					await data.request("permission:read", {
+						user: interaction.user,
+						serverId: server.id,
+					}),
 					PermissionFlags.downloadPlugin,
 				);
 
@@ -289,7 +292,10 @@ export default {
 						componentType: ComponentType.Button,
 						filter: async (i) =>
 							comparePermission(
-								await readPermission(i.user, server.id),
+								await data.request("permission:read", {
+									user: i.user,
+									serverId: server.id,
+								}),
 								PermissionFlags.downloadPlugin,
 							),
 						time: 15 * 60 * 1000,
@@ -359,11 +365,11 @@ export default {
 
 				// Remove the stale DB record
 				// (downloadPluginFile already upserted the new one)
-				await deletePluginRecord(
-					u.plugin.projectId,
-					u.plugin.versionId,
-					server.id,
-				);
+				await data.request("db:deletePluginRecord", {
+					projectId: u.plugin.projectId,
+					versionId: u.plugin.versionId,
+					serverId: server.id,
+				});
 
 				return true;
 			},

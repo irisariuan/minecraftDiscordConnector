@@ -1,5 +1,6 @@
 import { defaultSettings } from "../defaultSettings";
 import { getServerSettings, SettingType, upsertSetting } from "./db";
+import { appEvents } from "./events/appEvents";
 import type { Server, ServerManager } from "./server";
 
 const SETTINGS = `${process.cwd()}/data/settings.json`;
@@ -87,6 +88,7 @@ export function setSettings(
 			server.settings[k as keyof ServerSettings] = v;
 		}
 	}
+	appEvents.emit("settingsChanged", { changes, settings });
 }
 
 async function saveSettings(changes: Partial<GlobalSettings>) {

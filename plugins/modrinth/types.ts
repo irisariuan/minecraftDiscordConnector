@@ -1,4 +1,4 @@
-import type { getPluginsByServerId } from "../../lib/db";
+import type { TrackedPlugin } from "../api";
 
 export enum SideValue {
 	Required = "required",
@@ -169,7 +169,7 @@ export interface ListPluginVersionsProps {
 	featured?: boolean;
 }
 
-export type DbPlugin = Awaited<ReturnType<typeof getPluginsByServerId>>[number];
+export type DbPlugin = TrackedPlugin;
 
 // ─── .mrpack types ────────────────────────────────────────────────────────────
 

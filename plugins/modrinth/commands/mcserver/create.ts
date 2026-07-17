@@ -7,23 +7,19 @@ import {
 	type ChatInputCommandInteraction,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-	runPhasedInput,
-	type PhasedPhase,
-} from "../../../../lib/component/phasedInput";
-import {
-	fetchVersionOptionsForLoader,
-	KNOWN_LOADERS,
-} from "../../../../lib/serverLoader";
 import { existsSync } from "node:fs";
-import { getAllServers, createServer } from "../../../../lib/db";
 import {
-	getPaperProject,
+	data,
+	downloadAndSave,
+	fetchVersionOptionsForLoader,
 	findHighestAvailableVersion,
+	getPaperProject,
 	getPaperVersionBuild,
-} from "../../../../lib/serverInstance/jar";
-import { safeJoin } from "../../../../lib/utils";
-import { downloadAndSave } from "../../../../lib/utils/web";
+	KNOWN_LOADERS,
+	runPhasedInput,
+	safeJoin,
+	type PhasedPhase,
+} from "../../../api";
 import {
 	ensureDir,
 	getVanillaServerUrl,
@@ -38,7 +34,7 @@ import {
 	writeStartScript,
 } from "../../lib";
 import type { ServerType } from "../../types";
-import type { ExecuteParams } from "../../../../lib/commandFile";
+import type { ExecuteParams } from "../../../api";
 import { rm, writeFile } from "node:fs/promises";
 
 export function createSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
@@ -166,7 +162,7 @@ export async function createHandler(
 		.filter((p) => !isNaN(p) && p > 0 && p <= 65535);
 
 	// Check for duplicate server paths
-	const existing = await getAllServers();
+	const existing = await data.request("db:getAllServers");
 	if (existing.some((s) => s.path === serverDir)) {
 		return interaction.editReply({
 			content: `❌ A server with path ${inlineCode(serverDir)} is already registered.`,
@@ -334,7 +330,7 @@ export async function createHandler(
 	// ── Register in DB ──────────────────────────────────────────────
 	let newServer;
 	try {
-		newServer = await createServer({
+		newServer = await data.request("db:createServer", {
 			path: serverDir,
 			pluginPath: pluginDir,
 			version: mcVersion,

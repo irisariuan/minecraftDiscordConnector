@@ -1,5 +1,5 @@
 import { exists, glob, mkdir } from "node:fs/promises";
-import { getNextTimestamp } from "../../lib/utils";
+import { getNextTimestamp } from "../api";
 
 export default function run() {
 	console.log("Running daily scripts...");

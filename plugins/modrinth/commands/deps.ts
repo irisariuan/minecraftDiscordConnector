@@ -2,8 +2,7 @@ import {
 	ChatInputCommandInteraction,
 	MessageComponentInteraction,
 } from "discord.js";
-import type { Server } from "../../../lib/server";
-import { trimTextWithSuffix } from "../../../lib/utils";
+import { trimTextWithSuffix, type Server } from "../../api";
 import { downloadPluginFile, type ResolvedDependency } from "../lib";
 import { sendSelectableActionMessage } from "../selectable";
 

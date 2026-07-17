@@ -26,7 +26,12 @@ import { serverConfig } from "./lib/serverInstance/plugin/types";
 import { changeSettings, loadSettings, settings } from "./lib/settings";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
 import { getAllTickets, ticketNotificationManager } from "./lib/ticket";
-import { pluginEvents } from "./lib/pluginEvent";
+import { appEvents } from "./lib/events/appEvents";
+import { registerCoreDataHandlers } from "./lib/events/coreHandlers";
+
+// Data channels must exist before any plugin module is imported, since plugin
+// commands/scripts may call data.request() as soon as they execute.
+registerCoreDataHandlers();
 
 let enablePlugins = !process.argv.includes("--no-plugins");
 let commands = await loadCommands(enablePlugins);
@@ -351,7 +356,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			Promise.try(() =>
 				command.execute({ interaction, client, serverManager }),
 			).catch(errorHandler);
-			pluginEvents.emit("commandCalled", {
+			appEvents.emit("commandCalled", {
 				commandName,
 				interaction,
 				server: null,
@@ -432,7 +437,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		Promise.try(() =>
 			command.execute({ interaction, client, server, serverManager }),
 		).catch(errorHandler);
-		pluginEvents.emit("commandCalled", {
+		appEvents.emit("commandCalled", {
 			commandName,
 			interaction,
 			server,

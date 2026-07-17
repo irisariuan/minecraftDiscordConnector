@@ -12,7 +12,7 @@ import {
 	type MessageActionRowComponentBuilder,
 	type MessageComponentInteraction,
 } from "discord.js";
-import { trimTextWithSuffix } from "../../lib/utils";
+import { trimTextWithSuffix } from "../api";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 

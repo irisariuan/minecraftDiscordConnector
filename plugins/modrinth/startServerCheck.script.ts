@@ -1,4 +1,4 @@
-import { pluginEvents } from "../../lib/pluginEvent";
+import { events } from "../api";
 import { buildOutdatedPluginsEmbed, checkOutdatedPlugins } from "./lib";
 
 /**
@@ -6,7 +6,7 @@ import { buildOutdatedPluginsEmbed, checkOutdatedPlugins } from "./lib";
  * outdated-plugin check and post the result embed to the same channel.
  */
 export default function run() {
-	pluginEvents.on("commandCalled", async ({ commandName, interaction, server }) => {
+	events.on("commandCalled", async ({ commandName, interaction, server }) => {
 		if (commandName !== "startserver") return;
 		if (!server) return;
 

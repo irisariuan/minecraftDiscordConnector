@@ -2,18 +2,18 @@ import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { type Entry, fromBuffer } from "yauzl";
 import { EmbedBuilder, bold, inlineCode, italic } from "discord.js";
-import { upsertNewPlugin, getPluginsByServerId } from "../../lib/db";
-import type { Server } from "../../lib/server";
-import type { DbPlugin, RichUpdateEntry } from "./types";
 import {
+	createPathForPluginFile,
+	data,
 	ensureSuffix,
 	removeSuffix,
 	safeFetch,
 	safeJoin,
-	trimTextWithSuffix,
 	separate,
-} from "../../lib/utils";
-import { createPathForPluginFile } from "../../lib/serverInstance/plugin";
+	trimTextWithSuffix,
+	type Server,
+} from "../api";
+import type { DbPlugin, RichUpdateEntry } from "./types";
 import {
 	SideValue,
 	type ErrorResponse,
@@ -175,7 +175,9 @@ export async function checkPluginCompatibility(
 	newMcVersion: string,
 	loaderType: string,
 ): Promise<CompatProject[]> {
-	const dbPlugins = await getPluginsByServerId(serverId);
+	const dbPlugins = await data.request("db:getPluginsByServerId", {
+		serverId,
+	});
 	if (dbPlugins.length === 0) return [];
 
 	const results = await Promise.all(
@@ -225,7 +227,9 @@ export async function checkOutdatedPlugins(server: Server): Promise<{
 	outdated: RichUpdateEntry[];
 	failed: string[];
 }> {
-	const plugins = await getPluginsByServerId(server.id);
+	const plugins = await data.request("db:getPluginsByServerId", {
+		serverId: server.id,
+	});
 	if (plugins.length === 0) return { outdated: [], failed: [] };
 
 	// Keep only the most-recently updated record per projectId
@@ -739,28 +743,18 @@ export async function downloadPluginFile(
 	const res = await safeFetch(metadata.files[0].url);
 	if (!res?.ok) return { filename: null, newDownload: false };
 	const stream = createWriteStream(filePath);
-	const data = res.body;
-	if (!data) return { filename: null, newDownload: false };
-	for await (const chunk of data) {
+	const body = res.body;
+	if (!body) return { filename: null, newDownload: false };
+	for await (const chunk of body) {
 		stream.write(chunk);
 	}
 	stream.end();
 	console.log(`Downloaded ${metadata.files[0].filename}`);
-	await upsertNewPlugin({
-		create: {
-			projectId: metadata.project_id,
-			filePath,
-			versionId: versionId,
-			serverId: server.id,
-		},
-		update: { filePath, versionId: versionId },
-		where: {
-			projectId_versionId_serverId: {
-				versionId: versionId,
-				serverId: server.id,
-				projectId: metadata.project_id,
-			},
-		},
+	await data.request("db:trackPlugin", {
+		projectId: metadata.project_id,
+		versionId,
+		serverId: server.id,
+		filePath,
 	});
 	return { filename: metadata.files[0].filename, newDownload: true };
 }
@@ -1168,21 +1162,11 @@ export async function downloadModpackFile(
 		const { projectId, versionId: fileVersionId } =
 			parseMrpackFileIds(file);
 		promises.push(
-			upsertNewPlugin({
-				create: {
-					projectId,
-					versionId: fileVersionId,
-					filePath: destPath,
-					serverId: server.id,
-				},
-				update: { filePath: destPath, versionId: fileVersionId },
-				where: {
-					projectId_versionId_serverId: {
-						projectId,
-						versionId: fileVersionId,
-						serverId: server.id,
-					},
-				},
+			data.request("db:trackPlugin", {
+				projectId,
+				versionId: fileVersionId,
+				serverId: server.id,
+				filePath: destPath,
 			}).catch((err) => {
 				console.warn(
 					`[modpack] Failed to upsert DB record for ${file.path}: ${err}`,
