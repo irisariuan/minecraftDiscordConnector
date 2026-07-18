@@ -48,7 +48,7 @@ const lifecycle: Partial<ServerLifecycle> = {
 		// No connector API: generic timeout → force-kill.
 		if (apiPort === null) {
 			if (grace <= 0) {
-				return { success: await ctx.process.kill(0) };
+				return { success: await ctx.process.kill("SIGKILL") };
 			}
 			return {
 				success: true,
