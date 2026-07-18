@@ -69,7 +69,7 @@ export default {
 			)
 		) {
 			const { success, promise } = await server.stop({
-				grace: seconds * 20,
+				grace: seconds,
 			});
 			if (!success) {
 				await interaction.editReply({ content: "Failed to shutdown" });

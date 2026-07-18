@@ -43,7 +43,7 @@ const lifecycle: Partial<ServerLifecycle> = {
 		options: TerminateOptions,
 	): Promise<TerminateResult> {
 		const { apiPort } = mc(ctx);
-		const grace = Math.max(0, options.grace ?? 0);
+		const grace = Math.max(0, options.grace ?? 0) * 20; // minecraft plugin uses ticks (20 ticks = 1 second)
 
 		// No connector API: generic timeout → force-kill.
 		if (apiPort === null) {
@@ -54,9 +54,9 @@ const lifecycle: Partial<ServerLifecycle> = {
 				success: true,
 				promise: new Promise<void>((resolve) => {
 					setTimeout(async () => {
-					if (await ctx.process.isOnline(true)) {
-						await ctx.process.kill("SIGKILL");
-					}
+						if (await ctx.process.isOnline(true)) {
+							await ctx.process.kill("SIGKILL");
+						}
 						resolve();
 					}, grace);
 				}),
@@ -142,7 +142,8 @@ export default defineGamePlugin<MinecraftConfig>({
 		};
 	},
 	lifecycle: lifecycle as Partial<ServerLifecycle<MinecraftConfig>>,
-	capabilities: capabilities as unknown as ServerCapabilities<MinecraftConfig>,
+	capabilities:
+		capabilities as unknown as ServerCapabilities<MinecraftConfig>,
 	// Backward-compatible: create a default MC server from the legacy env vars
 	// when the database is empty. Returns null on a fresh multi-game install.
 	bootstrap: () => {
