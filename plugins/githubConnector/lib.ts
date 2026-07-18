@@ -1,13 +1,15 @@
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { createPathForPluginFile, createStore, safeFetch } from "../api";
+import { data, safeFetch, safeJoin } from "../api";
 
 // ─── Source repository ────────────────────────────────────────────────────────
 
 export const GITHUB_OWNER = "irisariuan";
 export const GITHUB_REPO = "discordMinecraftConnectorPlugin";
 export const GITHUB_SLUG = `${GITHUB_OWNER}/${GITHUB_REPO}`;
+
+/** Provider namespace under which the connector is tracked as a server artifact. */
+const PROVIDER = "github";
 
 const API_BASE = `https://api.github.com/repos/${GITHUB_SLUG}`;
 const USER_AGENT = `ipBotDiscord-githubConnector (+https://github.com/${GITHUB_SLUG})`;
@@ -19,8 +21,6 @@ interface GithubAsset {
 	browser_download_url: string;
 	id: number;
 	size: number;
-	/** Newer GitHub API returns e.g. "sha256:abc…"; may be absent on older releases. */
-	digest?: string | null;
 }
 
 interface GithubRelease {
@@ -31,31 +31,60 @@ interface GithubRelease {
 	assets: GithubAsset[];
 }
 
-// ─── Persistent per-server state ──────────────────────────────────────────────
+// ─── Install record (tracked via the generic artifact channels) ───────────────
 
-/** What we last installed for a given server. */
-export interface ConnectorState {
+/** What is currently installed for a server, derived from the artifact record. */
+export interface ConnectorInstall {
 	/** Release tag the installed jar came from (e.g. "v1.2.0"). */
 	tag: string;
-	/** Hex sha256 of the installed jar — the source of truth for updates. */
-	sha256: string;
 	/** File name of the installed asset. */
 	assetName: string;
-	/** GitHub asset id, for reference. */
-	assetId: number;
 	/** Absolute path of the installed jar. */
 	filePath: string;
-	/** Epoch ms of the last install/update. */
-	installedAt: number;
 }
 
-const store = createStore("githubConnector");
-const stateKey = (serverId: number) => `server:${serverId}`;
-
-export function getConnectorState(
+/** Read the tracked connector install for a server, or null. */
+export async function getInstalled(
 	serverId: number,
-): Promise<ConnectorState | null> {
-	return store.get<ConnectorState>(stateKey(serverId));
+): Promise<ConnectorInstall | null> {
+	const artifacts = await data.request("artifact:list", {
+		serverId,
+		provider: PROVIDER,
+	});
+	const record = artifacts.find((a) => a.artifactId === GITHUB_SLUG);
+	if (!record) return null;
+	const meta = (record.metadata ?? {}) as { assetName?: string };
+	return {
+		tag: record.versionId,
+		assetName: meta.assetName ?? "",
+		filePath: record.filePath,
+	};
+}
+
+/** Persist an install record, replacing any previous (different-tag) record. */
+async function recordInstall(
+	serverId: number,
+	tag: string,
+	filePath: string,
+	assetName: string,
+	prev: ConnectorInstall | null,
+): Promise<void> {
+	if (prev && prev.tag !== tag) {
+		await data.request("artifact:delete", {
+			provider: PROVIDER,
+			artifactId: GITHUB_SLUG,
+			versionId: prev.tag,
+			serverId,
+		});
+	}
+	await data.request("artifact:track", {
+		provider: PROVIDER,
+		artifactId: GITHUB_SLUG,
+		versionId: tag,
+		serverId,
+		filePath,
+		metadata: { assetName },
+	});
 }
 
 // ─── GitHub helpers ───────────────────────────────────────────────────────────
@@ -78,21 +107,10 @@ function pickJarAsset(release: GithubRelease): GithubAsset | null {
 	);
 }
 
-/** Extract the hex sha256 from an asset's `digest` field, when present. */
-function assetSha256(asset: GithubAsset): string | null {
-	if (!asset.digest) return null;
-	const [algo, hex] = asset.digest.split(":");
-	return algo === "sha256" && hex ? hex.toLowerCase() : null;
-}
-
-function sha256Hex(buf: Buffer): string {
-	return createHash("sha256").update(buf).digest("hex");
-}
-
 // ─── Update checking (no side effects) ────────────────────────────────────────
 
 export interface UpdateCheck {
-	installed: ConnectorState | null;
+	installed: ConnectorInstall | null;
 	latestTag: string | null;
 	assetName: string | null;
 	updateAvailable: boolean;
@@ -101,15 +119,12 @@ export interface UpdateCheck {
 }
 
 /**
- * Decide whether a newer connector build is available for `serverId`, without
- * downloading or installing anything.
- *
- * Uses the release asset's sha256 digest when GitHub provides it (exact,
- * content-based). Falls back to comparing the release tag when no digest is
- * exposed.
+ * Decide whether a newer connector build is available for `serverId`, by
+ * comparing the installed **release tag** against the latest release. No
+ * download or hashing is performed.
  */
 export async function checkForUpdate(serverId: number): Promise<UpdateCheck> {
-	const installed = await getConnectorState(serverId);
+	const installed = await getInstalled(serverId);
 	const release = await getLatestRelease();
 	if (!release) {
 		return {
@@ -148,29 +163,14 @@ export async function checkForUpdate(serverId: number): Promise<UpdateCheck> {
 			reason: "Tracked jar is missing on disk and will be reinstalled.",
 		};
 	}
-	const remoteHash = assetSha256(asset);
-	if (remoteHash) {
-		const available = remoteHash !== installed.sha256;
-		return {
-			installed,
-			latestTag: release.tag_name,
-			assetName: asset.name,
-			updateAvailable: available,
-			reason: available
-				? "Release file hash differs from the installed jar."
-				: "Installed jar hash matches the latest release.",
-		};
-	}
-	const available =
-		installed.tag !== release.tag_name ||
-		installed.assetName !== asset.name;
+	const available = installed.tag !== release.tag_name;
 	return {
 		installed,
 		latestTag: release.tag_name,
 		assetName: asset.name,
 		updateAvailable: available,
 		reason: available
-			? "Release tag differs (GitHub exposed no file hash to compare)."
+			? `Newer release available (${installed.tag} → ${release.tag_name}).`
 			: "Already on the latest release tag.",
 	};
 }
@@ -180,6 +180,7 @@ export async function checkForUpdate(serverId: number): Promise<UpdateCheck> {
 export type SyncStatus =
 	| "installed"
 	| "updated"
+	| "matched"
 	| "upToDate"
 	| "noRelease"
 	| "noAsset"
@@ -191,17 +192,18 @@ export interface SyncResult {
 	assetName?: string;
 	/** Previous tag, present when status is "updated". */
 	fromTag?: string;
-	sha256?: string;
 	message?: string;
 }
 
 /**
- * Ensure the newest connector jar from GitHub is installed in `pluginDir` for
- * `serverId`, tracking the installed version + hash.
+ * Ensure the latest connector jar is installed in `pluginDir` for `serverId`,
+ * tracking the installed **release tag**.
  *
- * The download is skipped entirely when the installed jar is already current
- * (decided by {@link checkForUpdate}'s logic), so this is cheap to call on
- * every startup / server start.
+ * Behaviour:
+ * - Already on the latest tag with the jar present → no-op (`upToDate`).
+ * - The exact release jar already sits in the directory (e.g. placed manually)
+ *   → adopt it and write the record without downloading (`matched`).
+ * - Otherwise → download, install, and record (`installed` / `updated`).
  *
  * @param force  Re-download and reinstall even if already up to date.
  */
@@ -216,26 +218,41 @@ export async function syncConnector(
 	const asset = pickJarAsset(release);
 	if (!asset) return { status: "noAsset", tag: release.tag_name };
 
-	const prev = await getConnectorState(serverId);
-	const remoteHash = assetSha256(asset);
-	const fileOnDisk = prev ? existsSync(prev.filePath) : false;
+	const prev = await getInstalled(serverId);
+	const filePath = safeJoin(pluginDir, asset.name);
 
-	// Fast path: up to date according to the hash (or tag) — no download.
-	if (!force && prev && fileOnDisk) {
-		const current = remoteHash
-			? remoteHash === prev.sha256
-			: prev.tag === release.tag_name && prev.assetName === asset.name;
-		if (current) {
-			return {
-				status: "upToDate",
-				tag: prev.tag,
-				assetName: prev.assetName,
-				sha256: prev.sha256,
-			};
-		}
+	// Already current — nothing to do.
+	if (
+		!force &&
+		prev &&
+		prev.tag === release.tag_name &&
+		existsSync(prev.filePath)
+	) {
+		return {
+			status: "upToDate",
+			tag: prev.tag,
+			assetName: prev.assetName,
+		};
 	}
 
-	// Download the asset.
+	// The latest release jar already exists on disk — adopt & record it.
+	if (!force && existsSync(filePath)) {
+		await recordInstall(
+			serverId,
+			release.tag_name,
+			filePath,
+			asset.name,
+			prev,
+		);
+		return {
+			status: "matched",
+			tag: release.tag_name,
+			assetName: asset.name,
+			fromTag: prev?.tag,
+		};
+	}
+
+	// Download and install.
 	const res = await safeFetch(asset.browser_download_url, {
 		headers: {
 			"User-Agent": USER_AGENT,
@@ -250,55 +267,31 @@ export async function syncConnector(
 		};
 	}
 	const buf = Buffer.from(await res.arrayBuffer());
-	const hash = sha256Hex(buf);
-
-	// Content-identical to what we already have: refresh bookkeeping only.
-	if (!force && prev && prev.sha256 === hash && fileOnDisk) {
-		if (prev.tag !== release.tag_name || prev.assetId !== asset.id) {
-			await store.set<ConnectorState>(stateKey(serverId), {
-				...prev,
-				tag: release.tag_name,
-				assetId: asset.id,
-			});
-		}
-		return {
-			status: "upToDate",
-			tag: release.tag_name,
-			assetName: asset.name,
-			sha256: hash,
-		};
-	}
 
 	// Remove the previous jar if the file name changed, to avoid duplicates.
-	if (
-		prev &&
-		prev.assetName !== asset.name &&
-		existsSync(prev.filePath)
-	) {
+	if (prev && prev.assetName !== asset.name && existsSync(prev.filePath)) {
 		await rm(prev.filePath).catch(() => {});
 	}
 
 	if (!existsSync(pluginDir)) {
 		await mkdir(pluginDir, { recursive: true });
 	}
-	const filePath = createPathForPluginFile(pluginDir, asset.name);
 	await writeFile(filePath, buf);
-
-	const newState: ConnectorState = {
-		tag: release.tag_name,
-		sha256: hash,
-		assetName: asset.name,
-		assetId: asset.id,
-		filePath,
-		installedAt: Date.now(),
-	};
-	await store.set<ConnectorState>(stateKey(serverId), newState);
+	await recordInstall(serverId, release.tag_name, filePath, asset.name, prev);
 
 	return {
 		status: prev ? "updated" : "installed",
 		tag: release.tag_name,
 		assetName: asset.name,
 		fromTag: prev?.tag,
-		sha256: hash,
 	};
+}
+
+/** Extract a Minecraft-style plugin directory from an opaque server config. */
+export function pluginDirOf(config: unknown): string | null {
+	if (config && typeof config === "object" && "pluginDir" in config) {
+		const value = (config as Record<string, unknown>).pluginDir;
+		return typeof value === "string" && value.length > 0 ? value : null;
+	}
+	return null;
 }

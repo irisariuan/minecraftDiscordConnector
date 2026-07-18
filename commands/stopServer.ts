@@ -51,9 +51,8 @@ export default {
 			});
 
 		if (
-			server.config.apiPort !== null &&
-			((await server.haveServerSideScheduledShutdown()) ||
-				server.haveLocalSideScheduledShutdown())
+			(await server.hasScheduledShutdown()) ||
+			server.haveLocalSideScheduledShutdown()
 		) {
 			return await interaction.followUp({
 				content:
@@ -69,7 +68,9 @@ export default {
 				PermissionFlags.stopServer,
 			)
 		) {
-			const { success, promise } = await server.stop(seconds * 20);
+			const { success, promise } = await server.stop({
+				grace: seconds * 20,
+			});
 			if (!success) {
 				await interaction.editReply({ content: "Failed to shutdown" });
 				return;
@@ -115,9 +116,9 @@ export default {
 				callerId: interaction.user.id,
 				description: displayString,
 				async onSuccess(approval, message) {
-					const { success, promise } = await server.stop(
-						seconds * 20,
-					);
+					const { success, promise } = await server.stop({
+						grace: seconds * 20,
+					});
 					if (!success)
 						return await message.edit({
 							content: "Failed to shutdown",

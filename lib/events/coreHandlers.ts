@@ -1,4 +1,4 @@
-import { canSpendCredit, spendCredit } from "../credit";
+import { canSpendCredit, refundCredit, spendCredit } from "../credit";
 import {
 	createIdentityLink,
 	createServer,
@@ -15,7 +15,10 @@ import {
 	upsertServerArtifact,
 } from "../db";
 import { CF_KEY, UPDATE_URL } from "../env";
-import { readPermission } from "../permission";
+import {
+	getUsersWithMatchedPermission,
+	readPermission,
+} from "../permission";
 import { ticketEffectManager } from "../ticket/effect";
 import {
 	storeDelete,
@@ -67,7 +70,11 @@ export function registerCoreDataHandlers() {
 
 	appEvents.handle("db:getAllServers", () => getAllServers());
 	appEvents.handle("db:getServerById", ({ id }) => selectServerById(id));
-	appEvents.handle("db:createServer", (data) => createServer(data));
+	appEvents.handle("db:createServer", async (data) => {
+		const server = await createServer(data);
+		appEvents.emit("serverCreated", { server });
+		return server;
+	});
 	appEvents.handle("db:updateServer", ({ id, data }) =>
 		updateServer(id, data),
 	);
@@ -84,6 +91,14 @@ export function registerCoreDataHandlers() {
 
 	appEvents.handle("credit:canSpend", ({ userId, cost }) =>
 		canSpendCredit(userId, cost),
+	);
+
+	appEvents.handle("credit:refund", async (params) => {
+		await refundCredit(params);
+	});
+
+	appEvents.handle("permission:getUsersWith", ({ permission }) =>
+		getUsersWithMatchedPermission(permission),
 	);
 
 	appEvents.handle("ticket:getActiveEffectTypes", ({ userId }) =>

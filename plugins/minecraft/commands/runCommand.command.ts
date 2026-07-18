@@ -5,20 +5,17 @@ import {
 	time,
 	userMention,
 } from "discord.js";
-import { buildInteractionFetcher, sendApprovalPoll } from "../lib/approval";
-import type { CommandFile } from "../lib/commandFile";
 import {
+	buildInteractionFetcher,
 	compareAllPermissions,
-	getUsersWithMatchedPermission,
+	data,
 	PermissionFlags,
-	readPermission,
-} from "../lib/permission";
-import {
-	parseCommandOutput,
-	runCommandOnServer,
-} from "../lib/serverInstance/request";
-import { sendMessagesToUsersById } from "../lib/utils";
-import { spendCredit } from "../lib/credit";
+	sendApprovalPoll,
+	sendMessagesToUsersById,
+	type CommandFile,
+} from "../../api";
+import type { MinecraftConfig } from "../config";
+import { parseCommandOutput, runCommandOnServer } from "../runtime/request";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -31,10 +28,7 @@ export default {
 				.setRequired(true),
 		)
 		.addBooleanOption((option) =>
-			option
-				.setName("poll")
-				.setDescription("Use poll")
-				.setRequired(false),
+			option.setName("poll").setDescription("Use poll").setRequired(false),
 		)
 		.addIntegerOption((option) =>
 			option
@@ -60,7 +54,8 @@ export default {
 				flags: MessageFlags.Ephemeral,
 			});
 		}
-		if (server.config.apiPort === null) {
+		const { apiPort } = server.getPluginConfig() as unknown as MinecraftConfig;
+		if (apiPort === null) {
 			return await interaction.followUp({
 				content: "Running commands is not supported on this server",
 				flags: MessageFlags.Ephemeral,
@@ -72,23 +67,23 @@ export default {
 		const capture = interaction.options.getInteger("capture") ?? 1000;
 		const timeout = interaction.options.getInteger("timeout");
 		const canRunCommand = compareAllPermissions(
-			await readPermission(interaction.user, server.id),
+			await data.request("permission:read", {
+				user: interaction.user,
+				serverId: server.id,
+			}),
 			[PermissionFlags.runCommand],
 		);
 
 		if (canRunCommand && force) {
 			const output = server.captureSomeOutput(capture);
-			const { success } = await runCommandOnServer(
-				server.config.apiPort,
-				command,
-			);
+			const { success } = await runCommandOnServer(apiPort, command);
 			await interaction.editReply(
 				parseCommandOutput((await output)?.join("\n") ?? null, success),
 			);
 		}
 		await interaction.deleteReply();
 		if (
-			!(await spendCredit({
+			!(await data.request("credit:spend", {
 				user: interaction.user,
 				channel: interaction.channel,
 				cost: server.settings.newRunCommandPollFee,
@@ -110,18 +105,14 @@ export default {
 				callerId: interaction.user.id,
 				description: `Command: \`${command}\` (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
-					if (!server.config.apiPort)
-						return await message.reply(
-							"Running commands is not supported on this server",
-						);
 					const output = server.captureSomeOutput(capture);
 					const { success } = await runCommandOnServer(
-						server.config.apiPort,
+						apiPort,
 						approval.content,
 					);
-					const users = await getUsersWithMatchedPermission(
-						PermissionFlags.receiveNotification,
-					);
+					const users = await data.request("permission:getUsersWith", {
+						permission: PermissionFlags.receiveNotification,
+					});
 					if (users) {
 						sendMessagesToUsersById(
 							client,
@@ -149,5 +140,6 @@ export default {
 	ephemeral: true,
 	features: {
 		requireStartedServer: true,
+		requiredCapabilities: ["runCommand"],
 	},
 } satisfies CommandFile<true>;

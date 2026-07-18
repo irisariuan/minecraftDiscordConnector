@@ -26,7 +26,10 @@ export default {
 				content: "Server is offline",
 				flags: MessageFlags.Ephemeral,
 			});
-		if (server.config.apiPort === null) {
+		if (
+			!server.hasCapability("cancelScheduledShutdown") &&
+			!server.haveLocalSideScheduledShutdown()
+		) {
 			return await interaction.followUp({
 				content:
 					"Server-side scheduled shutdown is not supported on this server",
@@ -34,7 +37,7 @@ export default {
 			});
 		}
 		if (
-			!(await server.haveServerSideScheduledShutdown()) &&
+			!(await server.hasScheduledShutdown()) &&
 			!server.haveLocalSideScheduledShutdown()
 		)
 			return await interaction.followUp({
@@ -52,7 +55,7 @@ export default {
 				server.cancelLocalScheduledShutdown();
 				success = true;
 			}
-			if (await server.cancelServerSideShutdown()) {
+			if (await server.cancelScheduledShutdown()) {
 				success = true;
 			}
 			if (!success)
@@ -92,7 +95,7 @@ export default {
 						server.cancelLocalScheduledShutdown();
 						success = true;
 					}
-					if (await server.cancelServerSideShutdown()) {
+					if (await server.cancelScheduledShutdown()) {
 						success = true;
 					}
 					if (!success)

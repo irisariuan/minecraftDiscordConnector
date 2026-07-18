@@ -145,6 +145,7 @@ export type {
 	ParsedLogLine,
 	PlayerInfo,
 	PluginStateStore,
+	ServerBootstrap,
 	ServerCapabilities,
 	ServerLifecycle,
 	ServerProcessHandle,
@@ -164,6 +165,10 @@ export {
 	createRequestComponent,
 	RequestComponentId,
 } from "../lib/component/request";
+export {
+	buildInteractionFetcher,
+	sendApprovalPoll,
+} from "../lib/approval";
 export { sendPaginationMessage } from "../lib/pagination";
 export {
 	compareAllPermissions,
@@ -180,6 +185,7 @@ export {
 	removeSuffix,
 	safeFetch,
 	safeJoin,
+	sendMessagesToUsersById,
 	separate,
 	trimTextWithSuffix,
 } from "../lib/utils";

@@ -11,7 +11,7 @@ import {
 import type { CommandFile } from "../lib/commandFile";
 import { createServer, getAllServers } from "../lib/db";
 import { andPerm, PermissionFlags } from "../lib/permission";
-import { serverGameTypes } from "../lib/server";
+import { getAllGamePlugins, getGamePlugin } from "../lib/plugin/registry";
 import {
 	buildEditModalContentRow,
 	collectInputFromModal,
@@ -19,14 +19,10 @@ import {
 } from "../lib/component/modal";
 import { parsePorts, buildServerEmbed } from "../lib/component/serverBrowser";
 import { runPhasedInput, type PhasedPhase } from "../lib/component/phasedInput";
-import {
-	inferModType,
-	fetchVersionOptionsForLoader,
-	KNOWN_LOADERS,
-} from "../lib/serverLoader";
 import { readFile, writeFile } from "node:fs/promises";
 import { joinPathWithBase } from "../lib/utils";
 import type { DbServer } from "../lib/db";
+import type { Prisma } from "../generated/prisma/client";
 import { sendServerBrowser } from "../lib/serverBrowser";
 
 export default {
@@ -65,11 +61,19 @@ export default {
 		// ─── CREATE ───────────────────────────────────────────────────────
 		if (sub === "create") {
 			// ── Step 1: collect data via phased wizard ─────────────────────
+			const gamePlugins = getAllGamePlugins();
+			if (gamePlugins.length === 0) {
+				return await interaction.editReply({
+					content:
+						"❌ No game plugins are loaded, so no server can be created. Enable a game plugin first.",
+				});
+			}
+
 			const phases: PhasedPhase[] = [
 				{
-					label: "Paths",
+					label: "Server",
 					description:
-						"Set the absolute paths for the server and its plugins directory.",
+						"Set the absolute path to the server directory.",
 					fields: [
 						{
 							id: "path",
@@ -77,55 +81,35 @@ export default {
 							description: "Absolute path to the server folder",
 							required: true,
 						},
-						{
-							id: "pluginPath",
-							label: "Plugin Directory Path",
-							description: "Absolute path to the plugins folder",
-							required: true,
-						},
 					],
 				},
 				{
-					label: "Game Config",
+					label: "Game",
 					description:
-						"Choose the loader and version. Mod type is inferred automatically from the loader.",
+						"Choose the game plugin. Game-specific configuration can be set afterwards via that plugin's commands (e.g. /mcserver for Minecraft).",
 					fields: [
 						{
-							id: "loaderType",
-							label: "Loader Type",
+							id: "pluginId",
+							label: "Game Plugin",
 							type: "select" as const,
-							selectOptions: KNOWN_LOADERS.map((l) => ({
-								label: l,
-								value: l,
+							selectOptions: gamePlugins.map((p) => ({
+								label: p.displayName,
+								value: p.id,
 							})),
 							required: true,
 						},
 						{
-							id: "gameType",
-							label: "Game Type",
-							type: "select" as const,
-							selectOptions: serverGameTypes.map((t) => ({
-								label: t,
-								value: t,
-							})),
-							required: true,
-						},
-						{
-							id: "version",
-							label: "Game Version",
-							type: "select" as const,
-							loadOptions: (values) =>
-								fetchVersionOptionsForLoader(
-									values.loaderType ?? "",
-								),
-							required: true,
+							id: "runtimeVersion",
+							label: "Runtime Version (optional)",
+							description: "Generic version label, if any",
+							required: false,
 						},
 					],
 				},
 				{
 					label: "Network & Identity",
 					description:
-						"Set the port(s), optional API port, and an optional display tag.",
+						"Set the port(s) and an optional display tag.",
 					fields: [
 						{
 							id: "port",
@@ -135,13 +119,6 @@ export default {
 							placeholder: "25565",
 							required: false,
 							defaultValue: "25565",
-						},
-						{
-							id: "apiPort",
-							label: "API Port",
-							description: "Leave empty for none",
-							placeholder: "e.g. 8080",
-							required: false,
 						},
 						{
 							id: "tag",
@@ -155,12 +132,6 @@ export default {
 						const portRaw = values.port?.trim() || "25565";
 						if (!parsePorts(portRaw)) {
 							return "Invalid port value(s). Provide a comma-separated list of integers between 1 and 65535.";
-						}
-						if (
-							values.apiPort?.trim() &&
-							isNaN(parseInt(values.apiPort.trim(), 10))
-						) {
-							return "API Port must be a valid integer.";
 						}
 						return null;
 					},
@@ -177,32 +148,28 @@ export default {
 
 			// ── Parse collected values ─────────────────────────────────────
 			const path = phaseValues[0]!.path!;
-			const pluginPath = phaseValues[0]!.pluginPath!;
-			const loaderType = phaseValues[1]!.loaderType!;
-			const version = phaseValues[1]!.version!;
-			const modType = inferModType(loaderType);
-			const gameType = phaseValues[1]!.gameType!;
+			const pluginId = phaseValues[1]!.pluginId!;
+			const runtimeVersion =
+				phaseValues[1]!.runtimeVersion?.trim() || null;
 			const portRaw = phaseValues[2]!.port?.trim() || "25565";
-			const apiPortRaw = phaseValues[2]!.apiPort?.trim() || "";
 			const tagRaw = phaseValues[2]!.tag?.trim() || "";
 
 			const ports = parsePorts(portRaw)!;
-			const apiPort = apiPortRaw ? parseInt(apiPortRaw, 10) : null;
 			const tag = tagRaw || null;
+
+			// Seed config from the selected plugin's defaults (if any).
+			const config = getGamePlugin(pluginId)?.defaultConfig?.() ?? {};
 
 			// ── Review before creation ─────────────────────────────────────
 			const previewServer: DbServer = {
 				id: 0,
 				tag,
 				path,
-				pluginPath,
-				version,
-				loaderType,
-				modType,
 				port: ports,
-				apiPort,
-				gameType,
 				startupScript: null,
+				pluginId,
+				runtimeVersion,
+				config: config as DbServer["config"],
 			};
 
 			const reviewMessage = await interaction.editReply({
@@ -252,27 +219,16 @@ export default {
 				});
 				return;
 			}
-			if (existing.some((s) => s.pluginPath === pluginPath)) {
-				await interaction.editReply({
-					content: `❌ A server with plugin path ${inlineCode(pluginPath)} already exists.`,
-					embeds: [],
-					components: [],
-				});
-				return;
-			}
 
 			// ── Create & load ──────────────────────────────────────────────
 			const newServer = await createServer({
 				path,
-				pluginPath,
-				version,
-				loaderType,
-				modType,
 				tag,
 				port: ports,
-				apiPort,
-				gameType,
 				startupScript: null,
+				pluginId,
+				runtimeVersion,
+				config: config as Prisma.InputJsonValue,
 			});
 
 			await serverManager.addOrReloadServer(newServer);

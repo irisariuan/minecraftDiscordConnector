@@ -2,11 +2,16 @@ import { existsSync } from "node:fs";
 import { MessageFlags, SlashCommandBuilder, time } from "discord.js";
 import {
 	data,
-	getActivePlugins,
 	sendPaginationMessage,
 	trimTextWithSuffix,
 	type CommandFile,
 } from "../../api";
+import {
+	deleteModrinthPlugin,
+	getActivePlugins,
+	getModrinthPlugins,
+	mcConfig,
+} from "../mc";
 import { sendSelectableActionMessage } from "../selectable";
 import {
 	downloadPluginFile,
@@ -55,8 +60,8 @@ export default {
 	async execute({ interaction, server }) {
 		// ── Phase 1: build enriched list ──────────────────────────────────
 		const [dbPlugins, diskPlugins] = await Promise.all([
-			data.request("db:getPluginsByServerId", { serverId: server.id }),
-			getActivePlugins(server.config.pluginDir).catch(() => null),
+			getModrinthPlugins(server.id),
+			getActivePlugins(mcConfig(server).pluginDir).catch(() => null),
 		]);
 
 		const uniqueProjectIds = [
@@ -234,12 +239,7 @@ export default {
 						return newDownload;
 					}
 					// action === "delete"
-					return data
-						.request("db:deletePluginRecord", {
-							projectId: p.projectId,
-							versionId: p.versionId,
-							serverId: server.id,
-						})
+					return deleteModrinthPlugin(server.id, p.projectId, p.versionId)
 						.then(() => true)
 						.catch(() => false);
 				},
@@ -270,8 +270,8 @@ export default {
 		const missingDeps = await resolveProjectDependencies(
 			Array.from(installedProjectIds),
 			installedProjectIds,
-			server.config.minecraftVersion,
-			[server.config.loaderType],
+			mcConfig(server).minecraftVersion,
+			[mcConfig(server).loaderType],
 		);
 		await interaction.editReply({ content: "" }); // clear the "checking" message
 
@@ -284,6 +284,6 @@ export default {
 	},
 
 	features: {
-		supportedPlatforms: ["minecraft"],
+		requiredCapabilities: ["managePackages"],
 	},
 } satisfies CommandFile<true>;

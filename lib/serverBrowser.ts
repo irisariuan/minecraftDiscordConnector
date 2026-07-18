@@ -6,6 +6,7 @@ import {
 	MessageFlags,
 } from "discord.js";
 import { readFile, writeFile } from "node:fs/promises";
+import type { Prisma } from "../generated/prisma/client";
 import { collectInputFromModal } from "./component/modal";
 import {
 	ServerBrowserAction,
@@ -19,7 +20,8 @@ import {
 	buildConfirmDeleteRow,
 } from "./component/serverBrowser";
 import { getAllServers, updateServer, deleteServer } from "./db";
-import { ServerManager, serverGameTypes } from "./server";
+import type { ServerManager } from "./server";
+import { getGamePlugin } from "./plugin/registry";
 import { joinPathWithBase } from "./utils";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -124,22 +126,16 @@ export async function sendServerBrowser(
 					.getTextInputValue(ServerBrowserInputId.TAG)
 					.trim();
 				const newTag = tagRaw === "" ? null : tagRaw;
-				const newVersion = submit.fields
-					.getTextInputValue(ServerBrowserInputId.VERSION)
+				const newPluginId = submit.fields
+					.getTextInputValue(ServerBrowserInputId.PLUGIN_ID)
 					.trim();
-				const newLoaderType = submit.fields
-					.getTextInputValue(ServerBrowserInputId.LOADER_TYPE)
-					.trim();
-				const newModType = submit.fields
-					.getTextInputValue(ServerBrowserInputId.MOD_TYPE)
-					.trim();
-				const newGameType = submit.fields
-					.getTextInputValue(ServerBrowserInputId.GAME_TYPE)
+				const runtimeRaw = submit.fields
+					.getTextInputValue(ServerBrowserInputId.RUNTIME_VERSION)
 					.trim();
 
-				if (!serverGameTypes.includes(newGameType as never)) {
+				if (!getGamePlugin(newPluginId)) {
 					await interaction.editReply({
-						content: `❌ Invalid game type ${inlineCode(newGameType)}. Allowed: ${serverGameTypes.join(", ")}.`,
+						content: `❌ Unknown game plugin ${inlineCode(newPluginId)}. It is not loaded/registered.`,
 						embeds: [],
 						components: [],
 					});
@@ -148,10 +144,8 @@ export async function sendServerBrowser(
 
 				const updatedServer = await updateServer(server.id, {
 					tag: newTag,
-					version: newVersion,
-					loaderType: newLoaderType,
-					modType: newModType,
-					gameType: newGameType,
+					pluginId: newPluginId,
+					runtimeVersion: runtimeRaw === "" ? null : runtimeRaw,
 				});
 
 				await serverManager.addOrReloadServer(updatedServer);
@@ -179,14 +173,11 @@ export async function sendServerBrowser(
 				const newPath = submit.fields
 					.getTextInputValue(ServerBrowserInputId.PATH)
 					.trim();
-				const newPluginPath = submit.fields
-					.getTextInputValue(ServerBrowserInputId.PLUGIN_PATH)
-					.trim();
 				const portRaw = submit.fields
 					.getTextInputValue(ServerBrowserInputId.PORT)
 					.trim();
-				const apiPortRaw = submit.fields
-					.getTextInputValue(ServerBrowserInputId.API_PORT)
+				const configRaw = submit.fields
+					.getTextInputValue(ServerBrowserInputId.CONFIG)
 					.trim();
 
 				const newPorts = parsePorts(portRaw);
@@ -200,17 +191,14 @@ export async function sendServerBrowser(
 					return;
 				}
 
-				const apiPortNum =
-					apiPortRaw === "" || apiPortRaw === "-1"
-						? null
-						: parseInt(apiPortRaw, 10);
-				if (
-					apiPortRaw !== "" &&
-					apiPortRaw !== "-1" &&
-					isNaN(apiPortNum as number)
-				) {
+				let parsedConfig: Prisma.InputJsonValue;
+				try {
+					parsedConfig = (
+						configRaw === "" ? {} : JSON.parse(configRaw)
+					) as Prisma.InputJsonValue;
+				} catch {
 					await interaction.editReply({
-						content: "❌ Invalid API port value.",
+						content: "❌ Plugin config must be valid JSON.",
 						embeds: [],
 						components: [],
 					});
@@ -219,9 +207,8 @@ export async function sendServerBrowser(
 
 				const updatedServer = await updateServer(server.id, {
 					path: newPath,
-					pluginPath: newPluginPath,
 					port: newPorts,
-					apiPort: apiPortNum,
+					config: parsedConfig,
 				});
 
 				await serverManager.addOrReloadServer(updatedServer);

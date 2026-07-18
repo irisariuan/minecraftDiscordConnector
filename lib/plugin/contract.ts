@@ -205,6 +205,20 @@ export type ConfigValidation<Config> =
 	| { ok: true; config: Config }
 	| { ok: false; error: string };
 
+/**
+ * A default server a plugin wants created when the database has none — used for
+ * backward-compatible, env-driven bootstrap. The core stays game-agnostic: it
+ * simply persists whatever generic fields + opaque `config` the plugin returns.
+ */
+export interface ServerBootstrap {
+	path: string;
+	port: number[];
+	tag?: string | null;
+	startupScript?: string | null;
+	runtimeVersion?: string | null;
+	config: Record<string, unknown>;
+}
+
 // ─── The game plugin itself ────────────────────────────────────────────────────
 
 /**
@@ -227,6 +241,11 @@ export interface GamePlugin<Config = Record<string, unknown>> {
 	lifecycle?: Partial<ServerLifecycle<Config>>;
 	/** Optional capabilities. */
 	capabilities?: ServerCapabilities<Config>;
+	/**
+	 * Optional env-driven default server, created only when the database has no
+	 * servers at all. Return null to opt out.
+	 */
+	bootstrap?(): ServerBootstrap | null;
 }
 
 /** Identity helper so plugin authors get full type-checking on their export. */

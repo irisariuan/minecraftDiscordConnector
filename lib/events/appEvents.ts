@@ -1,5 +1,9 @@
 import type { ChatInputCommandInteraction, Client } from "discord.js";
-import type { PartialTransaction, SpendCreditParams } from "../credit";
+import type {
+	PartialTransaction,
+	refundCredit,
+	SpendCreditParams,
+} from "../credit";
 import type {
 	createServer,
 	DbServer,
@@ -54,6 +58,11 @@ export interface ServerStatusChangedPayload {
 	anyOnline: boolean;
 }
 
+/** Fired right after a new server record is created. */
+export interface ServerCreatedPayload {
+	server: DbServer;
+}
+
 export type AppEventMap = {
 	/** Emitted after any slash command starts executing. */
 	commandCalled: CommandCalledPayload;
@@ -64,6 +73,8 @@ export type AppEventMap = {
 	/** Emitted when the "any server online" state flips (plugins may open/close
 	 *  their own callback servers in response). */
 	serverStatusChanged: ServerStatusChangedPayload;
+	/** Emitted right after a new server record is created. */
+	serverCreated: ServerCreatedPayload;
 };
 
 // ─── Request/response (data access) channels ──────────────────────────────────
@@ -199,6 +210,16 @@ export type AppRequestMap = {
 			silent?: boolean;
 		};
 		result: boolean;
+	};
+	/** Refund credit to a user (with notification). */
+	"credit:refund": {
+		params: Parameters<typeof refundCredit>[0];
+		result: void;
+	};
+	/** Discord user ids holding a given permission, or null. */
+	"permission:getUsersWith": {
+		params: { permission: number };
+		result: string[] | null;
 	};
 	/** The effect-type strings a user currently has active (e.g. "free_play"). */
 	"ticket:getActiveEffectTypes": {

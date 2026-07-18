@@ -1,5 +1,6 @@
 import { input } from "@inquirer/prompts";
 import { createServer } from "../lib/db";
+import type { Prisma } from "../generated/prisma/client";
 import { join, relative, resolve } from "path";
 import { safeJoin } from "../lib/utils";
 import { existsSync } from "fs";
@@ -78,24 +79,25 @@ const ports = rawPorts
 try {
 	const server = await createServer({
 		path,
-		pluginPath: pluginsPath,
 		port: ports,
-		apiPort,
-		loaderType,
-		modType,
-		version,
 		tag: tag ?? null,
+		pluginId: "minecraft",
+		runtimeVersion: version,
+		config: {
+			loaderType,
+			modType,
+			minecraftVersion: version,
+			pluginDir: pluginsPath,
+			apiPort,
+		} as Prisma.InputJsonValue,
 	});
 
 	console.log(`Server created successfully with ID: ${server.id}`);
 	console.log(`Path: ${server.path}`);
-	console.log(`Plugin Path: ${server.pluginPath}`);
 	console.log(`Ports: ${server.port.join(", ")}`);
-	console.log(`Loader Type: ${server.loaderType}`);
-	console.log(`Mod Type: ${server.modType}`);
-	console.log(`Version: ${server.version}`);
+	console.log(`Game Plugin: ${server.pluginId}`);
+	console.log(`Runtime Version: ${server.runtimeVersion ?? "none"}`);
 	if (server.tag) console.log(`Tag: ${server.tag}`);
-	if (server.apiPort) console.log(`API Port: ${server.apiPort}`);
 } catch (error) {
 	console.error("Error creating server:", error);
 }

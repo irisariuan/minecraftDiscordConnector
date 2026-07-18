@@ -474,7 +474,11 @@ export class ServerManager {
 	getAllTagPairs() {
 		const result: TagPair[] = [];
 		for (const [id, server] of this.servers.entries()) {
-			result.push({ id, tag: server.config.tag });
+			result.push({
+				id,
+				tag: server.config.tag,
+				pluginId: server.pluginId,
+			});
 		}
 		return result;
 	}
@@ -622,6 +626,8 @@ function registerServerRuntimeHandlers(manager: ServerManager, client: Client) {
 export interface TagPair {
 	id: number;
 	tag: string | null;
+	/** The game plugin that owns the server — used to disambiguate selection. */
+	pluginId: string;
 }
 
 async function exitServer(client: Client, server: Server) {

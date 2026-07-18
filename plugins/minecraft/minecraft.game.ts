@@ -143,6 +143,20 @@ export default defineGamePlugin<MinecraftConfig>({
 	},
 	lifecycle: lifecycle as Partial<ServerLifecycle<MinecraftConfig>>,
 	capabilities: capabilities as unknown as ServerCapabilities<MinecraftConfig>,
+	// Backward-compatible: create a default MC server from the legacy env vars
+	// when the database is empty. Returns null on a fresh multi-game install.
+	bootstrap: () => {
+		const config = envMinecraftConfig();
+		const serverDir = process.env.SERVER_DIR;
+		if (!config || !serverDir) return null;
+		return {
+			path: serverDir,
+			port: [Number(process.env.SERVER_PORT ?? "25565")],
+			tag: process.env.SERVER_TAG ?? "Default Server",
+			runtimeVersion: config.minecraftVersion,
+			config: config as unknown as Record<string, unknown>,
+		};
+	},
 });
 
 // Referenced so `Ctx` is exported-usable by sibling command modules.

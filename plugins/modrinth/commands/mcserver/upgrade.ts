@@ -14,13 +14,16 @@ import { existsSync } from "node:fs";
 import {
 	data,
 	downloadAndSave,
-	fetchVersionOptionsForLoader,
-	getPaperVersionBuild,
 	runPhasedInput,
 	safeJoin,
 	type ExecuteParams,
 	type PhasedPhase,
 } from "../../../api";
+import {
+	fetchVersionOptionsForLoader,
+	getPaperVersionBuild,
+	mcConfig,
+} from "../../mc";
 import {
 	checkPluginCompatibility,
 	buildCompatProjectEmbed,
@@ -86,7 +89,7 @@ export async function upgradeHandler(
 							? null
 							: serverManager.getServer(sid);
 						return fetchVersionOptionsForLoader(
-							sv?.config.loaderType ?? "",
+							sv ? mcConfig(sv).loaderType : "",
 						);
 					},
 					required: true,
@@ -134,7 +137,8 @@ export async function upgradeHandler(
 		});
 	}
 
-	const serverType = dbServer.loaderType as ServerType;
+	const dbConfig = (dbServer.config ?? {}) as Record<string, unknown>;
+	const serverType = dbConfig.loaderType as ServerType;
 	const serverTag = dbServer.tag ?? `Server #${dbServer.id}`;
 	const serverDir = dbServer.path;
 
@@ -348,7 +352,8 @@ export async function upgradeHandler(
 		const updated = await data.request("db:updateServer", {
 			id: serverId,
 			data: {
-				version: newVersion,
+				runtimeVersion: newVersion,
+				config: { ...dbConfig, minecraftVersion: newVersion },
 				...(newStartupScript !== null && {
 					startupScript: newStartupScript,
 				}),
