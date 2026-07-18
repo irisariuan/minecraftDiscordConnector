@@ -54,9 +54,9 @@ const lifecycle: Partial<ServerLifecycle> = {
 				success: true,
 				promise: new Promise<void>((resolve) => {
 					setTimeout(async () => {
-						if (await ctx.process.isOnline(true)) {
-							await ctx.process.kill(0);
-						}
+					if (await ctx.process.isOnline(true)) {
+						await ctx.process.kill("SIGKILL");
+					}
 						resolve();
 					}, grace);
 				}),
