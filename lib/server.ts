@@ -349,7 +349,7 @@ export class Server {
 		this.waitingToShutdown = true;
 		const graceMs = Math.max(0, options.grace ?? 0);
 		if (graceMs <= 0) {
-			const stopped = await this.forceStop(0);
+			const stopped = await this.forceStop("SIGKILL");
 			this.waitingToShutdown = false;
 			return { success: stopped, promise: this.instance?.exited };
 		}
