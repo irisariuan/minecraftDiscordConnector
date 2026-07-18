@@ -360,7 +360,7 @@ export class Server {
 					if (
 						this.waitingToShutdown &&
 						this.instance?.exitCode === null &&
-						(await this.forceStop(0))
+						(await this.forceStop("SIGKILL"))
 					) {
 						console.log("Server process forcefully stopped");
 					}
