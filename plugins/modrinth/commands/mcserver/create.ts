@@ -11,15 +11,17 @@ import { existsSync } from "node:fs";
 import {
 	data,
 	downloadAndSave,
+	runPhasedInput,
+	safeJoin,
+	type PhasedPhase,
+} from "../../../api";
+import {
 	fetchVersionOptionsForLoader,
 	findHighestAvailableVersion,
 	getPaperProject,
 	getPaperVersionBuild,
 	KNOWN_LOADERS,
-	runPhasedInput,
-	safeJoin,
-	type PhasedPhase,
-} from "../../../api";
+} from "../../mc";
 import {
 	ensureDir,
 	getVanillaServerUrl,
@@ -332,15 +334,18 @@ export async function createHandler(
 	try {
 		newServer = await data.request("db:createServer", {
 			path: serverDir,
-			pluginPath: pluginDir,
-			version: mcVersion,
-			loaderType,
-			modType,
 			tag: tag ?? null,
 			port: ports,
-			apiPort: null,
-			gameType: "minecraft",
 			startupScript: startupScript ?? null,
+			pluginId: "minecraft",
+			runtimeVersion: mcVersion,
+			config: {
+				loaderType,
+				modType,
+				minecraftVersion: mcVersion,
+				pluginDir,
+				apiPort: null,
+			},
 		});
 	} catch (err) {
 		return interaction.editReply({

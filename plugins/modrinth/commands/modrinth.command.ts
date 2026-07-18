@@ -27,6 +27,7 @@ import {
 	resolveProjectDependencies,
 	searchPlugins,
 } from "../lib";
+import { deleteModrinthPlugin, getModrinthPlugins, mcConfig } from "../mc";
 import { sendSelectableActionMessage } from "../selectable";
 import {
 	ProjectType,
@@ -122,7 +123,7 @@ export default {
 										? {}
 										: {
 												versions: [
-													server.config
+													mcConfig(server)
 														.minecraftVersion,
 												],
 											}),
@@ -133,10 +134,10 @@ export default {
 										? {}
 										: {
 												categories: [
-													server.config.loaderType,
+													mcConfig(server).loaderType,
 												],
 												versions: [
-													server.config
+													mcConfig(server)
 														.minecraftVersion,
 												],
 											}),
@@ -152,11 +153,11 @@ export default {
 
 			formatter: (plugin) => {
 				const usable = isModpack
-					? plugin.versions.includes(server.config.minecraftVersion)
+					? plugin.versions.includes(mcConfig(server).minecraftVersion)
 					: usableOnServer(
 							plugin,
-							server.config.minecraftVersion,
-							server.config.loaderType,
+							mcConfig(server).minecraftVersion,
+							mcConfig(server).loaderType,
 						);
 				return {
 					name: plugin.title,
@@ -235,7 +236,7 @@ export default {
 	),
 
 	features: {
-		supportedPlatforms: ["minecraft"],
+		requiredCapabilities: ["managePackages"],
 	},
 } satisfies CommandFile<true>;
 
@@ -267,8 +268,8 @@ async function selectVersionToDownload({
 				skipCheck
 					? {}
 					: {
-							loaders: [server.config.loaderType],
-							game_versions: [server.config.minecraftVersion],
+							loaders: [mcConfig(server).loaderType],
+							game_versions: [mcConfig(server).minecraftVersion],
 						},
 			);
 			return (versions ?? []).filter(
@@ -279,8 +280,8 @@ async function selectVersionToDownload({
 		formatter: (version) => {
 			const compatible =
 				version.game_versions.includes(
-					server.config.minecraftVersion,
-				) && version.loaders.includes(server.config.loaderType);
+					mcConfig(server).minecraftVersion,
+				) && version.loaders.includes(mcConfig(server).loaderType);
 			return {
 				name: version.version_number,
 				value: [
@@ -407,8 +408,8 @@ async function selectVersionToDownload({
 				const deps = await resolveProjectDependencies(
 					result.projectIds,
 					new Set(result.projectIds),
-					server.config.minecraftVersion,
-					[server.config.loaderType],
+					mcConfig(server).minecraftVersion,
+					[mcConfig(server).loaderType],
 				);
 				await offerDependencyInstall(versionInteraction, server, deps);
 				return true;
@@ -423,10 +424,7 @@ async function selectVersionToDownload({
 			// Check for an existing installed version of the same project
 			let upgradeHandled = false;
 			if (selectedVersion?.project_id) {
-				const serverPlugins = await data.request(
-					"db:getPluginsByServerId",
-					{ serverId: server.id },
-				);
+				const serverPlugins = await getModrinthPlugins(server.id);
 				const existingRecord = serverPlugins.find(
 					(p) =>
 						p.projectId === selectedVersion.project_id &&
@@ -512,11 +510,7 @@ async function selectVersionToDownload({
 					) {
 						await rm(existingRecord.filePath).catch(() => {});
 					}
-					await data.request("db:deletePluginRecord", {
-						projectId: existingRecord.projectId,
-						versionId: existingRecord.versionId,
-						serverId: server.id,
-					});
+					await deleteModrinthPlugin(server.id, existingRecord.projectId, existingRecord.versionId);
 
 					await versionInteraction.editReply({
 						content: `Plugin upgraded from \`${existingLabel}\` → \`${newLabel}\` successfully! Restart the server to apply.`,
@@ -619,18 +613,15 @@ async function selectVersionToDownload({
 			}
 
 			if (selectedVersion) {
-				const installedPlugins = await data.request(
-					"db:getPluginsByServerId",
-					{ serverId: server.id },
-				);
+				const installedPlugins = await getModrinthPlugins(server.id);
 				const installedProjectIds = new Set(
 					installedPlugins.map((p) => p.projectId),
 				);
 				const deps = await resolveProjectDependencies(
 					[selectedVersion.project_id],
 					installedProjectIds,
-					server.config.minecraftVersion,
-					[server.config.loaderType],
+					mcConfig(server).minecraftVersion,
+					[mcConfig(server).loaderType],
 				);
 				await offerDependencyInstall(versionInteraction, server, deps);
 			}

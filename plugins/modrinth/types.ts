@@ -1,4 +1,4 @@
-import type { TrackedPlugin } from "../api";
+import type { ModrinthPlugin } from "./mc";
 
 export enum SideValue {
 	Required = "required",
@@ -169,7 +169,7 @@ export interface ListPluginVersionsProps {
 	featured?: boolean;
 }
 
-export type DbPlugin = TrackedPlugin;
+export type DbPlugin = ModrinthPlugin;
 
 // ─── .mrpack types ────────────────────────────────────────────────────────────
 

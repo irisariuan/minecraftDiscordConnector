@@ -7,22 +7,17 @@ import {
 	SlashCommandBuilder,
 } from "discord.js";
 import { basename } from "node:path";
-import type { CommandFile } from "../lib/commandFile";
-import {
-	createRequestComponent,
-	RequestComponentId,
-} from "../lib/component/request";
-import { getPluginsByServerId } from "../lib/db";
 import {
 	comparePermission,
+	createRequestComponent,
+	data,
 	orPerm,
 	PermissionFlags,
-	readPermission,
-} from "../lib/permission";
-import {
-	getActivePlugins,
-	removePluginByFileName,
-} from "../lib/serverInstance/plugin";
+	RequestComponentId,
+	type CommandFile,
+} from "../../api";
+import type { MinecraftConfig } from "../config";
+import { getActivePlugins, removePluginByFileName } from "../runtime/pluginDir";
 
 const CONFIRM_ID = "deleteallplugins_confirm";
 const CANCEL_ID = "deleteallplugins_cancel";
@@ -52,6 +47,7 @@ export default {
 	requireServer: true,
 
 	async execute({ interaction, server }) {
+		const { pluginDir } = server.getPluginConfig() as unknown as MinecraftConfig;
 		const includeUntracked =
 			interaction.options.getBoolean("include_untracked") ?? false;
 
@@ -61,8 +57,11 @@ export default {
 		});
 
 		const [diskFiles, dbPlugins] = await Promise.all([
-			getActivePlugins(server.config.pluginDir).catch(() => null),
-			getPluginsByServerId(server.id),
+			getActivePlugins(pluginDir).catch(() => null),
+			data.request("artifact:list", {
+				serverId: server.id,
+				provider: "modrinth",
+			}),
 		]);
 
 		if (diskFiles === null) {
@@ -72,7 +71,6 @@ export default {
 		}
 
 		// ── Phase 2: cross-reference disk vs DB ───────────────────────────────
-		// Key: bare filename on disk (no extension). Value: tracked in DB?
 		const dbFileNames = new Set(
 			dbPlugins
 				.map((p) => (p.filePath ? basename(p.filePath) : null))
@@ -114,7 +112,7 @@ export default {
 			.setTitle("⚠️ Delete All Plugins")
 			.setColor(0xe74c3c)
 			.setDescription(
-				`This will permanently delete **${toDelete.length}** plugin file${toDelete.length !== 1 ? "s" : ""} from \`${server.config.pluginDir}\`.${untrackedNote}`,
+				`This will permanently delete **${toDelete.length}** plugin file${toDelete.length !== 1 ? "s" : ""} from \`${pluginDir}\`.${untrackedNote}`,
 			)
 			.addFields(
 				{
@@ -149,7 +147,10 @@ export default {
 
 		// ── Phase 4: permission gate ──────────────────────────────────────────
 		const hasPermission = comparePermission(
-			await readPermission(interaction.user, server.id),
+			await data.request("permission:read", {
+				user: interaction.user,
+				serverId: server.id,
+			}),
 			PermissionFlags.deletePlugin,
 		);
 
@@ -213,7 +214,10 @@ export default {
 					componentType: ComponentType.Button,
 					filter: async (i) =>
 						comparePermission(
-							await readPermission(i.user, server.id),
+							await data.request("permission:read", {
+								user: i.user,
+								serverId: server.id,
+							}),
 							PermissionFlags.deletePlugin,
 						),
 					time: 15 * 60 * 1000,
@@ -250,7 +254,7 @@ export default {
 		const results = await Promise.all(
 			toDelete.map(async (name) => ({
 				name,
-				ok: await removePluginByFileName(server.config.pluginDir, name),
+				ok: await removePluginByFileName(pluginDir, name),
 			})),
 		);
 

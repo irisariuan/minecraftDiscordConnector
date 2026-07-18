@@ -1,6 +1,7 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
-import { getActivePlugins } from "../lib/serverInstance/plugin";
+import type { CommandFile } from "../../api";
+import type { MinecraftConfig } from "../config";
+import { getActivePlugins } from "../runtime/pluginDir";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -10,7 +11,8 @@ export default {
 	requireServer: true,
 
 	async execute({ interaction, server }) {
-		const activePlugins = await getActivePlugins(server.config.pluginDir);
+		const { pluginDir } = server.getPluginConfig() as unknown as MinecraftConfig;
+		const activePlugins = await getActivePlugins(pluginDir);
 
 		if (activePlugins === null) {
 			await interaction.followUp({

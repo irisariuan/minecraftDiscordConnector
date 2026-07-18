@@ -238,13 +238,12 @@ export function setActivity(
 	client: Client,
 	online: boolean,
 	suspended: boolean,
-	minecraftVersion: string,
+	/** Generic server label (e.g. its tag or game id) shown in the presence. */
+	label: string,
 ) {
 	client.user?.setActivity({
 		name: `${
-			online
-				? `Running Minecraft Server ${minecraftVersion}`
-				: "Server offline"
+			online ? `Running Server ${label}` : "Server offline"
 		}${suspended ? " (Suspending)" : "(Public)"}`,
 		type: ActivityType.Custom,
 	});

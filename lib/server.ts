@@ -1,33 +1,38 @@
 import { spawn, type Subprocess } from "bun";
 import type { Client } from "discord.js";
 import { EventEmitter } from "node:events";
-import { join } from "node:path";
-import { stripVTControlCharacters } from "node:util";
 import type { Approval } from "./approval";
 import { CacheItem } from "./cache";
 import { changeCredit, sendCreditNotification } from "./credit";
 import { getAllServers, getUserAccessibleServerIds } from "./db";
-import { type ServerConfig } from "./serverInstance/plugin/types";
-import { type LogLine } from "./serverInstance/request";
-import express, { type Express } from "express";
-import { Server as HTTPServer } from "http";
+import { appEvents } from "./events/appEvents";
+import {
+	defaultParseOutput,
+	type CapabilityName,
+	type GenericServerConfig,
+	type ParsedLogLine,
+	type PluginStateStore,
+	type ServerLifecycle,
+	type ServerRuntimeContext,
+	type TerminateOptions,
+	type TerminateResult,
+} from "./plugin/contract";
+import {
+	requireGamePlugin,
+	type RegisteredGamePlugin,
+} from "./plugin/registry";
+import {
+	storeDelete,
+	storeGet,
+	storeGetAll,
+	storeSet,
+} from "./pluginStore";
 import { loadServerSettings, type ServerSettings } from "./settings";
 import { SuspendingEventEmitter } from "./suspend";
-import { createDecodeWritableStream, isTrueValue, safeFetch } from "./utils";
-import { initApiServer } from "./serverInstance/apiServer";
+import { createDecodeWritableStream, isTrueValue } from "./utils";
 import { defaultSettings } from "../defaultSettings";
 
-if (
-	!process.env.SERVER_DIR ||
-	!(await Bun.file(join(process.env.SERVER_DIR, "start.sh")).exists())
-)
-	throw new Error("SERVER_DIR environment variable is not set");
-
-const serverTypeRef = {
-	INFO: "info",
-	WARN: "warn",
-	ERROR: "error",
-} as const;
+// ─── Generic server message stream ─────────────────────────────────────────────
 
 class ServerMessageEmitter extends EventEmitter {
 	emitMessage(message: string) {
@@ -47,30 +52,44 @@ class ServerMessageEmitter extends EventEmitter {
 interface CreateServerOptions {
 	shutdownAllowedTime?: number;
 	defaultSuspending?: boolean;
-	config: ServerConfig;
+	/** Generic, game-agnostic runtime config. */
+	config: GenericServerConfig;
 	serverId: number;
 	settings: Partial<ServerSettings>;
-	gameType: ServerGameType;
-	startupScript?: string;
+	/** The game plugin that owns this server. */
+	pluginId: string;
+	/** Plugin-specific configuration (validated lazily by the plugin). */
+	pluginConfig: unknown;
 }
-export const serverGameTypes = ["minecraft", "hytale", "unknown"] as const;
-export type ServerGameType = (typeof serverGameTypes)[number];
 
+/**
+ * A game-neutral wrapper around one managed server process.
+ *
+ * The core owns generic process handling (spawn, force-kill, status, stdout
+ * capture, console input, cleanup). Everything game-specific — how to launch,
+ * how to gracefully stop, how to parse output, plus optional capabilities like
+ * running in-game commands — is delegated to the server's {@link GamePlugin}
+ * through {@link ServerLifecycle}/`ServerCapabilities`, with core defaults used
+ * for any hook a plugin does not override.
+ */
 export class Server {
-	private instance: Subprocess<"ignore", "pipe", "inherit"> | null;
+	private instance: Subprocess<"pipe", "pipe", "inherit"> | null;
 	private waitingToShutdown: boolean;
+	private manager: ServerManager | null = null;
+	private resolvedPlugin: RegisteredGamePlugin | null = null;
+	private validatedConfig: Record<string, unknown> | null = null;
+	private readonly rawConfig: unknown;
+
 	isOnline: CacheItem<boolean>;
 	serverMessageEmitter: ServerMessageEmitter;
-	outputLines: LogLine[];
+	outputLines: ParsedLogLine[];
 	shutdownAllowedTime: number;
 	timeouts: NodeJS.Timeout[];
 	suspendingEvent: SuspendingEventEmitter;
 	approvalList: Map<string, Approval>;
 	settings: ServerSettings;
-	gameType: ServerGameType;
-	startupScript?: string;
-	paymentManager: PaymentManager;
-	readonly config: ServerConfig;
+	readonly config: GenericServerConfig;
+	readonly pluginId: string;
 	readonly id: number;
 
 	constructor({
@@ -80,31 +99,114 @@ export class Server {
 		serverId,
 		config,
 		settings,
-		gameType,
-		startupScript,
+		pluginId,
+		pluginConfig,
 	}: CreateServerOptions) {
 		this.instance = null;
-		this.gameType = gameType;
-		this.startupScript = startupScript;
 		this.outputLines = [];
 		this.timeouts = [];
 		this.approvalList = new Map();
 		this.config = config;
+		this.pluginId = pluginId;
+		this.rawConfig = pluginConfig;
 		this.id = serverId;
 		this.settings = { ...defaultSettings, ...settings };
 		this.serverMessageEmitter = new ServerMessageEmitter();
 		this.suspendingEvent = new SuspendingEventEmitter(defaultSuspending);
-		this.paymentManager = new PaymentManager();
 		this.isOnline = new CacheItem<boolean>(false, {
 			interval: 1000 * 5,
 			ttl: 1000 * 5,
-			updateMethod: async () => {
-				return this.instance?.exitCode === null;
-			},
+			updateMethod: async () => this.instance?.exitCode === null,
 		});
 		this.waitingToShutdown = false;
 		this.shutdownAllowedTime = shutdownAllowedTime ?? 3000;
 	}
+
+	attachManager(manager: ServerManager) {
+		this.manager = manager;
+	}
+
+	// ── Plugin resolution ────────────────────────────────────────────────────
+
+	/** Resolve (and cache) the owning game plugin, throwing if it is missing. */
+	private plugin(): RegisteredGamePlugin {
+		return (this.resolvedPlugin ??= requireGamePlugin(
+			this.pluginId,
+			this.id,
+		));
+	}
+
+	/** Validate + cache this server's plugin config at the plugin boundary. */
+	private pluginConfig(): Record<string, unknown> {
+		if (this.validatedConfig) return this.validatedConfig;
+		const result = this.plugin().validateConfig(this.rawConfig);
+		if (!result.ok) {
+			throw new Error(
+				`Invalid configuration for server #${this.id} (plugin "${this.pluginId}"): ${result.error}`,
+			);
+		}
+		return (this.validatedConfig = result.config as Record<
+			string,
+			unknown
+		>);
+	}
+
+	/** The effective lifecycle: core defaults overlaid with plugin overrides. */
+	private lifecycle(): ServerLifecycle {
+		return { ...this.coreDefaults(), ...(this.plugin().lifecycle ?? {}) };
+	}
+
+	private context(): ServerRuntimeContext {
+		return {
+			serverId: this.id,
+			generic: this.config,
+			config: this.pluginConfig(),
+			process: this.processHandle(),
+			store: this.storeHandle(),
+		};
+	}
+
+	/** True when the owning plugin declares the named capability. */
+	hasCapability(name: CapabilityName): boolean {
+		return Boolean(this.plugin().capabilities?.[name]);
+	}
+
+	/** The validated plugin config (for read-only inspection by callers). */
+	getPluginConfig(): Record<string, unknown> {
+		return this.pluginConfig();
+	}
+
+	// ── Generic process handle handed to plugin hooks ────────────────────────
+
+	private processHandle() {
+		return {
+			spawn: (command: string[], options?: { cwd?: string }) =>
+				this.doSpawn(command, options),
+			kill: (signal?: number | NodeJS.Signals) => this.forceStop(signal),
+			isOnline: async (useFresh?: boolean) =>
+				(await this.isOnline.getData(useFresh)) ?? false,
+			sendConsoleInput: (line: string) => this.sendConsoleInput(line),
+			pushLine: (line: ParsedLogLine) => {
+				this.outputLines.push(line);
+			},
+			onOutput: (listener: (chunk: string) => void) =>
+				this.serverMessageEmitter.onMessage(listener),
+			getOutputLines: () => this.outputLines,
+		};
+	}
+
+	private storeHandle(): PluginStateStore {
+		const ns = this.pluginId;
+		return {
+			get: <T>(key: string) => storeGet(ns, key) as Promise<T | null>,
+			getAll: <T = unknown>() =>
+				storeGetAll(ns) as Promise<Record<string, T>>,
+			set: <T>(key: string, value: T) => storeSet(ns, key, value),
+			delete: (key: string) => storeDelete(ns, key),
+		};
+	}
+
+	// ── Generic output capture ───────────────────────────────────────────────
 
 	captureNextLineOfOutput() {
 		if (!this.instance) return null;
@@ -138,126 +240,37 @@ export class Server {
 		});
 	}
 
-	async start(serverManager: ServerManager) {
-		if (this.instance || (await this.isOnline.getData(true))) return null;
-		this.instance = spawn(["sh", this.startupScript ?? "./start.sh"], {
-			cwd: this.config.serverDir,
-			stdin: "ignore",
-			stdout: "pipe",
-			onExit: (subprocess, exitCode, signalCode, error) => {
-				console.log(
-					`Server process exited with code ${exitCode} and signal ${signalCode}`,
-				);
-				if (error) {
-					console.error(`Error: ${error}`);
-				}
-				this.cleanup();
-			},
-		});
-		this.isOnline.setData(true);
-		serverManager.checkServerStatus();
-		this.paymentManager.setActive(true);
-
-		this.instance.stdout.pipeTo(
-			createDecodeWritableStream((chunk) => {
-				console.log(`[Minecraft Server] ${chunk}`);
-				this.serverMessageEmitter.emitMessage(chunk);
-				const unformattedChunk = stripVTControlCharacters(chunk);
-				const [timestamp, level] = unformattedChunk
-					.match(/(?<=\[).+?(?=\])/)
-					?.at(0)
-					?.split(" ") ?? [null, null];
-				const textContent =
-					unformattedChunk.match(/(?<=\[.+\]: ).+/)?.[0] ??
-					unformattedChunk;
-				this.outputLines.push({
-					timestamp: timestamp ?? null,
-					type:
-						serverTypeRef[level as keyof typeof serverTypeRef] ??
-						"unknown",
-					message: textContent,
-				});
-			}),
-		);
-		this.instance.exited.then(() => {
-			serverManager.checkServerStatus();
-			this.paymentManager.setActive(false);
-		});
-		return this.instance.pid;
+	/** Write one line to the process stdin (generic console passthrough). */
+	sendConsoleInput(line: string): boolean {
+		const inst = this.instance;
+		if (!inst || inst.exitCode !== null) return false;
+		inst.stdin.write(line.endsWith("\n") ? line : `${line}\n`);
+		inst.stdin.flush();
+		return true;
 	}
 
-	async forceStop(exitCode: number | NodeJS.Signals = "SIGKILL") {
+	// ── Public lifecycle (delegates to the plugin, falls back to defaults) ────
+
+	async start(manager: ServerManager): Promise<number | null> {
+		this.manager = manager;
+		if (this.instance || (await this.isOnline.getData(true))) return null;
+		return this.lifecycle().launch(this.context());
+	}
+
+	async stop(options: TerminateOptions = {}): Promise<TerminateResult> {
+		return this.lifecycle().terminate(this.context(), options);
+	}
+
+	async forceStop(
+		signal: number | NodeJS.Signals = "SIGKILL",
+	): Promise<boolean> {
 		if (this.instance?.exitCode === null) {
-			this.instance?.kill(exitCode);
+			this.instance?.kill(signal);
 			await this.instance?.exited;
 			this.waitingToShutdown = false;
 			return true;
 		}
 		return false;
-	}
-
-	async stop(tick: number) {
-		if (this.waitingToShutdown || !(await this.isOnline.getData(true))) {
-			console.log(
-				this.waitingToShutdown
-					? "Already waiting to shutdown"
-					: "Server is already offline",
-			);
-			return { success: false };
-		}
-		this.waitingToShutdown = true;
-		if (this.config.apiPort === null) {
-			return {
-				success: true,
-				promise: new Promise<void>((r) => {
-					setTimeout(
-						async () => {
-							if (this.instance?.exitCode !== null) return;
-							if (
-								this.waitingToShutdown &&
-								(await this.forceStop(0))
-							) {
-								console.log(
-									"Server process forcefully stopped",
-								);
-							}
-							this.waitingToShutdown = false;
-							r();
-						},
-						(tick * 1000) / 20,
-					);
-				}),
-			};
-		}
-		const response = await safeFetch(
-			`http://localhost:${this.config.apiPort}/shutdown`,
-			{
-				body: JSON.stringify({ tick }),
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-			},
-		);
-		if (!response) {
-			console.error("Failed to fetch shutdown response");
-			return { success: false };
-		}
-		const { success } = (await response.json()) as { success: boolean };
-		if (!success) {
-			console.error("Failed to schedule shutdown");
-			return { success: false };
-		}
-
-		this.waitingToShutdown = false;
-		if (tick <= 0) {
-			return { success: true, promise: this.instance?.exited };
-		}
-
-		const promise = this.raceShutdown(
-			(tick / 20) * 1000 + this.shutdownAllowedTime,
-		);
-		return { promise, success };
 	}
 
 	async raceShutdown(ms: number) {
@@ -267,9 +280,7 @@ export class Server {
 					console.log("Server process forcefully stopped");
 				}
 				const index = this.timeouts.findIndex((t) => t === timeout);
-				if (index !== -1) {
-					this.timeouts.splice(index, 1);
-				}
+				if (index !== -1) this.timeouts.splice(index, 1);
 				r();
 			}, ms);
 			this.timeouts.push(timeout);
@@ -277,96 +288,129 @@ export class Server {
 		return Promise.race([promise, this.instance?.exited]);
 	}
 
-	async haveServerSideScheduledShutdown() {
-		const response = await safeFetch(
-			`http://localhost:${this.config.apiPort}/shuttingDown`,
-		).catch();
-		if (!response) return false;
-		const { result } = (await response.json()) as { result: boolean };
-		return result;
-	}
 	haveLocalSideScheduledShutdown() {
 		return this.timeouts.length > 0;
 	}
 
 	cancelLocalScheduledShutdown() {
 		this.waitingToShutdown = false;
-		for (const timeout of this.timeouts) {
-			clearTimeout(timeout);
-		}
+		for (const timeout of this.timeouts) clearTimeout(timeout);
 		this.timeouts = [];
 	}
 
-	async cancelServerSideShutdown() {
-		if (
-			this.config.apiPort === null ||
-			!(await this.haveServerSideScheduledShutdown())
-		)
-			return false;
-		const response = await safeFetch(
-			`http://localhost:${this.config.apiPort}/cancelShutdown`,
-		);
-		if (!response) return false;
-		const { success } = (await response.json()) as { success: boolean };
-		if (success) this.waitingToShutdown = false;
-		return success;
+	/** Whether the owning plugin reports a server-side scheduled shutdown. */
+	async hasScheduledShutdown(): Promise<boolean> {
+		const cap = this.plugin().capabilities?.hasScheduledShutdown;
+		return cap ? cap(this.context()) : false;
 	}
 
-	/**
-	 * @param identifier Player name or uuid, depending on `usingPlayerName`
-	 * @param otp One time password generated by server
-	 * @param usingPlayerName Whether the identifier is player name or uuid, default to true (player name)
-	 * @returns Registered uuid if successful, null otherwise
-	 */
-	async register(identifier: string, otp: string, usingPlayerName = true) {
-		if (
-			this.config.apiPort === null ||
-			!(await this.isOnline.getData(true))
-		)
-			return null;
-		const response = await safeFetch(
-			`http://localhost:${this.config.apiPort}/register`,
-			{
-				method: "POST",
-				body: usingPlayerName
-					? JSON.stringify({ playerName: identifier, otp })
-					: JSON.stringify({ uuid: identifier, otp }),
-			},
-		);
-		if (!response?.ok) return null;
-		const jsonObject = await response.json().catch(() => null);
-		if (!jsonObject) return null;
-		const { uuid }: { uuid: string } = jsonObject;
-		return uuid;
-	}
-	async registered(uuid: string) {
-		if (
-			this.config.apiPort === null ||
-			!(await this.isOnline.getData(true))
-		)
-			return false;
-		const response = await safeFetch(
-			`http://localhost:${this.config.apiPort}/registered`,
-			{
-				method: "POST",
-				body: JSON.stringify({ uuid }),
-			},
-		);
-		return response?.ok ?? false;
+	/** Ask the owning plugin to cancel a server-side scheduled shutdown. */
+	async cancelScheduledShutdown(): Promise<boolean> {
+		const cap = this.plugin().capabilities?.cancelScheduledShutdown;
+		return cap ? cap(this.context()) : false;
 	}
 
 	cleanup() {
-		console.log("Cleaning up server process");
+		console.log(`Cleaning up server process #${this.id}`);
 		this.instance = null;
 		this.isOnline.setData(false);
 		this.waitingToShutdown = false;
 		this.outputLines = [];
+		try {
+			this.lifecycle().cleanup(this.context());
+		} catch (err) {
+			console.error(`Plugin cleanup failed for server #${this.id}:`, err);
+		}
+	}
+
+	// ── Core default lifecycle implementations ────────────────────────────────
+
+	private coreDefaults(): ServerLifecycle {
+		return {
+			launch: (ctx) =>
+				ctx.process.spawn(ctx.generic.startCommand, {
+					cwd: ctx.generic.serverDir,
+				}),
+			terminate: (_ctx, options) => this.defaultTerminate(options),
+			forceTerminate: (_ctx, signal) => this.forceStop(signal),
+			probeStatus: () =>
+				Promise.resolve(this.instance?.exitCode === null),
+			parseOutput: defaultParseOutput,
+			cleanup: () => {},
+		};
+	}
+
+	private async defaultTerminate(
+		options: TerminateOptions,
+	): Promise<TerminateResult> {
+		if (this.waitingToShutdown || !(await this.isOnline.getData(true))) {
+			return { success: false };
+		}
+		this.waitingToShutdown = true;
+		const graceMs = Math.max(0, options.grace ?? 0);
+		if (graceMs <= 0) {
+			const stopped = await this.forceStop("SIGKILL");
+			this.waitingToShutdown = false;
+			return { success: stopped, promise: this.instance?.exited };
+		}
+		return {
+			success: true,
+			promise: new Promise<void>((r) => {
+				const timeout = setTimeout(async () => {
+					if (
+						this.waitingToShutdown &&
+						this.instance?.exitCode === null &&
+						(await this.forceStop("SIGKILL"))
+					) {
+						console.log("Server process forcefully stopped");
+					}
+					this.waitingToShutdown = false;
+					r();
+				}, graceMs);
+				this.timeouts.push(timeout);
+			}),
+		};
+	}
+
+	/** Spawn the process and wire generic stdout capture through the plugin's parser. */
+	private async doSpawn(
+		command: string[],
+		options?: { cwd?: string },
+	): Promise<number | null> {
+		if (this.instance || (await this.isOnline.getData(true))) return null;
+		const parseOutput = this.lifecycle().parseOutput;
+		const instance = spawn(command, {
+			cwd: options?.cwd ?? this.config.serverDir,
+			stdin: "pipe",
+			stdout: "pipe",
+			onExit: (_subprocess, exitCode, signalCode, error) => {
+				console.log(
+					`Server #${this.id} process exited with code ${exitCode} and signal ${signalCode}`,
+				);
+				if (error) console.error(`Error: ${error}`);
+				this.cleanup();
+			},
+		}) as unknown as Subprocess<"pipe", "pipe", "inherit">;
+		this.instance = instance;
+		this.isOnline.setData(true);
+		this.manager?.checkServerStatus();
+
+		instance.stdout.pipeTo(
+			createDecodeWritableStream((chunk) => {
+				console.log(`[server:${this.pluginId}#${this.id}] ${chunk}`);
+				this.serverMessageEmitter.emitMessage(chunk);
+				this.outputLines.push(parseOutput(chunk));
+			}),
+		);
+		instance.exited.then(() => this.manager?.checkServerStatus());
+		return instance.pid;
 	}
 }
 
 export async function createServerManager(client: Client) {
 	const manager = new ServerManager(client);
 	await manager.loadServers();
+	registerServerRuntimeHandlers(manager, client);
 	return manager;
 }
 
@@ -375,40 +419,46 @@ export async function createServerManager(client: Client) {
  */
 export class ServerManager {
 	private servers: Map<number, Server>;
-	private apiServerConnection: HTTPServer | null = null;
-	private apiServer: Express;
+	private anyOnline = false;
 
-	constructor(client: Client) {
+	constructor(_client: Client) {
 		this.servers = new Map();
-		this.apiServer = express();
-		initApiServer(this.apiServer, this, client);
 	}
+
 	async loadServers() {
 		this.servers.clear();
 		for (const server of await getAllServers()) {
-			if (!serverGameTypes.includes(server.gameType as ServerGameType))
-				throw new Error(`Unknown server game type: ${server.gameType}`);
-			this.servers.set(
-				server.id,
-				new Server({
-					serverId: server.id,
-					config: {
-						loaderType: server.loaderType,
-						minecraftVersion: server.version,
-						modType: server.modType,
-						pluginDir: server.pluginPath,
-						serverDir: server.path,
-						tag: server.tag,
-						port: server.port,
-						apiPort: server.apiPort,
-					},
-					settings: await loadServerSettings(server.id),
-					gameType: server.gameType as ServerGameType,
-					startupScript: server.startupScript ?? undefined,
-				}),
-			);
+			this.servers.set(server.id, this.buildServer(server));
 		}
 		return this.servers;
+	}
+
+	private buildServer(server: Awaited<ReturnType<typeof getAllServers>>[number]) {
+		const instance = new Server({
+			serverId: server.id,
+			config: {
+				serverDir: server.path,
+				port: server.port,
+				startCommand: ["sh", server.startupScript ?? "./start.sh"],
+				tag: server.tag,
+			},
+			settings: {},
+			pluginId: server.pluginId,
+			pluginConfig: server.config,
+		});
+		instance.attachManager(this);
+		// Load per-server settings asynchronously; falls back to defaults meanwhile.
+		loadServerSettings(server.id)
+			.then((settings) => {
+				instance.settings = { ...instance.settings, ...settings };
+			})
+			.catch((err) =>
+				console.error(
+					`Failed to load settings for server #${server.id}:`,
+					err,
+				),
+			);
+		return instance;
 	}
 
 	getServer(serverId: number) {
@@ -424,7 +474,11 @@ export class ServerManager {
 	getAllTagPairs() {
 		const result: TagPair[] = [];
 		for (const [id, server] of this.servers.entries()) {
-			result.push({ id, tag: server.config.tag });
+			result.push({
+				id,
+				tag: server.config.tag,
+				pluginId: server.pluginId,
+			});
 		}
 		return result;
 	}
@@ -432,14 +486,7 @@ export class ServerManager {
 		return this.servers.size;
 	}
 
-	/**
-	 * Returns server entries visible to the given user.
-	 * If the user has no ServerAccess rows → all servers are returned.
-	 * If the user has ≥1 ServerAccess rows → only those servers are returned.
-	 */
-	async getAccessibleServerEntries(
-		userId: string,
-	): Promise<[number, Server][]> {
+	async getAccessibleServerEntries(userId: string): Promise<[number, Server][]> {
 		const ids = await getUserAccessibleServerIds(userId);
 		if (ids === null) return this.getAllServerEntries();
 		return this.getAllServerEntries().filter(([id]) => ids.includes(id));
@@ -472,48 +519,35 @@ export class ServerManager {
 		id: number;
 		port: number[];
 		path: string;
-		pluginPath: string;
-		gameType: string;
 		startupScript: string | null;
-		apiPort: number | null;
-		loaderType: string;
-		modType: string;
-		version: string;
 		tag: string | null;
+		pluginId: string;
+		config: unknown;
 	}): Promise<"full" | "partial"> {
-		if (!serverGameTypes.includes(serverData.gameType as ServerGameType)) {
-			throw new Error(`Unknown server game type: ${serverData.gameType}`);
-		}
 		const existingServer = this.servers.get(serverData.id);
 		const isRunning =
 			existingServer && (await existingServer.isOnline.getData(true));
 
 		if (isRunning) {
-			// Partial in-memory update for a live server
-			existingServer.startupScript =
-				serverData.startupScript ?? undefined;
-			existingServer.gameType = serverData.gameType as ServerGameType;
-			// config is readonly reference but the object itself is mutable
-			(existingServer.config as ServerConfig).tag = serverData.tag;
+			// Partial in-memory update for a live server (config is readonly ref
+			// but the object itself is mutable).
+			(existingServer.config as GenericServerConfig).tag = serverData.tag;
 			return "partial";
 		}
 
 		const newServer = new Server({
 			serverId: serverData.id,
 			config: {
-				loaderType: serverData.loaderType,
-				minecraftVersion: serverData.version,
-				modType: serverData.modType,
-				pluginDir: serverData.pluginPath,
 				serverDir: serverData.path,
-				tag: serverData.tag,
 				port: serverData.port,
-				apiPort: serverData.apiPort,
+				startCommand: ["sh", serverData.startupScript ?? "./start.sh"],
+				tag: serverData.tag,
 			},
 			settings: await loadServerSettings(serverData.id),
-			gameType: serverData.gameType as ServerGameType,
-			startupScript: serverData.startupScript ?? undefined,
+			pluginId: serverData.pluginId,
+			pluginConfig: serverData.config,
 		});
+		newServer.attachManager(this);
 		this.servers.set(serverData.id, newServer);
 		return "full";
 	}
@@ -540,97 +574,64 @@ export class ServerManager {
 		return null;
 	}
 
+	/** Recompute the "any server online" flag and emit on transition. */
 	async checkServerStatus() {
 		let anyOnline = false;
 		for (const server of this.servers.values()) {
-			if (
-				(await server.isOnline.getData(true)) &&
-				!this.apiServerConnection
-			) {
+			if (await server.isOnline.getData(true)) {
 				anyOnline = true;
-				this.apiServerConnection = this.apiServer.listen(4002);
+				break;
 			}
 		}
-		if (!anyOnline && this.apiServerConnection) {
-			this.apiServerConnection.close();
-			this.apiServerConnection = null;
+		if (anyOnline !== this.anyOnline) {
+			this.anyOnline = anyOnline;
+			appEvents.emit("serverStatusChanged", { anyOnline });
 		}
 	}
 }
 
-interface Payment {
-	startTime: number;
-	validDuration: number;
-	timeout: NodeJS.Timeout;
-}
+/** Register runtime data channels that need a live {@link ServerManager}/client. */
+function registerServerRuntimeHandlers(manager: ServerManager, client: Client) {
+	appEvents.handle("server:getActiveByPort", async ({ port }) => {
+		const server = await manager.getActiveServerFromPort(port);
+		if (!server) return null;
+		return {
+			id: server.id,
+			pluginId: server.pluginId,
+			tag: server.config.tag,
+			config: server.getPluginConfig(),
+			settings: server.settings,
+		};
+	});
 
-class PaymentManager {
-	/**
-	 * Map<ID, Payment>
-	 */
-	private payment: Map<string, Payment>;
-	private active: boolean;
-	private timeouts: Set<NodeJS.Timeout>;
-	constructor() {
-		this.payment = new Map();
-		this.active = false;
-		this.timeouts = new Set();
-	}
-	get isActive() {
-		return this.active;
-	}
-	setActive(active: boolean) {
-		if ((active && !this.active) || (!active && this.active)) {
-			this.reset();
-		}
-		this.active = active;
-	}
-
-	reset() {
-		if (this.timeouts.size > 0) {
-			for (const interval of this.timeouts) {
-				clearInterval(interval);
+	appEvents.handle(
+		"credit:charge",
+		async ({ discordId, change, reason, serverId, silent = true }) => {
+			await changeCredit({ userId: discordId, change, serverId, reason });
+			const user = await client.users.fetch(discordId).catch(() => null);
+			if (user) {
+				await sendCreditNotification({
+					user,
+					creditChanged: change,
+					reason,
+					serverId,
+					silent,
+				});
 			}
-			this.timeouts.clear();
-		}
-		this.payment.clear();
-	}
-	markPaid(uuid: string, paymentInterval: number) {
-		this.setActive(true);
-		const timeout = setTimeout(() => {
-			this.payment.delete(uuid);
-			this.timeouts.delete(timeout);
-		}, paymentInterval);
-		this.payment.set(uuid, {
-			startTime: Date.now(),
-			validDuration: paymentInterval,
-			timeout,
-		});
-		this.timeouts.add(timeout);
-	}
-	markUnpaid(uuid: string) {
-		const payment = this.payment.get(uuid);
-		if (payment) {
-			clearTimeout(payment.timeout);
-			this.payment.delete(uuid);
-			this.timeouts.delete(payment.timeout);
-		}
-	}
-	hasPaid(uuid: string) {
-		return this.payment.has(uuid);
-	}
-	getPayment(uuid: string) {
-		return this.payment.get(uuid);
-	}
+			return true;
+		},
+	);
 }
 
 export interface TagPair {
 	id: number;
 	tag: string | null;
+	/** The game plugin that owns the server — used to disambiguate selection. */
+	pluginId: string;
 }
 
 async function exitServer(client: Client, server: Server) {
-	const { success, promise } = await server.stop(0);
+	const { success, promise } = await server.stop({ grace: 0 });
 	if (success) {
 		console.log("Server process shutting down");
 		await promise;

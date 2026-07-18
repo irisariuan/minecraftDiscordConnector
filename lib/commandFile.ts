@@ -13,7 +13,8 @@ import {
 	type User,
 } from "discord.js";
 import type { Permission } from "./permission";
-import { Server, ServerManager, type ServerGameType } from "./server";
+import type { CapabilityName } from "./plugin/contract";
+import { Server, ServerManager } from "./server";
 import { safeJoin } from "./utils";
 import { CLIENT_ID, TOKEN } from "./env";
 
@@ -43,7 +44,12 @@ export interface CommandFeatures {
 	requireStartedServer: boolean;
 	requireStoppedServer: boolean;
 	unsuspendable: boolean;
-	supportedPlatforms: ServerGameType[];
+	/**
+	 * Capabilities the selected server's game plugin must provide for this
+	 * command to run. The core rejects the command (with an actionable message)
+	 * when the server's plugin does not implement all of them.
+	 */
+	requiredCapabilities: CapabilityName[];
 }
 
 export interface CommandFile<RequireServer extends boolean> {

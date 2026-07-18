@@ -1,12 +1,14 @@
 import { ComponentType, MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
-import { createPlayer, hasPlayer } from "../lib/db";
+import { data, getRandomOtp, type CommandFile } from "../../api";
+import type { MinecraftConfig } from "../config";
 import {
 	createOtpButtonRow,
 	createOtpInputModal,
 	OTPAction,
-} from "../lib/serverInstance/otp";
-import { getRandomOtp } from "../lib/utils";
+} from "../runtime/otp";
+import { isRegistered, registerOnServer } from "../runtime/request";
+
+const PLUGIN_ID = "minecraft";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -20,14 +22,30 @@ export default {
 		),
 	requireServer: true,
 	async execute({ interaction, server }) {
+		if (server.pluginId !== PLUGIN_ID) {
+			return await interaction.editReply(
+				"This command is only available on Minecraft servers.",
+			);
+		}
+		const { apiPort } = server.getPluginConfig() as unknown as MinecraftConfig;
+		if (apiPort === null) {
+			return await interaction.editReply(
+				"Server API is not enabled on this server",
+			);
+		}
 		const playerName = interaction.options.getString("playername", true);
 		const otp = getRandomOtp();
-		const uuid = await server.register(playerName, otp);
+		const uuid = await registerOnServer(apiPort, playerName, otp);
 		if (!uuid)
 			return await interaction.editReply(
 				"Player not found! Please check if your player name is correct!",
 			);
-		if (await hasPlayer(uuid)) {
+		if (
+			await data.request("identity:getByExternal", {
+				pluginId: PLUGIN_ID,
+				externalId: uuid,
+			})
+		) {
 			return await interaction.editReply(
 				"This account has already been linked! If you want to relink, you need to first unlink using /unlink command!",
 			);
@@ -56,9 +74,7 @@ export default {
 				})
 				.catch(() => null);
 
-			if (!submission) {
-				return;
-			}
+			if (!submission) return;
 
 			const inputOtp = submission.fields.getTextInputValue(
 				OTPAction.OTP_TEXT_INPUT,
@@ -73,13 +89,15 @@ export default {
 
 			collector.stop("success");
 
-			const result = await createPlayer({
-				data: {
-					playername: playerName,
-					uuid,
+			const result = await data
+				.request("identity:link", {
+					pluginId: PLUGIN_ID,
+					externalId: uuid,
 					discordId: interaction.user.id,
-				},
-			}).catch(() => null);
+					serverId: server.id,
+					metadata: { playername: playerName },
+				})
+				.catch(() => null);
 			if (!result) {
 				return await submission.reply({
 					content:
@@ -88,7 +106,7 @@ export default {
 				});
 			}
 
-			if (await server.registered(uuid)) {
+			if (await isRegistered(apiPort, uuid)) {
 				await submission.reply({
 					content: "Successfully linked your account!",
 					flags: MessageFlags.Ephemeral,
@@ -110,7 +128,7 @@ export default {
 			}
 		});
 
-		collector.on("end", async (collected, reason) => {
+		collector.on("end", async (_collected, reason) => {
 			if (reason === "time") {
 				await interaction.editReply({
 					content: "OTP expired!",
@@ -122,6 +140,5 @@ export default {
 	ephemeral: true,
 	features: {
 		requireStartedServer: true,
-		supportedPlatforms: ["minecraft"],
 	},
 } satisfies CommandFile<true>;

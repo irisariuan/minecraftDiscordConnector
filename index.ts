@@ -21,9 +21,10 @@ import {
 	readPermission,
 } from "./lib/permission";
 import { getAllPluginScriptPaths, runScripts } from "./lib/plugin";
+import { getGamePlugin, loadGamePlugins } from "./lib/plugin/registry";
 import { createServerManager } from "./lib/server";
-import { serverConfig } from "./lib/serverInstance/plugin/types";
 import { changeSettings, loadSettings, settings } from "./lib/settings";
+import type { Prisma } from "./generated/prisma/client";
 import { compareArrays, getNextTimestamp } from "./lib/utils";
 import { getAllTickets, ticketNotificationManager } from "./lib/ticket";
 import { appEvents } from "./lib/events/appEvents";
@@ -34,21 +35,33 @@ import { registerCoreDataHandlers } from "./lib/events/coreHandlers";
 registerCoreDataHandlers();
 
 let enablePlugins = !process.argv.includes("--no-plugins");
+
+// Register game plugins (deterministically, before commands/scripts) so the
+// registry is populated for server lifecycle + capability gating.
+const loadedGames = enablePlugins ? await loadGamePlugins() : [];
 let commands = await loadCommands(enablePlugins);
+
+// Backward-compatible default server: if the database is empty, let the first
+// game plugin that offers an env-driven bootstrap create one. The core stays
+// game-agnostic — it just persists whatever generic fields the plugin returns.
 if (!(await hasAnyServer())) {
-	console.log(
-		"No server found in database, creating a new server with default configuration...",
-	);
-	await createServer({
-		loaderType: serverConfig.loaderType,
-		version: serverConfig.minecraftVersion,
-		path: serverConfig.serverDir,
-		pluginPath: serverConfig.pluginDir,
-		modType: serverConfig.modType,
-		port: serverConfig.port,
-		tag: "Default Server",
-	});
-	console.log("Default server created.");
+	for (const plugin of loadedGames) {
+		const boot = plugin.bootstrap?.();
+		if (!boot) continue;
+		await createServer({
+			path: boot.path,
+			port: boot.port,
+			tag: boot.tag ?? null,
+			startupScript: boot.startupScript ?? null,
+			pluginId: plugin.id,
+			runtimeVersion: boot.runtimeVersion ?? null,
+			config: boot.config as Prisma.InputJsonValue,
+		});
+		console.log(
+			`No server found; bootstrapped a default ${plugin.displayName} server.`,
+		);
+		break;
+	}
 }
 
 const client = new Client({
@@ -154,7 +167,7 @@ process.stdin.on("data", async (data) => {
 			);
 			for (const [id, server] of serverManager.getAllServerEntries()) {
 				console.log(
-					`- [${id}] ${server.config.tag || `*Server #${server.id}*`} (${server.gameType})`,
+					`- [${id}] ${server.config.tag || `*Server #${server.id}*`} (${server.pluginId})`,
 				);
 			}
 			break;
@@ -391,20 +404,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
 				flags: MessageFlags.Ephemeral,
 			});
 		}
-		if (
-			command.features?.supportedPlatforms &&
-			command.features.supportedPlatforms.length > 0 &&
-			!command.features.supportedPlatforms.includes(server.gameType)
-		) {
-			if (interaction.replied) {
-				return await interaction.editReply({
-					content: `This command is not supported on \`${server.gameType}\` servers`,
+		const requiredCaps = command.features?.requiredCapabilities ?? [];
+		if (requiredCaps.length > 0) {
+			const plugin = getGamePlugin(server.pluginId);
+			const missing = !plugin
+				? requiredCaps
+				: requiredCaps.filter((cap) => !plugin.capabilities?.[cap]);
+			if (missing.length > 0) {
+				const content = !plugin
+					? `This server's game plugin \`${server.pluginId}\` is not loaded, so this command is unavailable.`
+					: `This command is not supported on \`${server.pluginId}\` servers (missing capability: ${missing.join(", ")}).`;
+				if (interaction.replied) {
+					return await interaction.editReply({ content });
+				}
+				return await interaction.reply({
+					content,
+					flags: MessageFlags.Ephemeral,
 				});
 			}
-			return await interaction.reply({
-				content: `This command is not supported on \`${server.gameType}\` servers`,
-				flags: MessageFlags.Ephemeral,
-			});
 		}
 		if (
 			command.features?.requireStartedServer &&

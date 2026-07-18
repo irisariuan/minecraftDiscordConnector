@@ -47,6 +47,21 @@ export default {
 				flags: MessageFlags.Ephemeral,
 			});
 		}
+		// Resolve the target directory from the server's (validated) game config.
+		let pluginDir: string | undefined;
+		try {
+			pluginDir = (
+				server.getPluginConfig() as { pluginDir?: string }
+			).pluginDir;
+		} catch {
+			pluginDir = undefined;
+		}
+		if (!pluginDir) {
+			return await interaction.followUp({
+				content: "Uploading files is not supported on this server",
+				flags: MessageFlags.Ephemeral,
+			});
+		}
 		const payment = await spendCredit({
 			user: interaction.user,
 			channel: interaction.channel,
@@ -177,12 +192,12 @@ export default {
 			await thread.send(`The file will be added to the server shortly.`);
 			const finalFilename = isFileBuffer
 				? await copyLocalPluginFileToServer(
-						server.config.pluginDir,
+						pluginDir,
 						messages,
 					)
 				: await downloadWebPluginFileToLocal(
 						downloadingUrl,
-						server.config.pluginDir,
+						pluginDir,
 						filename,
 					);
 			if (token) uploadServer.token.disposeToken(token);
@@ -243,12 +258,12 @@ export default {
 					);
 					const finalFilename = isFileBuffer
 						? await copyLocalPluginFileToServer(
-								server.config.pluginDir,
+								pluginDir,
 								messages,
 							)
 						: await downloadWebPluginFileToLocal(
 								downloadingUrl,
-								server.config.pluginDir,
+								pluginDir,
 								filename,
 							);
 					if (token) uploadServer.token.disposeToken(token);

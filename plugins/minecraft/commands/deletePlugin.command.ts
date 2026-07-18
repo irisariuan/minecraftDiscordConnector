@@ -1,17 +1,15 @@
 import { ComponentType, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
 import {
-	createRequestComponent,
-	RequestComponentId,
-} from "../lib/component/request";
-import { refundCredit, spendCredit } from "../lib/credit";
-import {
-	orPerm,
 	comparePermission,
+	createRequestComponent,
+	data,
+	orPerm,
 	PermissionFlags,
-	readPermission,
-} from "../lib/permission";
-import { removePluginByFileName } from "../lib/serverInstance/plugin";
+	RequestComponentId,
+	type CommandFile,
+} from "../../api";
+import type { MinecraftConfig } from "../config";
+import { removePluginByFileName } from "../runtime/pluginDir";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -25,9 +23,10 @@ export default {
 		),
 	requireServer: true,
 	async execute({ interaction, server }) {
+		const { pluginDir } = server.getPluginConfig() as unknown as MinecraftConfig;
 		const plugin = interaction.options.getString("plugin", true);
 		const deleteFunc = async () => {
-			if (await removePluginByFileName(server.config.pluginDir, plugin)) {
+			if (await removePluginByFileName(pluginDir, plugin)) {
 				await interaction.editReply({
 					content: `Plugin \`${plugin}\` deleted successfully.`,
 					components: [],
@@ -41,12 +40,15 @@ export default {
 		};
 		if (
 			comparePermission(
-				await readPermission(interaction.user, server.id),
+				await data.request("permission:read", {
+					user: interaction.user,
+					serverId: server.id,
+				}),
 				PermissionFlags.deletePlugin,
 			)
 		)
 			return await deleteFunc();
-		const payment = await spendCredit({
+		const payment = await data.request("credit:spend", {
 			user: interaction.user,
 			channel: interaction.channel,
 			cost: server.settings.deletePluginFee,
@@ -67,7 +69,10 @@ export default {
 			.awaitMessageComponent({
 				filter: async (i) =>
 					comparePermission(
-						await readPermission(i.user, server.id),
+						await data.request("permission:read", {
+							user: i.user,
+							serverId: server.id,
+						}),
 						PermissionFlags.deletePlugin,
 					),
 				componentType: ComponentType.Button,
@@ -81,7 +86,7 @@ export default {
 			});
 		}
 		if (reply.customId === RequestComponentId.Deny) {
-			await refundCredit({
+			await data.request("credit:refund", {
 				user: interaction.user,
 				creditChanged: -payment.changed,
 				serverId: server.id,

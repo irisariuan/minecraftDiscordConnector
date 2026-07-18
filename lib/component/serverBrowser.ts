@@ -21,7 +21,7 @@ import {
 	type DbServer,
 } from "../db";
 import type { ServerManager } from "../server";
-import { serverGameTypes } from "../server";
+import { getAllGamePlugins } from "../plugin/registry";
 import { collectInputFromModal } from "./modal";
 import { joinPathWithBase } from "../utils";
 import { readFile, writeFile } from "node:fs/promises";
@@ -46,14 +46,11 @@ export enum ServerBrowserModalId {
 
 export enum ServerBrowserInputId {
 	TAG = "sb_tag",
-	VERSION = "sb_version",
-	LOADER_TYPE = "sb_loadertype",
-	MOD_TYPE = "sb_modtype",
-	GAME_TYPE = "sb_gametype",
+	PLUGIN_ID = "sb_pluginid",
+	RUNTIME_VERSION = "sb_runtimeversion",
 	PATH = "sb_path",
-	PLUGIN_PATH = "sb_pluginpath",
 	PORT = "sb_port",
-	API_PORT = "sb_apiport",
+	CONFIG = "sb_config",
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -66,6 +63,15 @@ export function parsePorts(raw: string): number[] | null {
 	const parts = raw.split(",").map((p) => parseInt(p.trim(), 10));
 	if (parts.some((p) => isNaN(p) || p < 1 || p > 65535)) return null;
 	return parts;
+}
+
+/** Pretty-print a server's opaque plugin config JSON for display/editing. */
+export function stringifyConfig(config: unknown): string {
+	try {
+		return JSON.stringify(config ?? {}, null, 2);
+	} catch {
+		return "{}";
+	}
 }
 
 // ─── Embed ────────────────────────────────────────────────────────────────────
@@ -101,42 +107,28 @@ export function buildServerEmbed(
 		.addFields(
 			{ name: "Path", value: inlineCode(server.path), inline: false },
 			{
-				name: "Plugin Path",
-				value: inlineCode(server.pluginPath),
-				inline: false,
-			},
-			{
-				name: "Version",
-				value: inlineCode(server.version),
+				name: "Game Plugin",
+				value: inlineCode(server.pluginId),
 				inline: true,
 			},
 			{
-				name: "Loader",
-				value: inlineCode(server.loaderType),
-				inline: true,
-			},
-			{
-				name: "Mod Type",
-				value: inlineCode(server.modType),
+				name: "Runtime Version",
+				value: server.runtimeVersion
+					? inlineCode(server.runtimeVersion)
+					: italic("none"),
 				inline: true,
 			},
 			{
 				name: "Port(s)",
-				value: inlineCode(server.port.join(", ")),
+				value: inlineCode(server.port.join(", ") || "none"),
 				inline: true,
 			},
 			{
-				name: "API Port",
-				value:
-					server.apiPort != null
-						? inlineCode(String(server.apiPort))
-						: italic("none"),
-				inline: true,
-			},
-			{
-				name: "Game Type",
-				value: inlineCode(server.gameType),
-				inline: true,
+				name: "Plugin Config",
+				value: inlineCode(
+					stringifyConfig(server.config).slice(0, 1000) || "{}",
+				),
+				inline: false,
 			},
 			{
 				name: "Startup Script",
@@ -216,7 +208,7 @@ export function buildConfirmDeleteRow(): ActionRowBuilder<ButtonBuilder> {
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
 /**
- * Modal for editing tag, version, loaderType, modType, gameType (max 5 inputs).
+ * Modal for editing generic identity: tag, game plugin id, runtime version.
  */
 export function buildEditInfoModal(server: DbServer): ModalBuilder {
 	const modal = new ModalBuilder()
@@ -232,30 +224,21 @@ export function buildEditInfoModal(server: DbServer): ModalBuilder {
 		.setMaxLength(100);
 	if (server.tag) tagInput.setValue(server.tag);
 
-	const versionInput = new TextInputBuilder()
-		.setCustomId(ServerBrowserInputId.VERSION)
+	const pluginInput = new TextInputBuilder()
+		.setCustomId(ServerBrowserInputId.PLUGIN_ID)
 		.setStyle(TextInputStyle.Short)
 		.setRequired(true)
-		.setValue(server.version);
+		.setValue(server.pluginId);
 
-	const loaderInput = new TextInputBuilder()
-		.setCustomId(ServerBrowserInputId.LOADER_TYPE)
+	const runtimeInput = new TextInputBuilder()
+		.setCustomId(ServerBrowserInputId.RUNTIME_VERSION)
 		.setStyle(TextInputStyle.Short)
-		.setRequired(true)
-		.setValue(server.loaderType);
+		.setRequired(false);
+	if (server.runtimeVersion) runtimeInput.setValue(server.runtimeVersion);
 
-	const modInput = new TextInputBuilder()
-		.setCustomId(ServerBrowserInputId.MOD_TYPE)
-		.setStyle(TextInputStyle.Short)
-		.setRequired(true)
-		.setValue(server.modType);
-
-	const gameInput = new TextInputBuilder()
-		.setCustomId(ServerBrowserInputId.GAME_TYPE)
-		.setStyle(TextInputStyle.Short)
-		.setRequired(true)
-		.setPlaceholder(serverGameTypes.join(" | "))
-		.setValue(server.gameType);
+	const knownGames = getAllGamePlugins()
+		.map((p) => p.id)
+		.join(" | ");
 
 	modal.addLabelComponents(
 		new LabelBuilder()
@@ -263,28 +246,20 @@ export function buildEditInfoModal(server: DbServer): ModalBuilder {
 			.setDescription("Leave empty to clear the display tag")
 			.setTextInputComponent(tagInput),
 		new LabelBuilder()
-			.setLabel("Version")
-			.setDescription("e.g. 1.21.1")
-			.setTextInputComponent(versionInput),
+			.setLabel("Game Plugin")
+			.setDescription(knownGames || "e.g. minecraft")
+			.setTextInputComponent(pluginInput),
 		new LabelBuilder()
-			.setLabel("Loader Type")
-			.setDescription("e.g. paper, fabric, forge")
-			.setTextInputComponent(loaderInput),
-		new LabelBuilder()
-			.setLabel("Mod Type")
-			.setDescription("e.g. plugin, mod, none")
-			.setTextInputComponent(modInput),
-		new LabelBuilder()
-			.setLabel("Game Type")
-			.setDescription(serverGameTypes.join(" | "))
-			.setTextInputComponent(gameInput),
+			.setLabel("Runtime Version")
+			.setDescription("Optional generic version label")
+			.setTextInputComponent(runtimeInput),
 	);
 
 	return modal;
 }
 
 /**
- * Modal for editing path, pluginPath, port, apiPort.
+ * Modal for editing path, port, and the plugin config JSON.
  */
 export function buildEditPathsModal(server: DbServer): ModalBuilder {
 	const modal = new ModalBuilder()
@@ -299,40 +274,30 @@ export function buildEditPathsModal(server: DbServer): ModalBuilder {
 		.setRequired(true)
 		.setValue(server.path);
 
-	const pluginPathInput = new TextInputBuilder()
-		.setCustomId(ServerBrowserInputId.PLUGIN_PATH)
-		.setStyle(TextInputStyle.Short)
-		.setRequired(true)
-		.setValue(server.pluginPath);
-
 	const portInput = new TextInputBuilder()
 		.setCustomId(ServerBrowserInputId.PORT)
 		.setStyle(TextInputStyle.Short)
 		.setRequired(true)
 		.setValue(server.port.join(", "));
 
-	const apiPortInput = new TextInputBuilder()
-		.setCustomId(ServerBrowserInputId.API_PORT)
-		.setStyle(TextInputStyle.Short)
+	const configInput = new TextInputBuilder()
+		.setCustomId(ServerBrowserInputId.CONFIG)
+		.setStyle(TextInputStyle.Paragraph)
 		.setRequired(false)
-		.setPlaceholder("e.g. 8080");
-	if (server.apiPort != null) apiPortInput.setValue(String(server.apiPort));
+		.setValue(stringifyConfig(server.config));
 
 	modal.addLabelComponents(
 		new LabelBuilder()
 			.setLabel("Server Directory Path")
 			.setTextInputComponent(pathInput),
 		new LabelBuilder()
-			.setLabel("Plugin Directory Path")
-			.setTextInputComponent(pluginPathInput),
-		new LabelBuilder()
 			.setLabel("Port(s)")
 			.setDescription("Comma-separated integers between 1–65535")
 			.setTextInputComponent(portInput),
 		new LabelBuilder()
-			.setLabel("API Port")
-			.setDescription("Leave empty or enter -1 to clear")
-			.setTextInputComponent(apiPortInput),
+			.setLabel("Plugin Config (JSON)")
+			.setDescription("Game-specific configuration, validated on load")
+			.setTextInputComponent(configInput),
 	);
 
 	return modal;

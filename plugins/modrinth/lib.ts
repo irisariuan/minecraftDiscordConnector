@@ -3,8 +3,6 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { type Entry, fromBuffer } from "yauzl";
 import { EmbedBuilder, bold, inlineCode, italic } from "discord.js";
 import {
-	createPathForPluginFile,
-	data,
 	ensureSuffix,
 	removeSuffix,
 	safeFetch,
@@ -13,6 +11,12 @@ import {
 	trimTextWithSuffix,
 	type Server,
 } from "../api";
+import {
+	createPathForPluginFile,
+	getModrinthPlugins,
+	mcConfig,
+	trackModrinthPlugin,
+} from "./mc";
 import type { DbPlugin, RichUpdateEntry } from "./types";
 import {
 	SideValue,
@@ -175,9 +179,7 @@ export async function checkPluginCompatibility(
 	newMcVersion: string,
 	loaderType: string,
 ): Promise<CompatProject[]> {
-	const dbPlugins = await data.request("db:getPluginsByServerId", {
-		serverId,
-	});
+	const dbPlugins = await getModrinthPlugins(serverId);
 	if (dbPlugins.length === 0) return [];
 
 	const results = await Promise.all(
@@ -227,9 +229,7 @@ export async function checkOutdatedPlugins(server: Server): Promise<{
 	outdated: RichUpdateEntry[];
 	failed: string[];
 }> {
-	const plugins = await data.request("db:getPluginsByServerId", {
-		serverId: server.id,
-	});
+	const plugins = await getModrinthPlugins(server.id);
 	if (plugins.length === 0) return { outdated: [], failed: [] };
 
 	// Keep only the most-recently updated record per projectId
@@ -248,8 +248,8 @@ export async function checkOutdatedPlugins(server: Server): Promise<{
 		const [versions, currentVersionDetails, projectDetails] =
 			await Promise.all([
 				listPluginVersions(projectId, {
-					loaders: [server.config.loaderType],
-					game_versions: [server.config.minecraftVersion],
+					loaders: [mcConfig(server).loaderType],
+					game_versions: [mcConfig(server).minecraftVersion],
 				}),
 				getPluginVersionDetails(plugin.versionId),
 				getPlugin(projectId),
@@ -731,7 +731,7 @@ export async function downloadPluginFile(
 		return { filename: null, newDownload: false };
 	}
 	const filePath = createPathForPluginFile(
-		server.config.pluginDir,
+		mcConfig(server).pluginDir,
 		metadata.files[0].filename,
 	);
 	if (!force && existsSync(filePath)) {
@@ -750,12 +750,12 @@ export async function downloadPluginFile(
 	}
 	stream.end();
 	console.log(`Downloaded ${metadata.files[0].filename}`);
-	await data.request("db:trackPlugin", {
-		projectId: metadata.project_id,
+	await trackModrinthPlugin(
+		server.id,
+		metadata.project_id,
 		versionId,
-		serverId: server.id,
 		filePath,
-	});
+	);
 	return { filename: metadata.files[0].filename, newDownload: true };
 }
 
@@ -1019,7 +1019,7 @@ export async function downloadModpackFile(
 		? modpackDepKeyToLoader(modpackDepKey)
 		: null;
 	const serverCompatible = compatibleLoadersForServer(
-		server.config.loaderType,
+		mcConfig(server).loaderType,
 	);
 
 	if (modpackLoader && !serverCompatible.has(modpackLoader)) {
@@ -1030,7 +1030,7 @@ export async function downloadModpackFile(
 			name: index.name,
 			error:
 				`Loader mismatch: this modpack requires **${modpackLoader}** ` +
-				`but the server uses **${server.config.loaderType}**. ` +
+				`but the server uses **${mcConfig(server).loaderType}**. ` +
 				`Install a ${modpackLoader} server or choose a different modpack.`,
 			projectIds: [],
 		};
@@ -1115,7 +1115,7 @@ export async function downloadModpackFile(
 					console.warn(
 						`[modpack] Skipping ${file.path}: loaders ` +
 							`[${meta.loaders.join(", ")}] are not compatible ` +
-							`with server loader "${server.config.loaderType}".`,
+							`with server loader "${mcConfig(server).loaderType}".`,
 					);
 					filesSkipped++;
 					continue;
@@ -1162,12 +1162,12 @@ export async function downloadModpackFile(
 		const { projectId, versionId: fileVersionId } =
 			parseMrpackFileIds(file);
 		promises.push(
-			data.request("db:trackPlugin", {
+			trackModrinthPlugin(
+				server.id,
 				projectId,
-				versionId: fileVersionId,
-				serverId: server.id,
-				filePath: destPath,
-			}).catch((err) => {
+				fileVersionId,
+				destPath,
+			).catch((err) => {
 				console.warn(
 					`[modpack] Failed to upsert DB record for ${file.path}: ${err}`,
 				);

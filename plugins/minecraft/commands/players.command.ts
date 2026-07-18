@@ -1,8 +1,7 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../lib/commandFile";
-import { fetchOnlinePlayers, type Player } from "../lib/serverInstance/request";
-import { sendPaginationMessage } from "../lib/pagination";
-import { CacheItem } from "../lib/cache";
+import { sendPaginationMessage, type CommandFile } from "../../api";
+import type { MinecraftConfig } from "../config";
+import { fetchOnlinePlayers, type Player } from "../runtime/request";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -10,27 +9,20 @@ export default {
 		.setDescription("Get a list of online players"),
 	requireServer: true,
 	async execute({ interaction, server }) {
-		const apiPort = server.config.apiPort;
+		const { apiPort } = server.getPluginConfig() as unknown as MinecraftConfig;
 		if (apiPort === null) {
 			return await interaction.followUp({
 				content: "Server API is not enabled on this server",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
-		const onlinePlayers = new CacheItem<Player[]>(null, {
-			ttl: 1000 * 60 * 5,
-			async updateMethod() {
-				return await fetchOnlinePlayers(apiPort);
-			},
-		});
 		sendPaginationMessage<Player>({
 			interaction,
 			options: {
 				notFoundMessage: "No players found",
 				title: "Online Players",
 			},
-			getResult: async ({ force }) =>
-				(await onlinePlayers.getData(force)) ?? undefined,
+			getResult: async () => (await fetchOnlinePlayers(apiPort)) ?? undefined,
 			filterFunc: (filter) => (player) => {
 				if (!filter) return true;
 				return player.name.toLowerCase().includes(filter.toLowerCase());
@@ -43,5 +35,6 @@ export default {
 	},
 	features: {
 		requireStartedServer: true,
+		requiredCapabilities: ["listPlayers"],
 	},
 } satisfies CommandFile<true>;

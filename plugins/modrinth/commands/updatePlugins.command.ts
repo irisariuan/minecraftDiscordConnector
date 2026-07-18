@@ -27,6 +27,7 @@ import {
 	getProjects,
 	listPluginVersions,
 } from "../lib";
+import { deleteModrinthPlugin, getModrinthPlugins, mcConfig } from "../mc";
 import { type DbPlugin, type RichUpdateEntry } from "../types";
 
 type UpdatePluginAction = "update" | "skip";
@@ -46,9 +47,7 @@ export default {
 				"🔍 Checking for plugin updates — please wait… (elapsed 0s)",
 		});
 
-		const plugins = await data.request("db:getPluginsByServerId", {
-			serverId: server.id,
-		});
+		const plugins = await getModrinthPlugins(server.id);
 		let completed = 0;
 		// Keep only the most-recently updated record per projectId
 		const latestByProject = new Map<string, DbPlugin>();
@@ -82,8 +81,8 @@ export default {
 				try {
 					const [versions, projectDetails] = await Promise.all([
 						listPluginVersions(projectId, {
-							loaders: [server.config.loaderType],
-							game_versions: [server.config.minecraftVersion],
+							loaders: [mcConfig(server).loaderType],
+							game_versions: [mcConfig(server).minecraftVersion],
 						}),
 						getPlugin(projectId),
 					]);
@@ -354,7 +353,7 @@ export default {
 				if (!filename) return false;
 
 				// Remove the old file when the path changed
-				const newFilePath = safeJoin(server.config.pluginDir, filename);
+				const newFilePath = safeJoin(mcConfig(server).pluginDir, filename);
 				if (
 					u.plugin.filePath &&
 					u.plugin.filePath !== newFilePath &&
@@ -365,11 +364,7 @@ export default {
 
 				// Remove the stale DB record
 				// (downloadPluginFile already upserted the new one)
-				await data.request("db:deletePluginRecord", {
-					projectId: u.plugin.projectId,
-					versionId: u.plugin.versionId,
-					serverId: server.id,
-				});
+				await deleteModrinthPlugin(server.id, u.plugin.projectId, u.plugin.versionId);
 
 				return true;
 			},
@@ -381,7 +376,7 @@ export default {
 		PermissionFlags.voteDownloadPlugin,
 	),
 	features: {
-		supportedPlatforms: ["minecraft"],
+		requiredCapabilities: ["managePackages"],
 		requireStoppedServer: true,
 	},
 } satisfies CommandFile<true>;

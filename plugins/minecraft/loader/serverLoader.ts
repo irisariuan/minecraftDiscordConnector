@@ -1,4 +1,4 @@
-import { getAllPaperVersions } from "./serverInstance/jar";
+import { getAllPaperVersions } from "./jar";
 
 // ─── Version Option Fetching ──────────────────────────────────────────────────
 
