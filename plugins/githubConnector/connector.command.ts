@@ -36,8 +36,8 @@ export default {
 		),
 	requireServer: true,
 	permissions: PermissionFlags.downloadPlugin,
+	ephemeral: true,
 	async execute({ interaction, server }) {
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		const pluginDir = pluginDirOf(server.getPluginConfig());
 		if (!pluginDir) {
 			return interaction.editReply(
