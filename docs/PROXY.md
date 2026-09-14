@@ -158,8 +158,12 @@ JSON. It is optional with defaults, so existing servers keep working untouched:
 Edit the block from Discord with `/mcserver edit` (it also covers the server's
 port(s), the plugin/mod directory and the IPC socket override). The proxy re-reads
 each server record, so proxy changes apply to the next connection even while the
-server is running — including a port change the backend itself only picks up when
-it restarts.
+server is running.
+
+A port change also rewrites `server-port` in the backend's `server.properties` —
+nothing in the launch path passes the port to the JVM, so the record alone would
+leave the proxy dialling a port nobody listens on. The backend only reads that
+file at startup, so restart it to actually bind the new port.
 
 ### ⚠️ Forwarding requires an unreachable backend
 

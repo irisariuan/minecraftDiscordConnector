@@ -23,7 +23,9 @@ import {
 import {
 	inferModType,
 	KNOWN_LOADERS,
+	SERVER_PROPERTIES_FILE,
 	validateMinecraftConfig,
+	writeServerPort,
 	type MinecraftConfig,
 } from "../../mc";
 
@@ -522,6 +524,13 @@ export async function editHandler(
 		});
 	}
 
+	if (portsChanged) {
+		reviewEmbed.addFields({
+			name: `ℹ️ ${SERVER_PROPERTIES_FILE} will follow`,
+			value: `${inlineCode(`server-port=${ports[0]}`)} is written to the server's ${inlineCode(SERVER_PROPERTIES_FILE)} so the server binds the port this record claims. Nothing else in the file is touched.`,
+		});
+	}
+
 	if (clashes.length > 0) {
 		reviewEmbed.addFields({
 			name: "⚠️ Port already claimed by another server",
@@ -532,7 +541,7 @@ export async function editHandler(
 	if (isOnline) {
 		reviewEmbed.setFooter({
 			text: portsChanged
-				? "Server is online: the proxy dials the new port at once, but the running process keeps its old one until restarted."
+				? "Server is online: the proxy dials the new port at once, but the process keeps its old one until restarted — and a running server can rewrite server.properties from memory."
 				: "Server is online: proxy settings apply immediately, path changes on the next start.",
 		});
 	}
@@ -603,6 +612,12 @@ export async function editHandler(
 		});
 	}
 
+	// Nothing in the launch path passes the port to the JVM — the server binds
+	// whatever server.properties says — so the file has to follow the record.
+	const portWrite = portsChanged
+		? await writeServerPort(saved.path, ports[0]!)
+		: null;
+
 	const reload = await serverManager.addOrReloadServer(saved);
 
 	const summaryEmbed = new EmbedBuilder()
@@ -634,10 +649,29 @@ export async function editHandler(
 		)
 		.setTimestamp();
 
+	if (portWrite) {
+		summaryEmbed.addFields(
+			portWrite.ok
+				? {
+						name: SERVER_PROPERTIES_FILE,
+						value:
+							portWrite.action === "created"
+								? `Created with ${inlineCode(`server-port=${ports[0]}`)} — Minecraft fills in the rest on its next start.`
+								: portWrite.action === "updated"
+									? `Set to ${inlineCode(`server-port=${ports[0]}`)}.`
+									: `Already at ${inlineCode(`server-port=${ports[0]}`)}.`,
+					}
+				: {
+						name: `⚠️ Could not update ${SERVER_PROPERTIES_FILE}`,
+						value: `${inlineCode(portWrite.error)}\nThe record now says ${inlineCode(ports.join(", "))}, so set ${inlineCode(`server-port=${ports[0]}`)} by hand or the server will keep binding its old port.`,
+					},
+		);
+	}
+
 	if (reload === "partial") {
 		summaryEmbed.setFooter({
 			text: portsChanged
-				? "The server is running: proxy settings are live, but the port and path changes only take effect after a restart."
+				? "The server is running: restart it to bind the new port, and re-check server.properties afterwards — a running server can rewrite it from memory."
 				: "The server is running: proxy settings are live, but path changes take effect after the next start.",
 		});
 	}

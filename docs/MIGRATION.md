@@ -75,6 +75,23 @@ bun tools/backfill-minecraft.ts --dry-run   # preview
 bun tools/backfill-minecraft.ts             # apply
 ```
 
+## Applying recorded ports to `server.properties`
+
+Nothing in the launch path passes a port to the JVM — a Minecraft server binds
+whatever its `server.properties` says, while the recorded `Server.port` drives
+port-conflict checks and the proxy's dial target. `/mcserver create` and
+`/mcserver edit` now keep the file in step, but servers registered before that
+may disagree with their own record. This idempotent tool settles it in the
+record's favour, rewriting only the `server-port` line:
+
+```sh
+bun tools/backfill-server-port.ts --dry-run   # preview
+bun tools/backfill-server-port.ts             # apply
+```
+
+Stop the affected servers first (or restart them afterwards): a server reads the
+file at startup, and a running one can rewrite it from memory.
+
 ## Rollback
 
 The migration drops columns/tables, so rollback is **restore-from-backup**, not

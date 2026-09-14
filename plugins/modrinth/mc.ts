@@ -18,6 +18,10 @@ export {
 	getActivePlugins,
 } from "../minecraft/runtime/pluginDir";
 export {
+	SERVER_PROPERTIES_FILE,
+	writeServerPort,
+} from "../minecraft/runtime/serverProperties";
+export {
 	findHighestAvailableVersion,
 	getPaperProject,
 	getPaperVersionBuild,

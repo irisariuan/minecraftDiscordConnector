@@ -21,6 +21,8 @@ import {
 	getPaperProject,
 	getPaperVersionBuild,
 	KNOWN_LOADERS,
+	SERVER_PROPERTIES_FILE,
+	writeServerPort,
 } from "../../mc";
 import {
 	ensureDir,
@@ -320,6 +322,10 @@ export async function createHandler(
 		await writeStartScript(serverDir, jarName).catch(() => {});
 	}
 
+	// The start script never passes a port to the JVM, so the chosen port only
+	// means anything once server.properties says the same.
+	const portWrite = await writeServerPort(serverDir, ports[0]!);
+
 	// ── Loader / mod type ───────────────────────────────────────────
 	const loaderType = serverType;
 	const modType =
@@ -393,6 +399,13 @@ export async function createHandler(
 			text: "Use /startserver to start the server when ready.",
 		})
 		.setTimestamp();
+
+	if (!portWrite.ok) {
+		embed.addFields({
+			name: `⚠️ Could not write ${SERVER_PROPERTIES_FILE}`,
+			value: `${inlineCode(portWrite.error)}\nSet ${inlineCode(`server-port=${ports[0]}`)} by hand, or the server will bind its default port.`,
+		});
+	}
 
 	interaction.editReply({ content: "", embeds: [embed] });
 	interaction.followUp(
