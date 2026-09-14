@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/forward"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/protocol"
 )
 
@@ -390,4 +391,29 @@ func TestWriteLoginStartCarriesTheVerifiedName(t *testing.T) {
 	r := protocol.NewReader(pkt.Data)
 	readString(t, r, "name", verified)
 	readUUID(t, r, "uuid", id)
+}
+
+// The advice in an online-mode rejection has to name something the operator can
+// actually change, and must not tell them to "enable none forwarding".
+func TestOnlineModeFixNamesTheRightChange(t *testing.T) {
+	for _, tc := range []struct {
+		mode     forward.Mode
+		contains string
+		absent   string
+	}{
+		{forward.ModeNone, `nothing else to configure`, "bungeecord"},
+		{forward.ModeBungeeCord, "spigot.yml", "velocity"},
+		{forward.ModeVelocity, "secret", "spigot.yml"},
+	} {
+		got := onlineModeFix(tc.mode)
+		if !strings.Contains(got, "online-mode=false") {
+			t.Errorf("%s: %q does not name online-mode=false", tc.mode, got)
+		}
+		if !strings.Contains(strings.ToLower(got), tc.contains) {
+			t.Errorf("%s: %q does not mention %q", tc.mode, got, tc.contains)
+		}
+		if strings.Contains(strings.ToLower(got), tc.absent) {
+			t.Errorf("%s: %q should not mention %q", tc.mode, got, tc.absent)
+		}
+	}
 }

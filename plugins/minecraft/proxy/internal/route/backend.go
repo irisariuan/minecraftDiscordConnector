@@ -148,10 +148,12 @@ func (p *Proxy) relayBackendLogin(
 		case idEncryptionRequest:
 			// A backend that asks the proxy to authenticate is in online mode,
 			// which cannot work behind a proxy: the player's session is already
-			// spent on the proxy itself.
-			return fmt.Errorf(
-				"backend %q is in online mode; set online-mode=false and enable %s forwarding",
-				entry.Tag, entry.Forwarding)
+			// spent on the proxy itself. Tell the player something they can
+			// repeat to an operator rather than dropping them silently.
+			if err := disconnectLogin(client, msgBackendOnlineMode); err != nil {
+				p.log.Debug("could not explain the online-mode backend", "error", err)
+			}
+			return fmt.Errorf("backend %q is in online mode: %s", entry.Tag, onlineModeFix(mode))
 
 		case idLoginPluginRequest:
 			if err := p.answerLoginPlugin(backend, pkt, mode, entry, identity); err != nil {
@@ -175,6 +177,22 @@ func (p *Proxy) relayBackendLogin(
 		default:
 			return fmt.Errorf("unexpected packet 0x%02x from backend during login", pkt.ID)
 		}
+	}
+}
+
+// onlineModeFix names what an operator has to change on a backend that is still
+// in online mode, in the terms of the forwarding mode it is configured for.
+func onlineModeFix(mode forward.Mode) string {
+	const base = "set online-mode=false in its server.properties"
+	switch mode {
+	case forward.ModeBungeeCord:
+		return base + " and turn on BungeeCord compatibility (settings.bungeecord in spigot.yml)"
+	case forward.ModeVelocity:
+		return base + " and enable Velocity modern forwarding with the same secret"
+	default:
+		// Nothing else to configure: the proxy has already authenticated the
+		// player and replays their verified name.
+		return base + " (nothing else to configure for forwarding \"none\")"
 	}
 }
 

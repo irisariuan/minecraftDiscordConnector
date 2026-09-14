@@ -22,6 +22,9 @@ const (
 	msgCannotHold = "No server is running right now, and your client is too old to be held while one starts. Start the server from Discord, then join again."
 	msgNoAccess   = "You do not have access to any server on this proxy."
 	msgAuthFailed = "Mojang could not verify your session. Restart your launcher and try again."
+	// Shown when a backend is still in online mode. The player cannot fix it,
+	// so the message is written to be repeated to whoever can.
+	msgBackendOnlineMode = "That server is not set up to run behind this proxy: it still has online-mode=true. Ask an administrator to set online-mode=false in its server.properties."
 )
 
 // handleLogin runs everything from Login Start to either a backend tunnel or a

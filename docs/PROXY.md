@@ -219,11 +219,22 @@ identities against the backend.
 
 ### No forwarding
 
-`"none"` needs nothing configured on the backend. The proxy still authenticates
-every player against Mojang — it is the online-mode authority either way — and
-replays the *verified* username to the backend, so a cracked client cannot walk
-in as somebody else. The backend runs in offline mode and names the player from
-that username.
+`"none"` needs nothing configured on the backend beyond turning its own
+authentication off, in its `server.properties`:
+
+```properties
+online-mode=false
+server-ip=127.0.0.1
+```
+
+Leaving `online-mode=true` makes the backend ask the proxy to authenticate a
+player whose session has already been spent, and the join fails with
+`backend "…" is in online mode` in the proxy log.
+
+The proxy still authenticates every player against Mojang — it is the
+online-mode authority either way — and replays the *verified* username to the
+backend, so a cracked client cannot walk in as somebody else. The backend runs
+in offline mode and names the player from that username.
 
 Two things do not survive the trip: the player's real UUID, which an offline
 server derives from the name instead, and their signed skin properties, which it
