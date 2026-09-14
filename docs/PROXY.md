@@ -219,8 +219,26 @@ identities against the backend.
 
 ### No forwarding
 
-With `"none"` the backend just sees the proxy's connection and no identity is
-passed. Only sensible for a backend with no per-player identity requirements.
+`"none"` needs nothing configured on the backend. The proxy still authenticates
+every player against Mojang — it is the online-mode authority either way — and
+replays the *verified* username to the backend, so a cracked client cannot walk
+in as somebody else. The backend runs in offline mode and names the player from
+that username.
+
+Two things do not survive the trip: the player's real UUID, which an offline
+server derives from the name instead, and their signed skin properties, which it
+has nowhere to fetch. Heads and skins therefore fall back to the default. That is
+a property of an unmodified offline server, not something the proxy can work
+around — use `"velocity"` or `"bungeecord"` if you need either.
+
+Discord links still resolve. `/link` run in game on such a backend is recorded
+against the offline UUID, so the proxy reports both identities to the bot and the
+bot matches on either. A player who links in game is recognised the next time
+they arrive at the proxy, and can start servers from the connecting screen.
+
+The backend must still be unreachable except from the proxy. It is in offline
+mode, so anything that can open a TCP connection to it directly can claim any
+name.
 
 ## The vote channel
 

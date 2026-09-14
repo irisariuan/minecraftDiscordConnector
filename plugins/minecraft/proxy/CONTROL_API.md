@@ -66,8 +66,22 @@ Mojang. Tells the proxy who this player is and what they may do.
 **Request**
 
 ```json
-{ "uuid": "…", "name": "Notch", "ip": "1.2.3.4", "protocol": 767 }
+{
+  "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+  "offlineUuid": "b50ad385-829d-3141-a216-7e7d7539ba7f",
+  "name": "Notch",
+  "ip": "1.2.3.4",
+  "protocol": 767
+}
 ```
+
+- `uuid` is the Mojang-verified identity: lowercase and dashed.
+- `offlineUuid` is the identity a backend running offline behind
+  `forwarding: none` will know the same player by — a version 3 UUID over
+  `OfflinePlayer:<name>`, derived from the *verified* name. Anything running
+  inside such a backend, `/link` included, reports that one, so resolve a player
+  by the verified UUID first and fall back to this. It is only trustworthy
+  because it follows a name Mojang confirmed.
 
 **Response `200`**
 
@@ -107,8 +121,15 @@ The player asked, in game, for a server to be started.
 **Request**
 
 ```json
-{ "uuid": "…", "name": "Notch", "serverId": 1 }
+{
+  "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+  "offlineUuid": "b50ad385-829d-3141-a216-7e7d7539ba7f",
+  "name": "Notch",
+  "serverId": 1
+}
 ```
+
+Both identities carry the same meaning as in `POST /session`.
 
 **Response `200`**
 

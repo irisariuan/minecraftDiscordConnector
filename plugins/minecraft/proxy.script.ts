@@ -41,12 +41,14 @@ const uuidSchema = z.string().min(1).max(64);
 
 const sessionSchema = z.object({
 	uuid: uuidSchema,
+	offlineUuid: uuidSchema.optional().default(""),
 	name: z.string().min(1).max(64),
 	ip: z.string().max(64).optional().default(""),
 	protocol: z.number().int().optional().default(0),
 });
 const startSchema = z.object({
 	uuid: uuidSchema,
+	offlineUuid: uuidSchema.optional().default(""),
 	name: z.string().min(1).max(64),
 	serverId: z.number().int(),
 });
@@ -61,6 +63,7 @@ function plainText(message: string): string {
 
 /** Look up the Discord account linked to a Minecraft UUID, or null. */
 async function identityOf(uuid: string) {
+	if (!uuid) return null;
 	try {
         return await data
             .request("identity:getByExternal", {
@@ -70,6 +73,29 @@ async function identityOf(uuid: string) {
     } catch {
         return null;
     }
+}
+
+/**
+ * Resolve a player the proxy has verified, by either identity they may be
+ * recorded under.
+ *
+ * The proxy authenticates against Mojang and reports that UUID. A server behind
+ * `forwarding: none` runs offline and knows the same player by the UUID it
+ * derives from their name, so `/link` run in game there records *that* one.
+ * Trying both is what lets an online-mode proxy sit in front of a backend with
+ * no forwarding configured at all.
+ *
+ * The offline UUID is only trustworthy because the proxy derives it from the
+ * name Mojang confirmed: claiming someone else's offline identity would mean
+ * owning their Minecraft account first.
+ */
+async function linkedAccount(player: {
+	uuid: string;
+	offlineUuid: string;
+}) {
+	return (
+		(await identityOf(player.uuid)) ?? (await identityOf(player.offlineUuid))
+	);
 }
 
 /**
@@ -129,7 +155,7 @@ function createControlApp(token: string): Express {
 		}
 		try {
 			const [link, voteChannelId, proxied] = await Promise.all([
-				identityOf(parsed.data.uuid),
+				linkedAccount(parsed.data),
 				getVoteChannelId(),
 				listProxiedServers(),
 			]);
@@ -214,7 +240,7 @@ function createControlApp(token: string): Express {
 			return;
 		}
 		try {
-			const link = await identityOf(parsed.data.uuid);
+			const link = await linkedAccount(parsed.data);
 			if (!link) {
 				res.json({
 					status: "not_linked",

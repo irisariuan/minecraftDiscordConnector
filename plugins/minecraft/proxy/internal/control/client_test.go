@@ -171,8 +171,13 @@ func TestSession(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := newTestClient(srv).Session(context.Background(),
-		"069a79f4-44e9-4726-a5be-fca90e38aaf5", "Notch", "1.2.3.4", 767)
+	s, err := newTestClient(srv).Session(context.Background(), Player{
+		UUID:        "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+		OfflineUUID: "b50ad385-829d-3141-a216-7e7d7539ba7f",
+		Name:        "Notch",
+		IP:          "1.2.3.4",
+		Protocol:    767,
+	})
 	if err != nil {
 		t.Fatalf("Session: %v", err)
 	}
@@ -180,6 +185,11 @@ func TestSession(t *testing.T) {
 	if got.UUID != "069a79f4-44e9-4726-a5be-fca90e38aaf5" || got.Name != "Notch" ||
 		got.IP != "1.2.3.4" || got.Protocol != 767 {
 		t.Errorf("request body = %+v", got)
+	}
+	// The offline identity has to reach the bot as well: a link made in game on
+	// a backend with no forwarding is recorded against it, not the Mojang one.
+	if got.OfflineUUID != "b50ad385-829d-3141-a216-7e7d7539ba7f" {
+		t.Errorf("request offlineUuid = %q", got.OfflineUUID)
 	}
 	if !s.Linked || s.DiscordID != "123456789" || !s.VoteChannelConfigured {
 		t.Errorf("session = %+v", s)
@@ -202,7 +212,7 @@ func TestSessionUnlinked(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := newTestClient(srv).Session(context.Background(), "u", "n", "", 47)
+	s, err := newTestClient(srv).Session(context.Background(), Player{UUID: "u", Name: "n", Protocol: 47})
 	if err != nil {
 		t.Fatalf("Session: %v", err)
 	}
@@ -249,7 +259,8 @@ func TestStartAllStatuses(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			res, err := newTestClient(srv).Start(context.Background(), "uuid", "Notch", 7)
+			res, err := newTestClient(srv).Start(context.Background(),
+				Player{UUID: "uuid", OfflineUUID: "offline-uuid", Name: "Notch"}, 7)
 			if err != nil {
 				t.Fatalf("Start: %v", err)
 			}

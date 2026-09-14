@@ -190,17 +190,48 @@ type Session struct {
 	Servers               []SessionServerInfo `json:"servers"`
 }
 
+// Player is the identity the proxy asserts about one connection.
+//
+// Two UUIDs travel together because a player can be known by two of them at
+// once. The proxy verifies the Mojang one, but a backend behind `forwarding:
+// none` runs offline and names the same player by the UUID it derives from
+// their name — which is the identity anything running *inside* that backend,
+// including the connector plugin's `/link`, will report to the bot. Sending
+// both lets the bot resolve a player whichever way they were first recorded.
+//
+// OfflineUUID is safe to act on precisely because it is derived from the
+// verified name: claiming somebody else's offline identity would mean owning
+// their Mojang account first.
+type Player struct {
+	// UUID is the Mojang-verified identity, lowercase and dashed.
+	UUID string
+	// OfflineUUID is what an offline-mode backend calls this player.
+	OfflineUUID string
+	Name        string
+	// IP is the player's address without a port.
+	IP string
+	// Protocol is the client's protocol version.
+	Protocol int32
+}
+
 type sessionRequest struct {
-	UUID     string `json:"uuid"`
-	Name     string `json:"name"`
-	IP       string `json:"ip"`
-	Protocol int32  `json:"protocol"`
+	UUID        string `json:"uuid"`
+	OfflineUUID string `json:"offlineUuid"`
+	Name        string `json:"name"`
+	IP          string `json:"ip"`
+	Protocol    int32  `json:"protocol"`
 }
 
 // Session calls POST /session, once per login, after the player has been
-// authenticated against Mojang. uuid must be lowercase and dashed.
-func (c *Client) Session(ctx context.Context, uuid, name, ip string, protocolVersion int32) (*Session, error) {
-	req := sessionRequest{UUID: uuid, Name: name, IP: ip, Protocol: protocolVersion}
+// authenticated against Mojang.
+func (c *Client) Session(ctx context.Context, player Player) (*Session, error) {
+	req := sessionRequest{
+		UUID:        player.UUID,
+		OfflineUUID: player.OfflineUUID,
+		Name:        player.Name,
+		IP:          player.IP,
+		Protocol:    player.Protocol,
+	}
 	var out Session
 	if err := c.do(ctx, http.MethodPost, "/session", req, &out); err != nil {
 		return nil, err
@@ -217,15 +248,21 @@ type StartResult struct {
 }
 
 type startRequest struct {
-	UUID     string `json:"uuid"`
-	Name     string `json:"name"`
-	ServerID int    `json:"serverId"`
+	UUID        string `json:"uuid"`
+	OfflineUUID string `json:"offlineUuid"`
+	Name        string `json:"name"`
+	ServerID    int    `json:"serverId"`
 }
 
 // Start calls POST /start. A non-nil result with a status the caller does not
 // recognise should be handled like StatusFailed.
-func (c *Client) Start(ctx context.Context, uuid, name string, serverID int) (*StartResult, error) {
-	req := startRequest{UUID: uuid, Name: name, ServerID: serverID}
+func (c *Client) Start(ctx context.Context, player Player, serverID int) (*StartResult, error) {
+	req := startRequest{
+		UUID:        player.UUID,
+		OfflineUUID: player.OfflineUUID,
+		Name:        player.Name,
+		ServerID:    serverID,
+	}
 	var out StartResult
 	if err := c.do(ctx, http.MethodPost, "/start", req, &out); err != nil {
 		return nil, err

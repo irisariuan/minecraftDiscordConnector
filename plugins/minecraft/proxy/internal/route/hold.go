@@ -52,7 +52,9 @@ func (p *Proxy) handleLogin(ctx context.Context, conn *protocol.Conn, raw net.Co
 	p.sessions.Add(1)
 	defer p.sessions.Add(-1)
 
-	sess, err := p.opts.Control.Session(ctx, profile.ID.String(), profile.Name, ip, hs.Protocol)
+	player := playerIdentity(profile, ip, hs.Protocol)
+
+	sess, err := p.opts.Control.Session(ctx, player)
 	if err != nil {
 		return fmt.Errorf("session lookup for %s: %w", profile.Name, err)
 	}
@@ -78,7 +80,32 @@ func (p *Proxy) handleLogin(ctx context.Context, conn *protocol.Conn, raw net.Co
 	if !mcver.CanBeHeld(hs.Protocol) {
 		return disconnectLogin(conn, msgCannotHold)
 	}
-	return p.hold(ctx, conn, hs, target, profile, ip, sess.Linked)
+	return p.hold(ctx, conn, hs, target, profile, player, sess.Linked)
+}
+
+// playerIdentity builds what the bot is told about a verified player.
+//
+// Both identities travel because a player can be known by two at once. The
+// proxy is the online-mode authority, so the Mojang UUID is who they really
+// are; but a backend behind `forwarding: none` runs offline and knows them by
+// the UUID it derives from their name instead. That second identity is the one
+// anything inside such a backend reports — the connector plugin's `/link`
+// included — so a player who linked in game would look like a stranger here
+// without it.
+//
+// It is derived from the *verified* name, never the name the client claimed:
+// offline UUIDs are case-sensitive, Mojang returns the canonical spelling, and
+// deriving from anything else would produce a UUID no backend ever uses.
+// Deriving it from the verified name is also what makes it safe to act on —
+// claiming somebody else's offline identity would mean owning their account.
+func playerIdentity(profile *auth.Profile, ip string, protocolVersion int32) control.Player {
+	return control.Player{
+		UUID:        profile.ID.String(),
+		OfflineUUID: protocol.OfflineUUID(profile.Name).String(),
+		Name:        profile.Name,
+		IP:          ip,
+		Protocol:    protocolVersion,
+	}
 }
 
 // chooseTarget picks the server a player is routed to, and reports whether it
@@ -128,7 +155,7 @@ func (p *Proxy) hold(
 	hs *handshake,
 	target int,
 	profile *auth.Profile,
-	ip string,
+	player control.Player,
 	linked bool,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -144,7 +171,7 @@ func (p *Proxy) hold(
 	// the bot has to know whose permission to check and whose credit to charge.
 	// A player without one simply waits, rather than being turned away for it.
 	if linked {
-		res, err := p.opts.Control.Start(ctx, profile.ID.String(), profile.Name, target)
+		res, err := p.opts.Control.Start(ctx, player, target)
 		switch {
 		case err != nil:
 			p.log.Warn("start request failed", "player", profile.Name, "error", err)
@@ -182,7 +209,7 @@ func (p *Proxy) hold(
 	}
 
 	p.log.Info("hold resolved", "player", profile.Name, "server", entry.Tag)
-	return p.joinBackend(ctx, conn, hs, entry, profile, ip)
+	return p.joinBackend(ctx, conn, hs, entry, profile, player.IP)
 }
 
 // awaitBackendAccepting waits for a backend to accept TCP connections.

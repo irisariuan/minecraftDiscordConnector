@@ -95,8 +95,15 @@ using whichever scheme the backend is configured for:
 - `velocity` — the backend asks over a login plugin message and the proxy answers
   with an HMAC-signed payload. Forgery requires the secret, so this is the safer
   choice where the backend supports it.
-- `none` — nothing is forwarded. Only sane for a backend that does not care who
-  anyone is.
+- `none` — nothing is forwarded, and no backend configuration is needed. The
+  backend runs offline and names the player from the username the proxy replays,
+  which the proxy has verified with Mojang, so the *name* is as trustworthy as
+  under any other mode. What the backend cannot learn is the player's real UUID
+  or their signed skin properties: an offline server derives the UUID from the
+  name and has nowhere to get textures from. The proxy therefore also tells the
+  bot the offline UUID that backend will use, so a Discord link made in game
+  under that identity still resolves when the same player next arrives at the
+  proxy (see `POST /session` in `CONTROL_API.md`).
 
 After the backend's Login Success is relayed, both links share one compression
 threshold, because the proxy forwards the backend's Set Compression verbatim.
@@ -129,6 +136,12 @@ The proxy has no third-party dependencies; everything is standard library.
   somebody else brings a server up they will sit on the connecting screen.
 - **Clients older than 1.13 cannot be held**, only routed to a server that is
   already running.
+- **Real UUIDs and skins need a forwarding mode.** With `none` the backend
+  assigns the offline UUID for the verified name and sees no profile
+  properties, so player heads and skins fall back to the default. No amount of
+  proxy-side work changes that: an unmodified offline server derives the UUID
+  itself and never asks anyone about textures. Use `velocity` or `bungeecord`
+  where the backend supports it.
 - **`publicHost` in the control API is currently unused** by the proxy. It exists
   for a future hand-off that moves a player between backends mid-session.
 - **The proxy has never been run against a real Minecraft client.** The login

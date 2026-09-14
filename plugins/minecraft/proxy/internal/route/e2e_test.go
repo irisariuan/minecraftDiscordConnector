@@ -42,12 +42,20 @@ type e2eBot struct {
 	linked       bool
 	startCalls   atomic.Int32
 	sessionCalls atomic.Int32
-	server       *httptest.Server
+	// sessions carries the raw body of each POST /session, so a test can
+	// assert on the identity the proxy claimed.
+	sessions chan map[string]any
+	server   *httptest.Server
 }
 
 func newE2EBot(t *testing.T, backendPort int, online, linked bool) *e2eBot {
 	t.Helper()
-	bot := &e2eBot{online: online, backendPort: backendPort, linked: linked}
+	bot := &e2eBot{
+		online:      online,
+		backendPort: backendPort,
+		linked:      linked,
+		sessions:    make(chan map[string]any, 4),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +74,13 @@ func newE2EBot(t *testing.T, backendPort int, online, linked bool) *e2eBot {
 	})
 	mux.HandleFunc("/session", func(w http.ResponseWriter, r *http.Request) {
 		bot.sessionCalls.Add(1)
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			select {
+			case bot.sessions <- body:
+			default:
+			}
+		}
 		bot.mu.Lock()
 		sess := control.Session{
 			Linked:    bot.linked,
@@ -703,5 +718,33 @@ func TestE2ESanity(t *testing.T) {
 	t.Parallel()
 	if fmt.Sprintf("%d", e2eProtocol) == "" {
 		t.Fatal("unreachable")
+	}
+}
+
+// TestSessionCarriesTheOfflineIdentity covers the path that makes a backend
+// with no forwarding usable: the proxy authenticates the player itself and
+// tells the bot both who they really are and who that backend will think they
+// are, so a link made in game still resolves here.
+func TestSessionCarriesTheOfflineIdentity(t *testing.T) {
+	rig := newE2ERig(t, true, true)
+
+	client := e2eDial(t, rig.addr, "mc.example.com")
+	client.encrypt()
+	client.expect(idLoginSuccess)
+
+	select {
+	case body := <-rig.bot.sessions:
+		if got := body["uuid"]; got != e2ePlayerUUID {
+			t.Errorf("session uuid = %v, want the verified %s", got, e2ePlayerUUID)
+		}
+		want := protocol.OfflineUUID("SmokeTester").String()
+		if got := body["offlineUuid"]; got != want {
+			t.Errorf("session offlineUuid = %v, want %s", got, want)
+		}
+		if got := body["name"]; got != "SmokeTester" {
+			t.Errorf("session name = %v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the bot never saw a session request")
 	}
 }
