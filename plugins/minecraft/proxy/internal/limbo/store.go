@@ -84,6 +84,7 @@ func Count(s Store) int {
 //	int64  recorded-at, Unix seconds
 //	uint32 recorded-at, nanoseconds within that second
 //	uint32 source length, then that many bytes of UTF-8
+//	byte   whether the Login (play) packet was composed rather than recorded
 //	packet Login (play)
 //	uint32 configuration packet count, then that many packets
 //
@@ -103,7 +104,7 @@ const (
 	// misparse. Bump snapshotFormat on any layout change: old files are then
 	// skipped and re-recorded, which costs one cold start and nothing else.
 	snapshotMagic  = "mcproxy-limbo-snapshot\x00"
-	snapshotFormat = uint32(1)
+	snapshotFormat = uint32(2)
 
 	// headerLen is the magic plus the format version, payload length and
 	// checksum that follow it.
@@ -314,10 +315,11 @@ func snapshotName(protocolVersion int32) string {
 // [protocol.Packet] payloads alias whatever buffer they were decoded into.
 func cloneSnapshot(snap *Snapshot) *Snapshot {
 	out := &Snapshot{
-		Protocol:   snap.Protocol,
-		LoginPlay:  clonePacket(snap.LoginPlay),
-		Source:     snap.Source,
-		RecordedAt: snap.RecordedAt,
+		Protocol:    snap.Protocol,
+		LoginPlay:   clonePacket(snap.LoginPlay),
+		Source:      snap.Source,
+		RecordedAt:  snap.RecordedAt,
+		Synthesized: snap.Synthesized,
 	}
 	if len(snap.Config) > 0 {
 		out.Config = make([]protocol.Packet, len(snap.Config))
@@ -389,6 +391,11 @@ func encodeSnapshot(snap *Snapshot) ([]byte, error) {
 	body = binary.BigEndian.AppendUint32(body, uint32(snap.RecordedAt.Nanosecond()))
 	body = binary.BigEndian.AppendUint32(body, uint32(len(snap.Source)))
 	body = append(body, snap.Source...)
+	if snap.Synthesized {
+		body = append(body, 1)
+	} else {
+		body = append(body, 0)
+	}
 	body, err := appendPacket(body, snap.LoginPlay)
 	if err != nil {
 		return nil, err
@@ -461,6 +468,10 @@ func decodeSnapshot(raw []byte) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+	synthesized, err := d.take(1)
+	if err != nil {
+		return nil, err
+	}
 	loginPlay, err := d.packet()
 	if err != nil {
 		return nil, err
@@ -486,11 +497,12 @@ func decodeSnapshot(raw []byte) (*Snapshot, error) {
 	}
 
 	return &Snapshot{
-		Protocol:   protocolVersion,
-		Config:     config,
-		LoginPlay:  loginPlay,
-		Source:     source,
-		RecordedAt: time.Unix(seconds, int64(nanos)).UTC(),
+		Protocol:    protocolVersion,
+		Config:      config,
+		LoginPlay:   loginPlay,
+		Source:      source,
+		RecordedAt:  time.Unix(seconds, int64(nanos)).UTC(),
+		Synthesized: synthesized[0] != 0,
 	}, nil
 }
 

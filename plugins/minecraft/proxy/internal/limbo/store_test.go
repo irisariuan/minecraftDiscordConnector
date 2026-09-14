@@ -232,6 +232,11 @@ func TestAbsurdLengthPrefixesAreRejectedBeforeAllocating(t *testing.T) {
 		b = binary.BigEndian.AppendUint64(b, uint64(time.Now().Unix()))
 		return binary.BigEndian.AppendUint32(b, 0)
 	}
+	// Everything from the Login (play) packet onwards sits behind an empty
+	// source and the byte recording whether that packet was composed.
+	pastSource := func() []byte {
+		return append(binary.BigEndian.AppendUint32(head(), 0), 0)
+	}
 
 	t.Run("source", func(t *testing.T) {
 		body := binary.BigEndian.AppendUint32(head(), 0xfffffff0)
@@ -239,14 +244,14 @@ func TestAbsurdLengthPrefixesAreRejectedBeforeAllocating(t *testing.T) {
 	})
 
 	t.Run("packet payload", func(t *testing.T) {
-		body := binary.BigEndian.AppendUint32(head(), 0) // empty source
+		body := pastSource()
 		body = binary.BigEndian.AppendUint32(body, 0x2b) // login play id
 		body = binary.BigEndian.AppendUint32(body, 0x7fffffff)
 		assertRejected(t, frame(body), errTooLarge)
 	})
 
 	t.Run("configuration packet count", func(t *testing.T) {
-		body := binary.BigEndian.AppendUint32(head(), 0)
+		body := pastSource()
 		body = binary.BigEndian.AppendUint32(body, 0x2b)
 		body = binary.BigEndian.AppendUint32(body, 0) // empty login play
 		body = binary.BigEndian.AppendUint32(body, 0xffffffff)
@@ -260,7 +265,7 @@ func TestAbsurdLengthPrefixesAreRejectedBeforeAllocating(t *testing.T) {
 	})
 
 	t.Run("a packet that claims the rest of the file twice over", func(t *testing.T) {
-		body := binary.BigEndian.AppendUint32(head(), 0)
+		body := pastSource()
 		body = binary.BigEndian.AppendUint32(body, 0x2b)
 		body = binary.BigEndian.AppendUint32(body, uint32(maxPacketLen-1))
 		assertRejected(t, frame(body), errTruncated)

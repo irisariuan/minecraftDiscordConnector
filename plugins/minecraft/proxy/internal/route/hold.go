@@ -93,7 +93,7 @@ func (p *Proxy) handleLogin(ctx context.Context, conn *protocol.Conn, raw net.Co
 		return p.serveWorld(ctx, conn, hs, profile, player, sess)
 
 	default:
-		return p.hold(ctx, conn, hs, d.Server, profile, player, sess.Linked)
+		return p.hold(ctx, conn, hs, d.Server, profile, player)
 	}
 }
 
@@ -160,9 +160,14 @@ func (p *Proxy) chooseTarget(sess *control.Session, host string) (int, bool) {
 //
 // Nothing has been sent past the encryption exchange, so the client stays on
 // its own connecting screen: it is never kicked, never shown an error, and
-// never asked to reconnect. What it cannot be shown is a message, so where it
-// can the proxy acts for the player instead, raising the start request on their
-// behalf.
+// never asked to reconnect. What it cannot be shown is a message, and it
+// cannot be asked anything either — which is why nothing is started on its
+// behalf. Starting a server is a decision with a cost attached, and a player
+// who cannot be told it is being made for them has not made it.
+//
+// So a held player waits for somebody else: another player in the waiting
+// world, or somebody on Discord. Only clients too old for a waiting world, or
+// on a version no world has been built for, ever end up here.
 func (p *Proxy) hold(
 	ctx context.Context,
 	conn *protocol.Conn,
@@ -170,7 +175,6 @@ func (p *Proxy) hold(
 	target int,
 	profile *auth.Profile,
 	player control.Player,
-	linked bool,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -180,25 +184,6 @@ func (p *Proxy) hold(
 		label = entry.Tag
 	}
 	p.log.Info("holding player", "player", profile.Name, "server", label, "protocol", hs.Protocol)
-
-	// Asking for a server to be started is gated on a linked Discord account:
-	// the bot has to know whose permission to check and whose credit to charge.
-	// A player without one simply waits, rather than being turned away for it.
-	if linked {
-		res, err := p.opts.Control.Start(ctx, player, target)
-		switch {
-		case err != nil:
-			p.log.Warn("start request failed", "player", profile.Name, "error", err)
-		case res.Status == control.StatusNoAccess:
-			return disconnectLogin(conn, res.Message)
-		default:
-			p.log.Info("start requested",
-				"player", profile.Name, "server", label, "status", res.Status, "message", res.Message)
-		}
-	} else {
-		p.log.Info("holding an unlinked player; not requesting a start",
-			"player", profile.Name, "server", label)
-	}
 
 	// "The process started" and "the port is open" are different moments, and
 	// the gap between them can run to tens of seconds on a cold world. Both

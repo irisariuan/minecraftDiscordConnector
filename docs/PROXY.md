@@ -7,8 +7,13 @@ there.
 
 Its real purpose is what happens when that backend is **down**. Instead of
 refusing the connection with "Can't connect to server", the proxy *keeps* the
-player and gives them a way to bring the server up — immediately if they are
-allowed to, otherwise by raising a start vote in Discord.
+player, in an empty world where they can see what is available and ask for a
+server to be started — immediately if they are allowed to, otherwise by raising
+a start vote in Discord.
+
+**Connecting starts nothing by itself.** A server comes up because somebody
+asked for it, in the waiting room or on Discord, and never because a player
+turned up.
 
 The proxy owns no database, no Discord connection and no credentials. It is a
 child process of the bot and asks the bot for every decision over a **Unix
@@ -64,8 +69,10 @@ client sits on its own connecting screen: no error, no kick, no prompt to
 reconnect. When the backend comes up, the proxy relays the real Login Success
 and the hold resolves into an ordinary join with nothing lost.
 
-Nothing can be shown to a player being held, so the proxy acts for them instead
-of asking: **joining is the request to start**, under the same rules as above.
+Nothing can be shown to a player being held, and nothing can be asked of them
+either, so **no server is started on their behalf**. They wait until somebody
+who can be asked — another player in the waiting room, or somebody on Discord —
+brings one up, and are then joined to it.
 
 A client stalled mid-login gives up after about thirty seconds of silence, so
 the hold sends it a login plugin message every ten seconds on a channel no
@@ -93,26 +100,33 @@ describing it — dimension types, biomes, damage types and a couple of dozen mo
 The list grows with every release and a client that finds one wrong does not
 complain, it disconnects.
 
-Rather than ship that data and watch it rot, the proxy **records it from your own
-servers**. The first time somebody joins a running backend with a given client
-version, the proxy writes down what that backend told them and keeps it in
-`data/mcproxy-worlds/`. Later, when nothing is running, it replays that recording
-to build the waiting room. The data is right by construction: it came from the
-very server those players are heading for.
+Rather than ship that data and watch it rot, the proxy **takes it from your own
+servers** and keeps it in `data/mcproxy-worlds/`. It does that two ways, and you
+do not have to do anything for either:
+
+- **It fetches one.** Within a minute of a server coming up, the proxy asks it
+  what version it speaks, logs in, notes the registry set and hangs up — before
+  the point where a server would put a player in the world. No join message, no
+  entry in the player list, nothing for your connector to report. Nobody sees it.
+- **It records one.** Whenever a real player joins, the proxy notes what that
+  server sent them. This is the better of the two, because the packet that puts
+  a player in a world can only be *copied* from a real join; a fetched world has
+  to have that one packet composed instead. So a fetched world is provisional,
+  and the first real join at that version replaces it.
 
 What this means in practice:
 
-- **A version has no waiting room until somebody has joined a server with it.**
-  Until then those players get the silent hold. Any join teaches it — including
-  the one at the end of a hold, which is how a first-ever player on a dead server
-  pays the cost for everyone without having to know they did.
+- **There is nothing to set up and nothing to trigger.** Start a server once and
+  the waiting room exists from then on, whether or not anybody joined.
 - **The player whose join is recorded pays a small cost**: their client receives
   the registry set in full rather than the abbreviated form it would normally
   negotiate. It is a few tens of kilobytes, once per version per day.
-- **Recordings refresh daily**, because a data pack, a mod or a game update
-  changes what a server sends.
-- **The directory is disposable.** Delete it and the next join at each version
-  records it again. It is in `.gitignore` and holds nothing sensitive.
+- **Worlds refresh daily**, because a data pack, a mod or a game update changes
+  what a server sends.
+- **The directory is disposable.** Delete it and it fills itself in again. It is
+  in `.gitignore` and holds nothing sensitive.
+- **A version no server of yours runs has no waiting room.** A client older or
+  newer than all your backends gets the silent hold instead.
 
 Set `MC_PROXY_WORLD_CACHE` to move it, or to an empty string to turn the waiting
 room off entirely and hold every player instead.
@@ -125,7 +139,7 @@ writes a `routing player` line carrying a `plan` and a `reason`; when the plan i
 
 | reason | what to do |
 | --- | --- |
-| `nothing has been recorded for this client version yet` | Join through the proxy once with that client and stay a few seconds. It does not matter whether a server was already running: if it was not, you will be held, your join will start it, and the join that follows teaches the proxy just the same. This happens once per client version. |
+| `nothing has been recorded for this client version yet` | Start a server and wait a minute — the proxy fetches a world from it on its own. If that does not happen, no server of yours runs this client's version, and there is nowhere for the proxy to get one. |
 | `no packet numbering is known for this client version` | The proxy cannot build a world for 1.21.11 or 26.1, or for anything older than 1.20.5. Those players are held instead. |
 | `the waiting world is switched off` | `MC_PROXY_WORLD_CACHE` is empty, or the cache directory could not be opened — there will be a warning at startup saying so. |
 

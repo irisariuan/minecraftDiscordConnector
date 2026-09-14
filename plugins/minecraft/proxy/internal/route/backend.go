@@ -154,6 +154,13 @@ func (p *Proxy) shouldRecord(protocolVersion int32) bool {
 	if !ok {
 		return true
 	}
+	if snap.Synthesized {
+		// What is held was fetched by the proxy, which means its Login (play)
+		// packet was composed from a version layout rather than taken from a
+		// server. A real join carries the genuine article, and is worth the
+		// larger registry set it costs this player to take it.
+		return true
+	}
 	return time.Since(snap.RecordedAt) > snapshotFreshness
 }
 

@@ -2,11 +2,13 @@
 
 A Minecraft: Java Edition reverse proxy that fronts every managed server on one
 exposed port. When the backend a player wants is down, the proxy keeps them
-rather than refusing the connection — in an empty world where they can choose
-where to go and ask for it to be started, or, for a client it cannot build a
-world for, parked silently mid-login while it asks on their behalf. Either way
-they are joined to the server when it comes up. The player never sees an error
-and is never kicked.
+rather than refusing the connection: it puts them in an empty world where they
+can see what is available and ask for one to be started. They are joined to it
+when it comes up, and are never shown an error or disconnected.
+
+Connecting starts nothing by itself. A server is started because somebody asked
+for it — in the waiting world, or on Discord — and never as a side effect of a
+player turning up.
 
 The proxy owns no database, no Discord connection and no credentials.
 Everything it needs comes from the bot over a Unix domain socket, speaking the
@@ -85,10 +87,11 @@ on its own connecting screen: no error, no kick, no prompt to reconnect. When th
 backend comes up the proxy opens the backend connection, relays the real Login
 Success, and the hold resolves into an ordinary join with nothing lost.
 
-What it cannot do is say anything. The proxy therefore acts for the player
-rather than asking them: joining *is* the request to start, and the bot applies
-the same permission and voting rules it would apply to `/startserver` on
-Discord.
+What it cannot do is say anything, and it cannot ask anything either — which is
+why nothing is started on such a player's behalf. Starting a server has a cost
+attached, in permission and in credit, and a player who cannot be told that a
+decision is being made for them has not made it. A held player waits for somebody
+who can: another player in the waiting world, or somebody on Discord.
 
 A client stalled mid-login disconnects itself after about thirty seconds of
 silence, so the hold sends a login plugin message every ten seconds on a channel
@@ -130,11 +133,29 @@ telling the client which *game* version's data to load, and a handshake carries
 only a protocol number. One protocol number covers both 1.21.7 and 1.21.8, whose
 data differ.
 
-So the first time anybody joins a running backend with a given client version,
-the proxy writes down the configuration phase that backend sent them, along with
-its Login (play) packet. That recording is correct by construction: it came from
-the very server those players are going to, at the very version they are running.
-It is kept on disk and replayed later, when nothing is up.
+So the proxy takes one from a real server. There are two ways it does that, and
+it prefers the first.
+
+**Watching a join.** When anybody joins a running backend, the proxy writes down
+the configuration phase that backend sent them, along with its Login (play)
+packet. Such a recording is correct by construction: every byte came from the
+very server those players are going to, at the very version they are running.
+
+**Fetching one.** Watching a join only works when somebody is joining, and the
+waiting world is needed precisely when nobody can. Since connecting no longer
+starts anything, a proxy that had never seen a join would have no way out of
+that state at all. So it goes and gets one: it asks a running backend for its
+server-list entry to learn which version it speaks, logs in, walks the
+configuration phase, and hangs up.
+
+Hanging up is the point. A backend puts a player into the world at the moment it
+sends Login (play), so stopping short of that means no join message, no entry in
+the player list, and nothing for a connector plugin to report — nobody sees it
+happen. The price is that the Login (play) packet must then be composed from a
+documented layout rather than copied, which is the one piece of per-version
+packet construction in the whole design. A world built this way is marked as
+such, and the first real join at that version replaces it with the genuine
+article.
 
 Two details make the recording trustworthy:
 
@@ -159,21 +180,12 @@ can be one the proxy could never replay.
 Recordings are re-taken after a day, because a data pack, a mod or a game update
 changes what a backend sends and nothing here can detect that.
 
-The cost of all this is a cold start, and it is a single event rather than a
-standing requirement. A client version nobody has yet joined with has no
-recording, and those players get the mute hold — but a hold that resolves ends
-in an ordinary join, and that join is a configuration phase going past like any
-other. So the first person through the door pays it for everyone, on whichever
-path they took, and the recording is filed seconds into their session rather
-than when they leave, so everybody arriving behind them benefits immediately.
+Either way a world is filed the moment it exists rather than when the session
+that produced it ends, so everybody arriving behind benefits immediately.
 
-The alternative would be for the proxy to fetch a recording itself rather than
-waiting for a player. It could, but not cheaply: the packet that puts somebody in
-a world arrives at the same moment the backend adds them to it, so harvesting
-means either a visible ghost player joining every server — which this bot's own
-connector would report as a real join — or writing that packet by hand for four
-version layouts, which is the per-version packet construction this whole design
-exists to avoid. Neither is worth removing an event that happens once.
+What remains is a window rather than a cold start: between a server first coming
+up and the proxy noticing, there is no world for that version. The proxy looks
+every forty-five seconds and on startup, so the window is under a minute, once.
 
 ## Choosing between servers
 
@@ -245,10 +257,15 @@ The proxy has no third-party dependencies; everything is standard library.
 
 ## Known limitations
 
-- **The waiting world needs a recording before it can be offered.** Until
-  somebody has joined a running server with a given client version, players on
-  that version get the mute hold. Nothing has to be done about this; the first
-  successful join fixes it permanently.
+- **A world exists only for versions the proxy has seen a server speak.** It
+  fetches one from each running backend within a minute of that backend coming
+  up, and records one from any join, so in practice this settles itself. But a
+  version no managed server has ever run — a player on a client newer or older
+  than every backend — has no world, and gets the mute hold.
+- **Nothing starts a server except somebody asking.** A player held mutely
+  cannot ask, so they wait for another player in the waiting world or for
+  somebody on Discord. That is deliberate: a start costs permission and credit,
+  and it should not be spent by somebody who was never told it was being spent.
 - **Three client versions have no waiting world at all**, whatever has been
   recorded: 1.21.11 and 26.1 have no published packet numbering, and anything
   newer than 26.2 is unknown by definition. They are held instead. Adding a

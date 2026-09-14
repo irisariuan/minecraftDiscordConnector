@@ -58,6 +58,17 @@ type Snapshot struct {
 	// when. Both exist to make a stale or surprising snapshot explicable.
 	Source     string
 	RecordedAt time.Time
+	// Synthesized marks a world the proxy fetched for itself rather than
+	// watching a player receive.
+	//
+	// Fetching one means stopping short of the moment the backend would put a
+	// player in the world, because that moment is a visible join — which leaves
+	// the proxy to compose the packet that does the putting, from a layout that
+	// has changed three times across the versions served. Such a snapshot is
+	// therefore provisional: it works, but it is the one part of the design not
+	// taken from a real server, so the first real join at this version replaces
+	// it with the genuine article.
+	Synthesized bool
 }
 
 // Store keeps snapshots by protocol version.

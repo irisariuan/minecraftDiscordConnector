@@ -107,8 +107,8 @@ export default {
 					{
 						name: "Waiting room",
 						value: worlds.length
-							? `Available to ${worlds.map(describeVersion).join(", ")}. Other client versions wait on the connecting screen until someone joins a running server with one.`
-							: "*nothing recorded yet* — players wait on the connecting screen. The first join to a running server records the waiting room for that client version.",
+							? `Available to ${worlds.map(describeVersion).join(", ")}. Other client versions wait on the connecting screen instead.`
+							: "*none yet* — players wait on the connecting screen. Start a server and the proxy takes a waiting room from it within a minute.",
 					},
 					{
 						name: `Proxied servers (${servers.length})`,

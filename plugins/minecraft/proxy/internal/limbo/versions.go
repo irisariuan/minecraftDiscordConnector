@@ -30,6 +30,11 @@ const (
 // version.
 type profile struct {
 	// Clientbound play.
+	//
+	// loginPlay is only needed when the proxy has to build that packet itself,
+	// which it does for a world it fetched rather than recorded. A recorded one
+	// carries the backend's own id and is replayed with it.
+	loginPlay       int32
 	gameEvent       int32
 	syncPosition    int32
 	playerAbilities int32
@@ -57,6 +62,11 @@ type profile struct {
 	strictErrorHandling bool
 	// sessionID is the UUID that joined Login Success in the 26.x line.
 	sessionID bool
+	// seaLevel is the field 1.21.2 added to Login (play), and onlineMode the
+	// one the 26.x line added after it. Both sit near the end of a packet that
+	// is otherwise unchanged across every version here.
+	seaLevel   bool
+	onlineMode bool
 }
 
 // profiles is the complete set of client versions that can be given a waiting
@@ -74,7 +84,7 @@ type profile struct {
 var profiles = map[int32]profile{
 	// 1.20.5 and 1.20.6.
 	766: {
-		gameEvent: 0x22, syncPosition: 0x40, playerAbilities: 0x38,
+		loginPlay: 0x2B, gameEvent: 0x22, syncPosition: 0x40, playerAbilities: 0x38,
 		systemChat: 0x6C, keepAlive: 0x26, storeCookie: 0x6B,
 		transfer:    0x73,
 		sbKeepAlive: 0x18, sbChatCommand: 0x04, sbChatCommandSigned: 0x05,
@@ -83,7 +93,7 @@ var profiles = map[int32]profile{
 	},
 	// 1.21 and 1.21.1.
 	767: {
-		gameEvent: 0x22, syncPosition: 0x40, playerAbilities: 0x38,
+		loginPlay: 0x2B, gameEvent: 0x22, syncPosition: 0x40, playerAbilities: 0x38,
 		systemChat: 0x6C, keepAlive: 0x26, storeCookie: 0x6B,
 		transfer:    0x73,
 		sbKeepAlive: 0x18, sbChatCommand: 0x04, sbChatCommandSigned: 0x05,
@@ -92,67 +102,75 @@ var profiles = map[int32]profile{
 	},
 	// 1.21.2 and 1.21.3.
 	768: {
-		gameEvent: 0x23, syncPosition: 0x42, playerAbilities: 0x3A,
+		loginPlay: 0x2C, gameEvent: 0x23, syncPosition: 0x42, playerAbilities: 0x3A,
 		systemChat: 0x73, keepAlive: 0x27, storeCookie: 0x72,
 		transfer:    0x7A,
 		sbKeepAlive: 0x1A, sbChatCommand: 0x05, sbChatCommandSigned: 0x06,
 		sbChatMessage:      0x07,
 		modernSyncPosition: true,
+		seaLevel:           true,
 	},
 	// 1.21.4.
 	769: {
-		gameEvent: 0x23, syncPosition: 0x42, playerAbilities: 0x3A,
+		loginPlay: 0x2C, gameEvent: 0x23, syncPosition: 0x42, playerAbilities: 0x3A,
 		systemChat: 0x73, keepAlive: 0x27, storeCookie: 0x72,
 		transfer:    0x7A,
 		sbKeepAlive: 0x1A, sbChatCommand: 0x05, sbChatCommandSigned: 0x06,
 		sbChatMessage:      0x07,
 		modernSyncPosition: true,
+		seaLevel:           true,
 	},
 	// 1.21.5.
 	770: {
-		gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
+		loginPlay: 0x2B, gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
 		systemChat: 0x72, keepAlive: 0x26, storeCookie: 0x71,
 		transfer:    0x7A,
 		sbKeepAlive: 0x1A, sbChatCommand: 0x05, sbChatCommandSigned: 0x06,
 		sbChatMessage:      0x07,
 		modernSyncPosition: true,
+		seaLevel:           true,
 	},
 	// 1.21.6.
 	771: {
-		gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
+		loginPlay: 0x2B, gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
 		systemChat: 0x72, keepAlive: 0x26, storeCookie: 0x71,
 		transfer:    0x7A,
 		sbKeepAlive: 0x1B, sbChatCommand: 0x06, sbChatCommandSigned: 0x07,
 		sbChatMessage:      0x08,
 		modernSyncPosition: true,
+		seaLevel:           true,
 	},
 	// 1.21.7 and 1.21.8.
 	772: {
-		gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
+		loginPlay: 0x2B, gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
 		systemChat: 0x72, keepAlive: 0x26, storeCookie: 0x71,
 		transfer:    0x7A,
 		sbKeepAlive: 0x1B, sbChatCommand: 0x06, sbChatCommandSigned: 0x07,
 		sbChatMessage:      0x08,
 		modernSyncPosition: true,
+		seaLevel:           true,
 	},
 	// 1.21.9 and 1.21.10.
 	773: {
-		gameEvent: 0x26, syncPosition: 0x46, playerAbilities: 0x3E,
+		loginPlay: 0x30, gameEvent: 0x26, syncPosition: 0x46, playerAbilities: 0x3E,
 		systemChat: 0x77, keepAlive: 0x2B, storeCookie: 0x76,
 		transfer:    0x7F,
 		sbKeepAlive: 0x1B, sbChatCommand: 0x06, sbChatCommandSigned: 0x07,
 		sbChatMessage:      0x08,
 		modernSyncPosition: true,
+		seaLevel:           true,
 	},
 	// 26.2.
 	776: {
-		gameEvent: 0x26, syncPosition: 0x48, playerAbilities: 0x40,
+		loginPlay: 0x31, gameEvent: 0x26, syncPosition: 0x48, playerAbilities: 0x40,
 		systemChat: 0x79, keepAlive: 0x2C, storeCookie: 0x78,
 		transfer:    0x81,
 		sbKeepAlive: 0x1C, sbChatCommand: 0x07, sbChatCommandSigned: 0x08,
 		sbChatMessage:      0x09,
 		modernSyncPosition: true,
+		seaLevel:           true,
 		sessionID:          true,
+		onlineMode:         true,
 	},
 }
 

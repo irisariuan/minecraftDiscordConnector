@@ -82,6 +82,12 @@ func (p *Proxy) ListenAndServe(ctx context.Context) error {
 	}
 	p.log.Info("proxy listening", "addr", p.opts.ListenAddr)
 
+	// A waiting world has to exist before the first player needs one, and
+	// nothing a player does can bring one into being any more: joining starts
+	// no servers, so a proxy with nothing recorded and nothing running would
+	// have no way out of that state. This goes and fetches one instead.
+	go p.harvestWorlds(ctx)
+
 	// Unblock Accept on shutdown.
 	go func() {
 		<-ctx.Done()

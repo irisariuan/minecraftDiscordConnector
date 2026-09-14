@@ -146,8 +146,21 @@ type e2eBackend struct {
 	handshakes chan string
 	echoed     chan []byte
 	// configures makes the backend walk a configuration phase after login,
-	// which is the only thing a waiting world can be recorded from.
+	// which is the only thing a waiting world can be recorded from. It also
+	// decides what version the backend claims in its server-list entry: a
+	// backend with a configuration phase is a modern one, and a backend without
+	// is old enough that the proxy will not try to fetch a world from it.
 	configures bool
+}
+
+// statusProtocol is the version this backend reports to the proxy's own
+// server-list ping, which is how the proxy decides what version of world to
+// fetch from it.
+func (b *e2eBackend) statusProtocol() int32 {
+	if b.configures {
+		return e2eProtocol
+	}
+	return 47
 }
 
 func newE2EBackend(t *testing.T) *e2eBackend {
@@ -185,6 +198,18 @@ func newE2EBackendWith(t *testing.T, configures bool) *e2eBackend {
 
 func (b *e2eBackend) port() int { return b.listener.Addr().(*net.TCPAddr).Port }
 
+// serveStatus answers the server-list ping the proxy sends to find out what
+// version a backend speaks before it tries to fetch a world from it.
+func (b *e2eBackend) serveStatus(conn *protocol.Conn) {
+	if _, err := conn.ReadPacket(); err != nil {
+		return
+	}
+	body := fmt.Sprintf(
+		`{"version":{"name":"test","protocol":%d},"players":{"max":1,"online":0}}`,
+		b.statusProtocol())
+	_ = conn.WritePacket(protocol.NewWriter(0x00).String(body).Packet())
+}
+
 // configure plays a real server's configuration phase: the registry set, the end
 // of the phase, and then the Login (play) that puts the player in the world.
 // It is the whole of what a waiting world is recorded from.
@@ -193,9 +218,20 @@ func (b *e2eBackend) configure(conn *protocol.Conn, c net.Conn) {
 	if _, err := conn.ReadPacket(); err != nil {
 		return
 	}
+	// Shaped like the real thing: a registry name, a count, and then that many
+	// entries of an identifier and its optional data. The proxy reads the first
+	// dimension type out of this to compose a Login (play) packet, so a stub
+	// with no entries in it would be a stub that cannot be used.
+	registry := func(name string, entries ...string) *protocol.Packet {
+		w := protocol.NewWriter(0x07).String(name).VarInt(int32(len(entries)))
+		for _, entry := range entries {
+			w.String(entry).Bool(false)
+		}
+		return w.Packet()
+	}
 	registries := []*protocol.Packet{
-		protocol.NewWriter(0x07).String("minecraft:dimension_type").Packet(),
-		protocol.NewWriter(0x07).String("minecraft:worldgen/biome").Packet(),
+		registry("minecraft:dimension_type", "minecraft:overworld"),
+		registry("minecraft:worldgen/biome", "minecraft:plains"),
 		protocol.NewWriter(0x0D).String("tags").Packet(),
 	}
 	for _, pkt := range registries {
@@ -237,6 +273,17 @@ func (b *e2eBackend) serve(c net.Conn) {
 	r := protocol.NewReader(hs.Data)
 	_, _ = r.VarInt()
 	addr, _ := r.String(32767)
+	_, _ = r.UShort()
+	nextState, _ := r.VarInt()
+
+	if nextState == stateStatus {
+		// Not recorded: the proxy pings backends on its own to find out what
+		// version they speak, and a test asserting on the address a *player*
+		// arrived with must not be handed one of those instead.
+		b.serveStatus(conn)
+		return
+	}
+
 	select {
 	case b.handshakes <- addr:
 	default:
@@ -613,17 +660,16 @@ func TestHoldUntilBackendComesUp(t *testing.T) {
 	client := e2eDial(t, rig.addr, "mc.example.com")
 	client.encrypt()
 
-	// The proxy should ask the bot to start the server on the player's behalf.
-	deadline := time.Now().Add(5 * time.Second)
-	for rig.bot.startCalls.Load() == 0 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if got := rig.bot.startCalls.Load(); got == 0 {
-		t.Fatal("the proxy never asked the bot to start the server")
+	// Arriving must not start anything. A held player cannot be told that a
+	// server is being started in their name, or what it costs, so the decision
+	// is not taken for them; they wait for somebody who can make it.
+	time.Sleep(500 * time.Millisecond)
+	if got := rig.bot.startCalls.Load(); got != 0 {
+		t.Fatalf("simply connecting asked the bot to start a server %d times", got)
 	}
 
-	// It should then hold the connection open rather than dropping or finishing
-	// it, and the keep-alive must be a login plugin request the client answers.
+	// It should hold the connection open rather than dropping or finishing it,
+	// and the keep-alive must be a login plugin request the client answers.
 	first := client.answerHoldPing()
 	if first != 1 {
 		t.Errorf("first hold ping had message id %d, wanted 1", first)
@@ -1165,4 +1211,35 @@ func TestHoldResolvingIntoAJoinRecordsTheWaitingWorld(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("the join that ended the hold taught the proxy nothing; the cold start would never end")
+}
+
+// TestProxyFetchesAWaitingWorldFromARunningBackend covers the path that makes
+// the waiting world usable at all now that joining starts nothing.
+//
+// A player who arrives with no server running is held and can do nothing about
+// it, so the world cannot wait for a player to bring one past. The proxy asks a
+// running backend directly: it learns the version from the server-list ping,
+// logs in, records the configuration phase, and hangs up before the backend
+// would put anybody in a world.
+func TestProxyFetchesAWaitingWorldFromARunningBackend(t *testing.T) {
+	store := limbo.NewMemoryStore()
+	newE2ERigFull(t, true, true, store, true)
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if snap, ok := store.Get(e2eProtocol); ok {
+			if len(snap.Config) == 0 {
+				t.Fatal("a world was fetched with no registry data in it")
+			}
+			if !snap.Synthesized {
+				t.Error("a fetched world is not marked as such, so a real join will never replace it")
+			}
+			if snap.LoginPlay.Data == nil {
+				t.Error("no login (play) packet was composed")
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the proxy never fetched a world, so nobody arriving to a dead server will ever see one")
 }
