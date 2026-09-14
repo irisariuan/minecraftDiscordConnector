@@ -231,15 +231,13 @@ func TestServeLegacyPlayerCountsAreDecimal(t *testing.T) {
 // comment makes: the request is drained "without blocking on a client that sent
 // only the single 0xFE byte".
 //
-// A Minecraft 1.4 or 1.5 client's whole server-list ping is that one byte. The
-// caller in route.handleConn has already consumed it before ServeLegacy is
-// reached, so there is nothing left to drain and the unconditional
-// conn.Read blocks until the connection's 20 second handshake deadline fires —
-// by which time the write deadline has expired too, so the client is answered
-// with nothing at all.
+// A Minecraft 1.4 or 1.5 client's whole server-list ping is that one byte, and
+// the caller in route.handleConn has already consumed it before ServeLegacy is
+// reached, so there is nothing left to drain. The drain therefore carries a
+// short deadline of its own; without it the read would block until the
+// connection's handshake deadline fired and the client would be answered with
+// nothing at all.
 func TestServeLegacyAnswersABare0xFEPing(t *testing.T) {
-	t.Skip("BUG: ServeLegacy blocks in its drain Read when the client sent only the 0xFE byte; see the comment above and the report")
-
 	t.Parallel()
 
 	serverSide, clientSide := net.Pipe()

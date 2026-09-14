@@ -7,8 +7,14 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf16"
 )
+
+// legacyDrainTimeout bounds the wait for the rest of a legacy ping request.
+// These clients send their whole request in one burst, so anything that has not
+// arrived almost immediately is not coming.
+const legacyDrainTimeout = 250 * time.Millisecond
 
 // LegacyPingFirstByte is the first byte of a pre-1.7 server-list ping. It is not
 // a valid modern packet length, so seeing it is an unambiguous signal that the
@@ -22,10 +28,15 @@ const LegacyPingFirstByte = 0xFE
 // support questions. The request is drained rather than parsed: every variant
 // gets the same answer.
 func ServeLegacy(conn net.Conn, info Info) error {
-	// Drain whatever the client sent without blocking on a client that sent
-	// only the single 0xFE byte.
+	// Drain whatever else the client sent. The caller has already consumed the
+	// leading 0xFE, and a 1.4 or 1.5 client's entire ping is that one byte, so
+	// there may be nothing at all left to read. A plain Read would then block
+	// until the handshake deadline fired and the reply would never be written,
+	// which is why this gets a deadline of its own.
+	_ = conn.SetReadDeadline(time.Now().Add(legacyDrainTimeout))
 	buf := make([]byte, 256)
 	_, _ = conn.Read(buf)
+	_ = conn.SetReadDeadline(time.Time{})
 
 	motd := StripLegacy(info.MOTD)
 	// The legacy response is null-delimited, so an embedded null or newline
