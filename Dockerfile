@@ -32,7 +32,16 @@ COPY prisma/ ./prisma/
 COPY prisma.config.ts ./
 RUN bunx prisma generate
 
-# Stage 5: Production image
+# Stage 5: Build the Go Minecraft proxy
+FROM golang:1.24-bookworm AS proxy-builder
+WORKDIR /src
+# The proxy has no third-party dependencies, so the module files plus the
+# sources are all that is needed.
+COPY plugins/minecraft/proxy/ ./
+ENV CGO_ENABLED=0
+RUN go build -o bin/mcproxy ./cmd/mcproxy
+
+# Stage 6: Production image
 FROM base AS runner
 WORKDIR /app
 
@@ -57,6 +66,10 @@ COPY --from=prisma-builder --chown=botuser:botgroup /app/generated ./generated
 # Copy application source
 COPY --chown=botuser:botgroup . .
 
+# Copy the compiled Minecraft proxy (MC_PROXY_BIN defaults to this path)
+COPY --from=proxy-builder --chown=botuser:botgroup /src/bin/mcproxy ./plugins/minecraft/proxy/bin/mcproxy
+RUN chmod +x ./plugins/minecraft/proxy/bin/mcproxy
+
 # Copy and make startup script executable
 COPY --chown=botuser:botgroup docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
@@ -73,7 +86,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 	CMD bun --version || exit 1
 
 # Expose ports (adjust based on your configuration)
-EXPOSE 3000 6001
+# 25565 is the Minecraft proxy listen port (MC_PROXY_LISTEN_PORT).
+# The proxy control API is a Unix socket inside the container, so there is
+# nothing to expose for it.
+EXPOSE 3000 6001 25565
 
 # Environment variables (set defaults, override with docker run -e or docker-compose)
 ENV NODE_ENV=production

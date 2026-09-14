@@ -8,6 +8,7 @@ import {
 	type CommandInteraction,
 	type Message,
 	type PartialMessage,
+	type SendableChannels,
 } from "discord.js";
 import {
 	ApprovalMessageComponentId,
@@ -63,6 +64,12 @@ export interface Approval extends CoreApproval {
 
 export interface ApprovalOptions {
 	description: string;
+	/**
+	 * Opaque tag identifying what this poll is for (e.g. `"startServer"`).
+	 * Lets callers find an already-open poll of a given kind on a server
+	 * without parsing its content.
+	 */
+	kind?: string;
 	approvalCount: number;
 	disapprovalCount: number;
 	requireSuperApproval?: boolean;
@@ -279,6 +286,19 @@ export function buildInteractionFetcher(interaction: CommandInteraction) {
 			embeds: [embed],
 			components: [createApprovalMessageComponent()],
 			withResponse: true,
+		});
+}
+
+/**
+ * Message fetcher for {@link sendApprovalPoll} that posts the poll straight into
+ * a channel, for flows that have no interaction to reply to (e.g. a poll raised
+ * on behalf of an in-game player).
+ */
+export function buildChannelFetcher(channel: SendableChannels) {
+	return (embed: EmbedBuilder) =>
+		channel.send({
+			embeds: [embed],
+			components: [createApprovalMessageComponent()],
 		});
 }
 

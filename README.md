@@ -12,12 +12,20 @@ All game-specific behaviour lives in **plugins**. Minecraft is one such plugin
 (`plugins/minecraft/`); adding another game means adding another plugin without
 touching the core. See **[docs/PLUGINS.md](docs/PLUGINS.md)**.
 
+Documentation:
+
+- **[docs/PLUGINS.md](docs/PLUGINS.md)** — the plugin architecture and how to add a game.
+- **[docs/PROXY.md](docs/PROXY.md)** — the Minecraft proxy: setup, forwarding, server selection and linking.
+- **[docs/MIGRATION.md](docs/MIGRATION.md)** — upgrading an existing install to multi-game.
+- **[DOCKER.md](DOCKER.md)** — running the bot in Docker.
+
 > **Upgrading an existing install?** Follow **[docs/MIGRATION.md](docs/MIGRATION.md)**
 > to run the data-preserving multi-game migration (back up first).
 
 ## Features
 
 - **Server Control**: Start, stop, suspend, and resume the Minecraft server via Discord commands.
+- **Minecraft Proxy**: One public port in front of every managed Minecraft server. A player who connects while their server is down is held on the connecting screen instead of being refused, and the act of joining starts the server — directly if they are permitted, otherwise by raising a start vote in Discord. See **[docs/PROXY.md](docs/PROXY.md)**.
 - **Plugin Management**: Search, append, and delete plugins using Modrinth API; upload custom plugins via Discord or web UI.
 - **Approval System**: Sensitive actions (like server start/stop) can require multi-user approval.
 - **Permission System**: Fine-grained user and role permissions for all commands.
@@ -93,7 +101,19 @@ touching the core. See **[docs/PLUGINS.md](docs/PLUGINS.md)**.
     SERVER_PORT=25565        # optional (default 25565)
     SERVER_API_PORT=6001     # optional (connector REST API port)
     SERVER_TAG=Default Server # optional display tag
+
+    # ── Minecraft proxy (optional) ─────────────────────────────────
+    # Off unless MC_PROXY_ENABLED is true-ish. See docs/PROXY.md.
+    MC_PROXY_ENABLED=false
+    MC_PROXY_LISTEN_PORT=25565 # public Minecraft port
+    MC_PROXY_IPC_PATH=data/mcproxy.sock # control socket (IPC)
+    MC_PROXY_PUBLIC_HOST=mc.example.com # reserved, see docs/PROXY.md
+    MC_PROXY_BIN=plugins/minecraft/proxy/bin/mcproxy
+    MC_PROXY_TOKEN=           # optional; random per start when unset
     ```
+
+    The proxy binary is built separately with `bun run build:proxy` (Go
+    required); the Docker image builds it for you.
 
     The core needs none of the Minecraft variables. They belong to the
     Minecraft plugin's env-based bootstrap; see
@@ -157,6 +177,13 @@ All commands are available as Discord slash commands. Some require specific perm
 - `/log [filter]` — View server logs with optional filtering (paginated)
 - `/players` — List currently online players (paginated)
 - `/refreshdns` — Update Cloudflare DNS record with current server IP
+
+### Minecraft Proxy Commands
+
+- `/proxy status` — Show whether the proxy is enabled, its listen port, the vote channel, and every proxied server
+- `/proxy setchannel channel` — Set the channel in-game start votes are posted to (requires `editSetting`)
+- `/proxy clearchannel` — Stop posting in-game start votes (requires `editSetting`)
+- `/linkcode code` — Link your Minecraft account using the six-digit code the proxy showed you when it refused the join
 
 ### Permission System Commands
 

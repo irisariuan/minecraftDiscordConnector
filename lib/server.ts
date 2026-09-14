@@ -1,9 +1,21 @@
 import { spawn, type Subprocess } from "bun";
-import type { Client } from "discord.js";
+import {
+	channelMention,
+	time,
+	userMention,
+	type Client,
+	type Message,
+} from "discord.js";
 import { EventEmitter } from "node:events";
-import type { Approval } from "./approval";
+import {
+	ApprovalStatus,
+	buildChannelFetcher,
+	checkApprovalStatus,
+	sendApprovalPoll,
+	type Approval,
+} from "./approval";
 import { CacheItem } from "./cache";
-import { changeCredit, sendCreditNotification } from "./credit";
+import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
 import { getAllServers, getUserAccessibleServerIds } from "./db";
 import { appEvents } from "./events/appEvents";
 import {
@@ -18,6 +30,12 @@ import {
 	type TerminateResult,
 } from "./plugin/contract";
 import {
+	comparePermission,
+	getUsersWithMatchedPermission,
+	PermissionFlags,
+	readPermission,
+} from "./permission";
+import {
 	requireGamePlugin,
 	type RegisteredGamePlugin,
 } from "./plugin/registry";
@@ -29,7 +47,12 @@ import {
 } from "./pluginStore";
 import { loadServerSettings, type ServerSettings } from "./settings";
 import { SuspendingEventEmitter } from "./suspend";
-import { createDecodeWritableStream, isTrueValue } from "./utils";
+import { TicketEffectType, voteApprovalTicketEffects } from "./ticket";
+import {
+	createDecodeWritableStream,
+	isTrueValue,
+	sendMessagesToUsersById,
+} from "./utils";
 import { defaultSettings } from "../defaultSettings";
 
 // ─── Generic server message stream ─────────────────────────────────────────────
@@ -590,6 +613,25 @@ export class ServerManager {
 	}
 }
 
+/** The still-open "start this server" approval poll on a server, if any. */
+function findPendingStartPoll(server: Server): Approval | null {
+	for (const approval of server.approvalList.values()) {
+		if (approval.options.kind !== "startServer") continue;
+		if (checkApprovalStatus(approval) !== ApprovalStatus.Pending) continue;
+		return approval;
+	}
+	return null;
+}
+
+/** Best-effort jump link to an approval poll's message. */
+function approvalUrl(approval: Approval): string | null {
+	try {
+		return approval.message.url ?? null;
+	} catch {
+		return null;
+	}
+}
+
 /** Register runtime data channels that need a live {@link ServerManager}/client. */
 function registerServerRuntimeHandlers(manager: ServerManager, client: Client) {
 	appEvents.handle("server:getActiveByPort", async ({ port }) => {
@@ -603,6 +645,337 @@ function registerServerRuntimeHandlers(manager: ServerManager, client: Client) {
 			settings: server.settings,
 		};
 	});
+
+	appEvents.handle("server:list", async () => {
+		try {
+			const result: {
+				id: number;
+				pluginId: string;
+				tag: string | null;
+				port: number[];
+				online: boolean;
+				config: Record<string, unknown>;
+				settings: ServerSettings;
+			}[] = [];
+			for (const server of manager.getAllServers()) {
+				let config: Record<string, unknown> = {};
+				try {
+					config = server.getPluginConfig();
+				} catch (err) {
+					console.error(
+						`Failed to read plugin config for server #${server.id}:`,
+						err,
+					);
+				}
+				result.push({
+					id: server.id,
+					pluginId: server.pluginId,
+					tag: server.config.tag,
+					port: server.config.port,
+					online: (await server.isOnline.getData(true)) ?? false,
+					config,
+					settings: server.settings,
+				});
+			}
+			return result;
+		} catch (err) {
+			console.error("server:list failed:", err);
+			return [];
+		}
+	});
+
+	appEvents.handle("server:start", async ({ id }) => {
+		try {
+			const server = manager.getServer(id);
+			if (!server) {
+				return {
+					started: false,
+					pid: null,
+					error: `Unknown server #${id}`,
+				};
+			}
+			if (await server.isOnline.getData(true)) {
+				return {
+					started: false,
+					pid: null,
+					error: "Server is already online",
+				};
+			}
+			const pid = await server.start(manager);
+			if (!pid) {
+				return {
+					started: false,
+					pid: null,
+					error: "Server is already online",
+				};
+			}
+			return { started: true, pid };
+		} catch (err) {
+			console.error(`server:start failed for server #${id}:`, err);
+			return {
+				started: false,
+				pid: null,
+				error: err instanceof Error ? err.message : String(err),
+			};
+		}
+	});
+
+	appEvents.handle("server:accessibleIds", async ({ discordId }) => {
+		try {
+			return await getUserAccessibleServerIds(discordId);
+		} catch (err) {
+			console.error(
+				`server:accessibleIds failed for ${discordId}:`,
+				err,
+			);
+			// Fail closed: grant nothing rather than everything.
+			return [];
+		}
+	});
+
+	appEvents.handle("server:pendingStartPoll", ({ id }) => {
+		try {
+			const server = manager.getServer(id);
+			if (!server) return { pending: false, url: null };
+			const approval = findPendingStartPoll(server);
+			if (!approval) return { pending: false, url: null };
+			return { pending: true, url: approvalUrl(approval) };
+		} catch (err) {
+			console.error(
+				`server:pendingStartPoll failed for server #${id}:`,
+				err,
+			);
+			return { pending: false, url: null };
+		}
+	});
+
+	appEvents.handle(
+		"server:requestStart",
+		async ({ id, discordId, channelId, requestedBy }) => {
+			try {
+				const server = manager.getServer(id);
+				if (!server) {
+					return {
+						status: "failed" as const,
+						message: `Unknown server #${id}.`,
+					};
+				}
+				const label = server.config.tag ?? `Server #${server.id}`;
+				if (await server.isOnline.getData(true)) {
+					return {
+						status: "already_online" as const,
+						message: `${label} is already online.`,
+					};
+				}
+				for (const port of await manager.getAllUsingPorts()) {
+					if (!server.config.port.includes(port)) continue;
+					return {
+						status: "port_conflict" as const,
+						message: `Cannot start ${label} because port ${port} is already in use by another server.`,
+					};
+				}
+
+				const user = await client.users
+					.fetch(discordId)
+					.catch(() => null);
+				if (!user) {
+					return {
+						status: "failed" as const,
+						message: "Could not resolve the linked Discord account.",
+					};
+				}
+
+				// Permitted users start the server immediately and for free.
+				if (
+					comparePermission(
+						await readPermission(discordId, server.id),
+						PermissionFlags.startServer,
+					)
+				) {
+					const pid = await server.start(manager);
+					if (!pid) {
+						return {
+							status: "already_online" as const,
+							message: `${label} is already online.`,
+						};
+					}
+					console.log(`Server started with PID ${pid}`);
+					return {
+						status: "started" as const,
+						message: `${label} is starting now.`,
+					};
+				}
+
+				const existing = findPendingStartPoll(server);
+				if (existing) {
+					return {
+						status: "poll_pending" as const,
+						message: `A vote to start ${label} is already open on Discord.`,
+						pollUrl: approvalUrl(existing),
+					};
+				}
+
+				if (!channelId) {
+					return {
+						status: "no_channel" as const,
+						message: `No vote channel is configured, so no vote could be raised. Use /startserver on Discord to start ${label}.`,
+					};
+				}
+				const channel = await client.channels
+					.fetch(channelId)
+					.catch(() => null);
+				if (!channel?.isSendable()) {
+					return {
+						status: "no_channel" as const,
+						message: `The configured vote channel cannot be posted to. Use /startserver on Discord to start ${label}.`,
+					};
+				}
+
+				const transaction = await spendCredit({
+					user,
+					channel,
+					cost: server.settings.newStartServerPollFee,
+					reason: "New Start Server Poll",
+					serverId: server.id,
+				});
+				if (!transaction) {
+					return {
+						status: "insufficient_credit" as const,
+						message: `You do not have enough credit to open a vote to start ${label}.`,
+					};
+				}
+
+				let approvalCount = server.settings.startServerApproval;
+				const customApprovalTicket = transaction.ticketUsed?.find(
+					(t) =>
+						t.effect.effect ===
+						TicketEffectType.CustomApprovalCount,
+				);
+				if (
+					customApprovalTicket &&
+					customApprovalTicket.effect.effect ===
+						TicketEffectType.CustomApprovalCount
+				) {
+					approvalCount = customApprovalTicket.effect.count;
+				}
+				if (approvalCount === 0) {
+					const pid = await server.start(manager);
+					if (!pid) {
+						return {
+							status: "already_online" as const,
+							message: `${label} is already online.`,
+						};
+					}
+					console.log(`Server started with PID ${pid}`);
+					return {
+						status: "started" as const,
+						message: `${label} is starting now.`,
+					};
+				}
+
+				const fetchMessage = buildChannelFetcher(channel);
+				const captured: { message: Message | null } = { message: null };
+				await sendApprovalPoll(
+					async (embed) => {
+						const message = await fetchMessage(embed);
+						captured.message = message;
+						return message;
+					},
+					{
+						content: requestedBy
+							? `Start Server at ${label} (requested in game by ${requestedBy})`
+							: `Start Server at ${label}`,
+						options: {
+							async canRepeatApprove({
+								user,
+								approval,
+								server,
+							}) {
+								if (!approval.options.credit) return false;
+								const approvalCount =
+									approval.approvalIds.filter(
+										(id) => id === user.id,
+									).length +
+									approval.disapprovalIds.filter(
+										(id) => id === user.id,
+									).length;
+								const transaction = await spendCredit({
+									user,
+									channel,
+									cost: approval.options.credit,
+									reason: "Start Server Vote",
+									serverId: server.id,
+									acceptedTicketTypeIds:
+										voteApprovalTicketEffects,
+									mustUseTickets: true,
+									onBeforeSpend: async ({ tickets }) => {
+										if (!tickets) return false;
+										return !!tickets.find(
+											(t) =>
+												t.effect.effect ===
+													TicketEffectType.RepeatApprove &&
+												t.effect.maxCount >=
+													approvalCount + 1, // +1 because the current vote has not been counted in approvalCount yet
+										);
+									},
+								});
+								return !!transaction;
+							},
+							startPollFee:
+								server.settings.newStartServerPollFee,
+							callerId: discordId,
+							kind: "startServer",
+							description: `Start Server (${label})`,
+							async onSuccess(approval, message) {
+								const pid = await server.start(manager);
+								if (!pid) {
+									await message.reply({
+										content: "Server is already online",
+									});
+									return;
+								}
+								console.log(`Server started with PID ${pid}`);
+								const users =
+									await getUsersWithMatchedPermission(
+										PermissionFlags.receiveNotification,
+									);
+								if (users) {
+									sendMessagesToUsersById(
+										client,
+										users,
+										`Server started with a vote by ${userMention(discordId)} at ${channelMention(channel.id)} (${time(approval.createdAt)})`,
+									);
+								}
+								await message.reply({
+									content: "Server started successfully",
+								});
+							},
+							approvalCount,
+							disapprovalCount:
+								server.settings.startServerDisapproval,
+							credit: server.settings.startServerVoteFee,
+						},
+						server,
+					},
+				);
+
+				return {
+					status: "poll_created" as const,
+					message: `A vote to start ${label} was posted on Discord.`,
+					pollUrl: captured.message?.url ?? null,
+				};
+			} catch (err) {
+				console.error(
+					`server:requestStart failed for server #${id}:`,
+					err,
+				);
+				return {
+					status: "failed" as const,
+					message: "An internal error occurred, please try again later.",
+				};
+			}
+		},
+	);
 
 	appEvents.handle(
 		"credit:charge",

@@ -44,3 +44,9 @@ test/**/*
 !test/**/*.test.*
 /generated/prisma
 /prisma/migrations/
+
+# compiled Go proxy binary (bun run build:proxy)
+plugins/minecraft/proxy/bin/
+
+# Control socket between the bot and the Minecraft proxy
+*.sock

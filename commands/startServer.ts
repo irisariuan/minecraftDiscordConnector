@@ -144,6 +144,7 @@ export default {
 				},
 				startPollFee: server.settings.newStartServerPollFee,
 				callerId: interaction.user.id,
+				kind: "startServer",
 				description: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
 					const pid = await server.start(serverManager);

@@ -33,6 +33,7 @@
 	},
 	"scripts": {
 		"build": "cd webUi; bun run build; cd ..",
+		"build:proxy": "cd plugins/minecraft/proxy && go build -o bin/mcproxy ./cmd/mcproxy",
 		"start": "bun index.ts",
 		"test": "bun test",
 		"typecheck": "bunx tsc --noEmit",

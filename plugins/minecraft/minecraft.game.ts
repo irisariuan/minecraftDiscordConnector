@@ -139,6 +139,12 @@ export default defineGamePlugin<MinecraftConfig>({
 			minecraftVersion: "",
 			pluginDir: "",
 			apiPort: null,
+			proxy: {
+				enabled: true,
+				host: "127.0.0.1",
+				forwarding: "none" as const,
+				forwardingSecret: null,
+			},
 		};
 	},
 	lifecycle: lifecycle as Partial<ServerLifecycle<MinecraftConfig>>,

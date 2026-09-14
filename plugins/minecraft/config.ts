@@ -12,7 +12,52 @@ export interface MinecraftConfig {
 	pluginDir: string;
 	/** Port of the in-JVM connector REST API, or null when not enabled. */
 	apiPort: number | null;
+	/** How this server is exposed through the Minecraft proxy. */
+	proxy: MinecraftProxyConfig;
 }
+
+/**
+ * Per-server proxy settings.
+ *
+ * The proxy is the online-mode authority: it authenticates the player against
+ * Mojang and then hands the verified identity to the backend using
+ * {@link MinecraftProxyConfig.forwarding}.
+ *
+ * `"bungeecord"` and `"velocity"` both require the backend to run in **offline
+ * mode** with the matching forwarding option enabled (`bungeecord: true` in
+ * Spigot's `spigot.yml` / the proxy-protocol flag of your fork, or Velocity
+ * modern forwarding with the same secret). A backend configured that way trusts
+ * whatever identity its connection claims, so it **must never be reachable from
+ * the internet directly** — bind it to loopback or firewall its port so that
+ * only the proxy can reach it. `"none"` forwards nothing and is only sane for a
+ * backend with no identity requirements.
+ */
+export interface MinecraftProxyConfig {
+	/** Whether this server is reachable through the proxy. */
+	enabled: boolean;
+	/** Host the proxy dials to reach the backend. */
+	host: string;
+	/** Player-info forwarding scheme the backend expects. */
+	forwarding: "none" | "bungeecord" | "velocity";
+	/** Velocity modern-forwarding secret; null for the other modes. */
+	forwardingSecret: string | null;
+}
+
+const proxySchema = z
+	.object({
+		enabled: z.boolean().default(true),
+		host: z.string().min(1).default("127.0.0.1"),
+		forwarding: z
+			.enum(["none", "bungeecord", "velocity"])
+			.default("none"),
+		forwardingSecret: z.string().nullable().default(null),
+	})
+	.default({
+		enabled: true,
+		host: "127.0.0.1",
+		forwarding: "none",
+		forwardingSecret: null,
+	});
 
 const schema = z.object({
 	loaderType: z.string().min(1),
@@ -20,6 +65,7 @@ const schema = z.object({
 	minecraftVersion: z.string().min(1),
 	pluginDir: z.string().min(1),
 	apiPort: z.number().int().nullable().default(null),
+	proxy: proxySchema,
 });
 
 /** Validate + normalise a raw `Server.config` value into a {@link MinecraftConfig}. */
@@ -57,5 +103,11 @@ export function envMinecraftConfig(): MinecraftConfig | null {
 		apiPort: process.env.SERVER_API_PORT
 			? Number(process.env.SERVER_API_PORT)
 			: 6001,
+		proxy: {
+			enabled: true,
+			host: "127.0.0.1",
+			forwarding: "none",
+			forwardingSecret: null,
+		},
 	};
 }

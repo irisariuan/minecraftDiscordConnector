@@ -99,7 +99,15 @@ export interface LinkIdentityParams {
 }
 
 /** Environment variables the core is willing to expose to plugins. */
-export type PluginEnvKey = "CF_KEY" | "UPDATE_URL";
+export type PluginEnvKey =
+	| "CF_KEY"
+	| "UPDATE_URL"
+	| "MC_PROXY_ENABLED"
+	| "MC_PROXY_LISTEN_PORT"
+	| "MC_PROXY_IPC_PATH"
+	| "MC_PROXY_PUBLIC_HOST"
+	| "MC_PROXY_BIN"
+	| "MC_PROXY_TOKEN";
 
 /** Input data for creating a server record. */
 export type ServerCreateData = Parameters<typeof createServer>[0];
@@ -187,6 +195,60 @@ export type AppRequestMap = {
 			config: Record<string, unknown>;
 			settings: ServerSettings;
 		} | null;
+	};
+	/** Every managed server with live online state. */
+	"server:list": {
+		params: undefined;
+		result: Array<{
+			id: number;
+			pluginId: string;
+			tag: string | null;
+			port: number[];
+			online: boolean;
+			config: Record<string, unknown>;
+			settings: ServerSettings;
+		}>;
+	};
+	/** Start a server directly, with no permission or credit check. */
+	"server:start": {
+		params: { id: number };
+		result: { started: boolean; pid: number | null; error?: string };
+	};
+	/** Server ids the user may use, or null when unrestricted. */
+	"server:accessibleIds": {
+		params: { discordId: string };
+		result: number[] | null;
+	};
+	/** Whether a start vote is currently open for a server. */
+	"server:pendingStartPoll": {
+		params: { id: number };
+		result: { pending: boolean; url: string | null };
+	};
+	/** Full "somebody asked to start this server" flow: start it when the user is
+	 *  permitted, otherwise raise an approval poll in `channelId`. */
+	"server:requestStart": {
+		params: {
+			id: number;
+			discordId: string;
+			channelId: string | null;
+			requestedBy?: string;
+		};
+		result: {
+			status:
+				| "started"
+				| "already_online"
+				| "poll_created"
+				| "poll_pending"
+				| "no_channel"
+				| "no_permission"
+				| "insufficient_credit"
+				| "port_conflict"
+				| "not_linked"
+				| "no_access"
+				| "failed";
+			message: string;
+			pollUrl?: string | null;
+		};
 	};
 	/** Snapshot of the current global settings. */
 	"settings:get": { params: undefined; result: GlobalSettings };

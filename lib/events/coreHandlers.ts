@@ -115,6 +115,12 @@ export function registerCoreDataHandlers() {
 	const pluginEnv: Record<PluginEnvKey, string | undefined> = {
 		CF_KEY,
 		UPDATE_URL,
+		MC_PROXY_ENABLED: process.env.MC_PROXY_ENABLED,
+		MC_PROXY_LISTEN_PORT: process.env.MC_PROXY_LISTEN_PORT,
+		MC_PROXY_IPC_PATH: process.env.MC_PROXY_IPC_PATH,
+		MC_PROXY_PUBLIC_HOST: process.env.MC_PROXY_PUBLIC_HOST,
+		MC_PROXY_BIN: process.env.MC_PROXY_BIN,
+		MC_PROXY_TOKEN: process.env.MC_PROXY_TOKEN,
 	};
 	appEvents.handle("env:get", ({ key }) => pluginEnv[key]);
 
