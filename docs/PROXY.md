@@ -102,9 +102,10 @@ very server those players are heading for.
 
 What this means in practice:
 
-- **A version has no waiting room until somebody has joined a running server with
-  it.** Until then those players get the silent hold. One successful join fixes
-  it for good.
+- **A version has no waiting room until somebody has joined a server with it.**
+  Until then those players get the silent hold. Any join teaches it — including
+  the one at the end of a hold, which is how a first-ever player on a dead server
+  pays the cost for everyone without having to know they did.
 - **The player whose join is recorded pays a small cost**: their client receives
   the registry set in full rather than the abbreviated form it would normally
   negotiate. It is a few tens of kilobytes, once per version per day.
@@ -124,7 +125,7 @@ writes a `routing player` line carrying a `plan` and a `reason`; when the plan i
 
 | reason | what to do |
 | --- | --- |
-| `nothing has been recorded for this client version yet` | Start a server, join it through the proxy once with that client, and stay a few seconds. That is the cold start; it happens once per client version. |
+| `nothing has been recorded for this client version yet` | Join through the proxy once with that client and stay a few seconds. It does not matter whether a server was already running: if it was not, you will be held, your join will start it, and the join that follows teaches the proxy just the same. This happens once per client version. |
 | `no packet numbering is known for this client version` | The proxy cannot build a world for 1.21.11 or 26.1, or for anything older than 1.20.5. Those players are held instead. |
 | `the waiting world is switched off` | `MC_PROXY_WORLD_CACHE` is empty, or the cache directory could not be opened — there will be a warning at startup saying so. |
 

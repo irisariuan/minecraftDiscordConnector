@@ -159,10 +159,21 @@ can be one the proxy could never replay.
 Recordings are re-taken after a day, because a data pack, a mod or a game update
 changes what a backend sends and nothing here can detect that.
 
-The cost of all this is a cold start. A client version nobody has yet joined
-with has no recording, and those players get the mute hold instead. That is the
-right way round: a missing waiting world is an inconvenience, a wrong one is a
-disconnection.
+The cost of all this is a cold start, and it is a single event rather than a
+standing requirement. A client version nobody has yet joined with has no
+recording, and those players get the mute hold — but a hold that resolves ends
+in an ordinary join, and that join is a configuration phase going past like any
+other. So the first person through the door pays it for everyone, on whichever
+path they took, and the recording is filed seconds into their session rather
+than when they leave, so everybody arriving behind them benefits immediately.
+
+The alternative would be for the proxy to fetch a recording itself rather than
+waiting for a player. It could, but not cheaply: the packet that puts somebody in
+a world arrives at the same moment the backend adds them to it, so harvesting
+means either a visible ghost player joining every server — which this bot's own
+connector would report as a real join — or writing that packet by hand for four
+version layouts, which is the per-version packet construction this whole design
+exists to avoid. Neither is worth removing an event that happens once.
 
 ## Choosing between servers
 

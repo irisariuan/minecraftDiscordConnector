@@ -145,9 +145,19 @@ type e2eBackend struct {
 	listener   net.Listener
 	handshakes chan string
 	echoed     chan []byte
+	// configures makes the backend walk a configuration phase after login,
+	// which is the only thing a waiting world can be recorded from.
+	configures bool
 }
 
 func newE2EBackend(t *testing.T) *e2eBackend {
+	return newE2EBackendWith(t, false)
+}
+
+// newE2EBackendWith optionally makes the backend walk a configuration phase
+// after the login, which is what a real 1.20.2+ server does and what the proxy
+// records a waiting world from.
+func newE2EBackendWith(t *testing.T, configures bool) *e2eBackend {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -157,6 +167,7 @@ func newE2EBackend(t *testing.T) *e2eBackend {
 		listener:   ln,
 		handshakes: make(chan string, 4),
 		echoed:     make(chan []byte, 4),
+		configures: configures,
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
@@ -173,6 +184,47 @@ func newE2EBackend(t *testing.T) *e2eBackend {
 }
 
 func (b *e2eBackend) port() int { return b.listener.Addr().(*net.TCPAddr).Port }
+
+// configure plays a real server's configuration phase: the registry set, the end
+// of the phase, and then the Login (play) that puts the player in the world.
+// It is the whole of what a waiting world is recorded from.
+func (b *e2eBackend) configure(conn *protocol.Conn, c net.Conn) {
+	// The client's Login Acknowledged, relayed by the proxy.
+	if _, err := conn.ReadPacket(); err != nil {
+		return
+	}
+	registries := []*protocol.Packet{
+		protocol.NewWriter(0x07).String("minecraft:dimension_type").Packet(),
+		protocol.NewWriter(0x07).String("minecraft:worldgen/biome").Packet(),
+		protocol.NewWriter(0x0D).String("tags").Packet(),
+	}
+	for _, pkt := range registries {
+		if err := conn.WritePacket(pkt); err != nil {
+			return
+		}
+	}
+	if err := conn.WritePacket(protocol.NewWriter(0x03).Packet()); err != nil {
+		return
+	}
+
+	// Everything the client sends before it acknowledges, then the
+	// acknowledgement itself.
+	for {
+		pkt, err := conn.ReadPacket()
+		if err != nil {
+			return
+		}
+		if pkt.ID == 0x03 {
+			break
+		}
+	}
+
+	login := protocol.NewWriter(e2ePlayLoginID).String("the world").Packet()
+	if err := conn.WritePacket(login); err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, c)
+}
 
 func (b *e2eBackend) serve(c net.Conn) {
 	defer c.Close()
@@ -204,6 +256,11 @@ func (b *e2eBackend) serve(c net.Conn) {
 		VarInt(0).
 		Packet()
 	if err := conn.WritePacket(success); err != nil {
+		return
+	}
+
+	if b.configures {
+		b.configure(conn, c)
 		return
 	}
 
@@ -400,9 +457,13 @@ func newE2ERig(t *testing.T, online, linked bool) *e2eRig {
 // newE2ERigWith builds a rig whose proxy has somewhere to keep recorded worlds,
 // which is what decides whether a waiting player is given one or held mutely.
 func newE2ERigWith(t *testing.T, online, linked bool, snapshots limbo.Store) *e2eRig {
+	return newE2ERigFull(t, online, linked, snapshots, false)
+}
+
+func newE2ERigFull(t *testing.T, online, linked bool, snapshots limbo.Store, configures bool) *e2eRig {
 	t.Helper()
 
-	backend := newE2EBackend(t)
+	backend := newE2EBackendWith(t, configures)
 	bot := newE2EBot(t, backend.port(), online, linked)
 	hashes := make(chan string, 4)
 	session := newE2ESession(t, hashes)
@@ -1032,4 +1093,76 @@ func TestWaitingWorldIsNotUsedWhenNothingHasBeenRecorded(t *testing.T) {
 	if id := client.answerHoldPing(); id != 1 {
 		t.Errorf("first hold ping had message id %d, wanted 1", id)
 	}
+}
+
+// TestHoldResolvingIntoAJoinRecordsTheWaitingWorld pins the sequence that makes
+// the cold start a single event rather than a standing requirement.
+//
+// A player who arrives while everything is down is held, their join is treated
+// as the request to start, and when the server comes up they are joined to it.
+// That join is a configuration phase going past, so it is also the moment the
+// proxy learns what a world for their client version looks like — which means
+// the very first person through the door pays the cold start for everyone, on
+// whichever path they took.
+func TestHoldResolvingIntoAJoinRecordsTheWaitingWorld(t *testing.T) {
+	store := limbo.NewMemoryStore()
+	rig := newE2ERigFull(t, false, true, store, true)
+
+	client := e2eDial(t, rig.addr, "mc.example.com")
+	client.encrypt()
+
+	// Nothing is recorded yet, so this player gets the mute hold.
+	if _, ok := store.Get(e2eProtocol); ok {
+		t.Fatal("a world was recorded before anybody joined a running server")
+	}
+	client.answerHoldPing()
+
+	rig.bot.setOnline(true)
+
+	// Answer hold pings until the hold resolves into a real login.
+	for i := 0; i < 20; i++ {
+		_ = client.raw.SetReadDeadline(time.Now().Add(10 * time.Second))
+		pkt, err := client.conn.ReadPacket()
+		if err != nil {
+			t.Fatalf("read while waiting for the hold to resolve: %v", err)
+		}
+		if pkt.ID == idLoginPluginRequest {
+			r := protocol.NewReader(pkt.Data)
+			msgID, _ := r.VarInt()
+			client.mustWrite(protocol.NewWriter(idLoginPluginResponse).
+				VarInt(msgID).Bool(false).Packet())
+			continue
+		}
+		if pkt.ID == idLoginSuccess {
+			break
+		}
+		t.Fatalf("unexpected packet 0x%02x while the hold resolved", pkt.ID)
+	}
+
+	// From here the client is joining the backend for real, and the proxy is
+	// watching the configuration phase go past.
+	client.mustWrite(protocol.NewWriter(e2eLoginAcknowledged).Packet())
+	client.expect(0x07)
+	client.expect(0x07)
+	client.expect(0x0D)
+	client.expect(0x03)
+	client.mustWrite(protocol.NewWriter(e2eAckConfiguration).Packet())
+	client.expect(e2ePlayLoginID)
+
+	// The recording has to be filed now, while this player is still on the
+	// server, or everybody arriving behind them waits for a world that exists.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if snap, ok := store.Get(e2eProtocol); ok {
+			if len(snap.Config) != 3 {
+				t.Errorf("recorded %d configuration packets, wanted 3", len(snap.Config))
+			}
+			if string(snap.LoginPlay.Data) == "" {
+				t.Error("no login (play) packet was recorded")
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the join that ended the hold taught the proxy nothing; the cold start would never end")
 }
