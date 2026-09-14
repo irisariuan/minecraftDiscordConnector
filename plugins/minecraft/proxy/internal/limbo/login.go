@@ -49,16 +49,39 @@ func (s *Session) completeLogin(opts Options) error {
 		// The zero UUID is what an absent session looks like.
 		w.UUID(protocol.UUID{})
 	}
-	if err := s.conn.WritePacket(w.Packet()); err != nil {
+	if err := s.write(w.Packet()); err != nil {
 		return fmt.Errorf("login success: %w", err)
 	}
 
-	pkt, err := s.conn.ReadPacket()
-	if err != nil {
-		return fmt.Errorf("waiting for login acknowledged: %w", err)
+	return s.awaitLoginAcknowledged()
+}
+
+// awaitLoginAcknowledged waits for the client to acknowledge the login,
+// stepping over anything that arrives in front of it.
+//
+// Something usually does. The proxy asks the client for a stored server choice
+// earlier in the login and gives up on the answer after a few seconds, but
+// giving up does not recall the question: a client on a slow link answers after
+// the proxy has stopped listening, and that answer is still on the wire here.
+// Insisting on the acknowledgement being first would turn a slow connection
+// into a player dropped with no message, which is the one outcome the waiting
+// world exists to prevent.
+//
+// The patience is bounded so that a client sending an endless stream of
+// something else cannot hold the connection open for ever.
+func (s *Session) awaitLoginAcknowledged() error {
+	const maxUnexpected = 8
+
+	for i := 0; i <= maxUnexpected; i++ {
+		pkt, err := s.conn.ReadPacket()
+		if err != nil {
+			return fmt.Errorf("waiting for login acknowledged: %w", err)
+		}
+		if pkt.ID == idLoginAcknowledged {
+			return nil
+		}
+		s.log.Debug("stepping over a packet sent before the login acknowledgement",
+			"packet", pkt.ID)
 	}
-	if pkt.ID != idLoginAcknowledged {
-		return fmt.Errorf("expected login acknowledged, got 0x%02x", pkt.ID)
-	}
-	return nil
+	return fmt.Errorf("client never acknowledged the login")
 }

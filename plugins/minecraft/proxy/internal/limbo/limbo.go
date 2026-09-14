@@ -116,6 +116,10 @@ func Enter(ctx context.Context, conn *protocol.Conn, opts Options) (*Session, er
 	if opts.Snapshot == nil {
 		return nil, fmt.Errorf("%w: nothing recorded for protocol %d", ErrUnsupported, opts.Protocol)
 	}
+	if len(opts.Snapshot.Config) == 0 {
+		return nil, fmt.Errorf("%w: the recording for protocol %d describes no world",
+			ErrUnsupported, opts.Protocol)
+	}
 	if opts.Snapshot.Protocol != opts.Protocol {
 		// Replaying one version's registry set to another version's client is
 		// the one mistake this whole design exists to prevent, so it is checked

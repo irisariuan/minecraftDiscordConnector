@@ -190,16 +190,3 @@ func disconnectLogin(conn *protocol.Conn, message string) error {
 	}
 	return conn.WritePacket(protocol.NewWriter(idLoginDisconnect).String(string(payload)).Packet())
 }
-
-// awaitLoginAcknowledged consumes the acknowledgement modern clients send after
-// Login Success, which is what moves them into the configuration phase.
-func awaitLoginAcknowledged(conn *protocol.Conn) error {
-	pkt, err := conn.ReadPacket()
-	if err != nil {
-		return fmt.Errorf("read login acknowledged: %w", err)
-	}
-	if pkt.ID != idLoginAcknowledged {
-		return fmt.Errorf("expected login acknowledged, got packet 0x%02x", pkt.ID)
-	}
-	return nil
-}

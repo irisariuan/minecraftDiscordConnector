@@ -18,18 +18,12 @@ package limbo
 // since the phase was introduced; they are constants below.
 
 // Configuration-phase packet ids, identical in every version this package
-// serves. Checked individually against each version's documentation rather than
-// assumed from the endpoints.
+// serves. Only the two the waiting world actually uses are named: an id that is
+// never sent or read is an id nothing has ever checked, and a list of them
+// reads like knowledge the package does not have.
 const (
-	cbConfigDisconnect    = 0x02
-	cbFinishConfiguration = 0x03
-	cbConfigKeepAlive     = 0x04
-	cbConfigTransfer      = 0x0B
-
-	sbConfigCookieResponse   = 0x01
+	cbFinishConfiguration    = 0x03
 	sbAckFinishConfiguration = 0x03
-	sbConfigKeepAlive        = 0x04
-	sbKnownPacks             = 0x07
 )
 
 // profile is the numbering and the handful of layout quirks for one protocol
@@ -43,7 +37,6 @@ type profile struct {
 	keepAlive       int32
 	storeCookie     int32
 	transfer        int32
-	disconnect      int32
 
 	// Serverbound play. Chat arrives three ways and all three are accepted:
 	// the client picks between the signed and unsigned command packets based on
@@ -53,7 +46,6 @@ type profile struct {
 	sbChatCommand       int32
 	sbChatCommandSigned int32
 	sbChatMessage       int32
-	sbConfirmTeleport   int32
 
 	// modernSyncPosition selects the layout Synchronize Player Position took in
 	// 1.21.2: the teleport id moved to the front, three velocity doubles were
@@ -84,81 +76,81 @@ var profiles = map[int32]profile{
 	766: {
 		gameEvent: 0x22, syncPosition: 0x40, playerAbilities: 0x38,
 		systemChat: 0x6C, keepAlive: 0x26, storeCookie: 0x6B,
-		transfer: 0x73, disconnect: 0x1D,
+		transfer:    0x73,
 		sbKeepAlive: 0x18, sbChatCommand: 0x04, sbChatCommandSigned: 0x05,
-		sbChatMessage: 0x06, sbConfirmTeleport: 0x00,
+		sbChatMessage:       0x06,
 		strictErrorHandling: true,
 	},
 	// 1.21 and 1.21.1.
 	767: {
 		gameEvent: 0x22, syncPosition: 0x40, playerAbilities: 0x38,
 		systemChat: 0x6C, keepAlive: 0x26, storeCookie: 0x6B,
-		transfer: 0x73, disconnect: 0x1D,
+		transfer:    0x73,
 		sbKeepAlive: 0x18, sbChatCommand: 0x04, sbChatCommandSigned: 0x05,
-		sbChatMessage: 0x06, sbConfirmTeleport: 0x00,
+		sbChatMessage:       0x06,
 		strictErrorHandling: true,
 	},
 	// 1.21.2 and 1.21.3.
 	768: {
 		gameEvent: 0x23, syncPosition: 0x42, playerAbilities: 0x3A,
 		systemChat: 0x73, keepAlive: 0x27, storeCookie: 0x72,
-		transfer: 0x7A, disconnect: 0x1D,
+		transfer:    0x7A,
 		sbKeepAlive: 0x1A, sbChatCommand: 0x05, sbChatCommandSigned: 0x06,
-		sbChatMessage: 0x07, sbConfirmTeleport: 0x00,
+		sbChatMessage:      0x07,
 		modernSyncPosition: true,
 	},
 	// 1.21.4.
 	769: {
 		gameEvent: 0x23, syncPosition: 0x42, playerAbilities: 0x3A,
 		systemChat: 0x73, keepAlive: 0x27, storeCookie: 0x72,
-		transfer: 0x7A, disconnect: 0x1D,
+		transfer:    0x7A,
 		sbKeepAlive: 0x1A, sbChatCommand: 0x05, sbChatCommandSigned: 0x06,
-		sbChatMessage: 0x07, sbConfirmTeleport: 0x00,
+		sbChatMessage:      0x07,
 		modernSyncPosition: true,
 	},
 	// 1.21.5.
 	770: {
 		gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
 		systemChat: 0x72, keepAlive: 0x26, storeCookie: 0x71,
-		transfer: 0x7A, disconnect: 0x1C,
+		transfer:    0x7A,
 		sbKeepAlive: 0x1A, sbChatCommand: 0x05, sbChatCommandSigned: 0x06,
-		sbChatMessage: 0x07, sbConfirmTeleport: 0x00,
+		sbChatMessage:      0x07,
 		modernSyncPosition: true,
 	},
 	// 1.21.6.
 	771: {
 		gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
 		systemChat: 0x72, keepAlive: 0x26, storeCookie: 0x71,
-		transfer: 0x7A, disconnect: 0x1C,
+		transfer:    0x7A,
 		sbKeepAlive: 0x1B, sbChatCommand: 0x06, sbChatCommandSigned: 0x07,
-		sbChatMessage: 0x08, sbConfirmTeleport: 0x00,
+		sbChatMessage:      0x08,
 		modernSyncPosition: true,
 	},
 	// 1.21.7 and 1.21.8.
 	772: {
 		gameEvent: 0x22, syncPosition: 0x41, playerAbilities: 0x39,
 		systemChat: 0x72, keepAlive: 0x26, storeCookie: 0x71,
-		transfer: 0x7A, disconnect: 0x1C,
+		transfer:    0x7A,
 		sbKeepAlive: 0x1B, sbChatCommand: 0x06, sbChatCommandSigned: 0x07,
-		sbChatMessage: 0x08, sbConfirmTeleport: 0x00,
+		sbChatMessage:      0x08,
 		modernSyncPosition: true,
 	},
 	// 1.21.9 and 1.21.10.
 	773: {
 		gameEvent: 0x26, syncPosition: 0x46, playerAbilities: 0x3E,
 		systemChat: 0x77, keepAlive: 0x2B, storeCookie: 0x76,
-		transfer: 0x7F, disconnect: 0x20,
+		transfer:    0x7F,
 		sbKeepAlive: 0x1B, sbChatCommand: 0x06, sbChatCommandSigned: 0x07,
-		sbChatMessage: 0x08, sbConfirmTeleport: 0x00,
+		sbChatMessage:      0x08,
 		modernSyncPosition: true,
 	},
 	// 26.2.
 	776: {
 		gameEvent: 0x26, syncPosition: 0x48, playerAbilities: 0x40,
 		systemChat: 0x79, keepAlive: 0x2C, storeCookie: 0x78,
-		transfer: 0x81, disconnect: 0x20,
+		transfer:    0x81,
 		sbKeepAlive: 0x1C, sbChatCommand: 0x07, sbChatCommandSigned: 0x08,
-		sbChatMessage: 0x09, sbConfirmTeleport: 0x00,
+		sbChatMessage:      0x09,
 		modernSyncPosition: true,
 		sessionID:          true,
 	},

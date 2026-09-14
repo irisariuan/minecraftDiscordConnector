@@ -256,7 +256,19 @@ func (w *worldSession) refresh(ctx context.Context) (bool, error) {
 // so there is no second implementation of forwarding, compression or identity
 // to keep in step with the first.
 func (w *worldSession) transfer(entry menuEntry) error {
-	host, port := w.returnAddress()
+	host, port, ok := w.returnAddress()
+	if !ok {
+		// Transferring to an address that cannot be dialled would drop the
+		// player onto their server list with no explanation, which is worse
+		// than the waiting room they are already in.
+		w.proxy.log.Warn("cannot transfer: no address to send the player back to",
+			"player", w.name, "server", entry.Tag)
+		w.say(
+			"§c"+entry.Tag+" is ready, but this proxy does not know what address",
+			"§cto send you back to. Ask an administrator to set the proxy's public",
+			"§chost, then reconnect.")
+		return nil
+	}
 	w.say("§aSending you to " + entry.Tag + "…")
 	w.proxy.log.Info("transferring player",
 		"player", w.name, "server", entry.Tag, "host", host, "port", port)
@@ -277,17 +289,21 @@ func (w *worldSession) transfer(entry menuEntry) error {
 // followed, because the client writes the resolved host and port into its
 // handshake. An operator-configured public host is only a fallback for the case
 // where the handshake address was something unroutable, such as a container
-// name seen through a port forward.
-func (w *worldSession) returnAddress() (string, int) {
-	host := cleanHost(w.hs.Host)
-	port := int(w.hs.Port)
-	if host == "" || port == 0 {
-		cfg := w.proxy.opts.Poller.Snapshot()
-		if cfg != nil && cfg.PublicHost != "" {
-			return cfg.PublicHost, cfg.ListenPort
-		}
+// name seen through a port forward. With neither, there is nowhere to send the
+// player and the caller has to say so instead of transferring them into the
+// dark.
+func (w *worldSession) returnAddress() (host string, port int, ok bool) {
+	host = cleanHost(w.hs.Host)
+	port = int(w.hs.Port)
+	if host != "" && port > 0 {
+		return host, port, true
 	}
-	return host, port
+
+	cfg := w.proxy.opts.Poller.Snapshot()
+	if cfg != nil && cfg.PublicHost != "" && cfg.ListenPort > 0 {
+		return cfg.PublicHost, cfg.ListenPort, true
+	}
+	return "", 0, false
 }
 
 func (w *worldSession) sayLinkHelp() {

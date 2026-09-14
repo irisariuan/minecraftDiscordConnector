@@ -113,11 +113,6 @@ func FromLegacy(s string) Component {
 		}
 	}
 	flush()
-
-	// A component with no styled runs at all still needs its text somewhere.
-	if len(root.Extra) == 0 {
-		root.Text = ""
-	}
 	return root
 }
 

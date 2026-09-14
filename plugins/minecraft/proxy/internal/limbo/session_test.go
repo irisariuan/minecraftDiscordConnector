@@ -405,6 +405,13 @@ func TestEnterRefusesWhatItCannotBuild(t *testing.T) {
 			name: "a recording made for a different version",
 			opts: Options{Protocol: testProtocol, Snapshot: &Snapshot{Protocol: 770}},
 		},
+		{
+			// A recording that describes no world would take the client into
+			// the play phase with none of the registries it insists on, which
+			// disconnects it at the end of configuration.
+			name: "a recording that describes no world",
+			opts: Options{Protocol: testProtocol, Snapshot: &Snapshot{Protocol: testProtocol}},
+		},
 	}
 
 	for _, tc := range cases {
@@ -486,4 +493,56 @@ func drainSpawn(t *testing.T, client *fakeClient) {
 	client.expect(prof.playerAbilities, "player abilities")
 	client.expect(prof.gameEvent, "game event")
 	client.expect(prof.syncPosition, "synchronize player position")
+}
+
+// TestEnterToleratesAPacketSentBeforeTheAcknowledgement is the fix for a way of
+// dropping a player that the waiting world exists to prevent.
+//
+// The proxy asks the client for a stored server choice during login and stops
+// waiting for the answer after a few seconds. A client on a slow link answers
+// anyway, and that answer arrives in front of the login acknowledgement. Read
+// strictly, it is an unexpected packet, the world fails to build, and the player
+// is dropped with no message at all — for being slow.
+func TestEnterToleratesAPacketSentBeforeTheAcknowledgement(t *testing.T) {
+	t.Parallel()
+
+	serverRaw, clientRaw := socketPair(t)
+	client := &fakeClient{t: t, raw: clientRaw, conn: protocol.NewConn(clientRaw)}
+	snap := testSnapshot()
+
+	entered := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() {
+		s, err := Enter(ctx, protocol.NewConn(serverRaw), Options{
+			Protocol: testProtocol,
+			Name:     "SmokeTester",
+			UUID:     protocol.OfflineUUID("SmokeTester"),
+			Snapshot: snap,
+			Logger:   slog.New(slog.DiscardHandler),
+		})
+		if s != nil {
+			t.Cleanup(func() { _ = s.Close() })
+		}
+		entered <- err
+	}()
+
+	client.expect(idLoginSuccess, "login success")
+
+	// A cookie response the proxy gave up waiting for, arriving late.
+	client.send(protocol.NewWriter(0x04).
+		String("mcproxy:target").
+		Bool(false).
+		Packet())
+	client.send(protocol.NewWriter(idLoginAcknowledged).Packet())
+
+	for range snap.Config {
+		client.read()
+	}
+	client.expect(cbFinishConfiguration, "finish configuration")
+	client.send(protocol.NewWriter(sbAckFinishConfiguration).Packet())
+
+	if err := <-entered; err != nil {
+		t.Fatalf("a late cookie reply cost the player their connection: %v", err)
+	}
 }

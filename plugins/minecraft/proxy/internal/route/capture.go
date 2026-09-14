@@ -120,10 +120,10 @@ func (p *Proxy) recordJoin(
 	}
 
 	// Whether the client's side of the configuration phase was relayed all the
-	// way through. It is written once, by the goroutine below, before the
-	// backend can possibly send the packet that ends the capture — the backend
-	// does not move to the play phase until it has the acknowledgement this
-	// relay forwards — so by the time the capture returns, this is settled.
+	// way through. The goroutine below sets it before forwarding the
+	// acknowledgement, and the backend cannot send the packet that ends the
+	// capture until it has that acknowledgement, so by the time the capture
+	// returns this is settled.
 	var relayed atomic.Bool
 
 	var wg sync.WaitGroup
@@ -180,13 +180,20 @@ func (p *Proxy) captureConfiguration(
 			"server", entry.Tag, "protocol", protocolVersion, "reason", reason)
 		return nil, nil
 	}
-	// resume undoes the read deadline for the byte copy that follows. It is
-	// called only where the last packet was forwarded whole, so the stream is
-	// still on a frame boundary and the copy can pick it up. After a failed
-	// read it is deliberately not called: ReadPacket may have consumed part of
-	// a frame, and a copy that resumed mid-frame would hand the client a
-	// truncated packet. Leaving an expired deadline in place ends the copy at
-	// once instead, which is the honest outcome for a backend that stalled.
+	// resume undoes the read deadline for the byte copy that follows, and must
+	// be called on every path that leaves this function with the session still
+	// alive. Forgetting it leaves the copy running against a deadline meant for
+	// the configuration phase, which would end a perfectly healthy session
+	// partway through the player's evening.
+	//
+	// The one place it is deliberately skipped is a failed read. ReadPacket may
+	// have consumed part of a frame before failing, and a copy that picked up
+	// mid-frame would hand the client a truncated packet; letting the deadline
+	// stand ends the copy at once instead, which is the honest outcome for a
+	// backend that stopped talking. Today ReadPacket happens to consume whole
+	// frames or nothing, so the stream would in fact still be aligned — but
+	// that is an implementation detail of the codec, not a promise, and this
+	// does not want to depend on it.
 	resume := func() { _ = backend.SetReadDeadline(time.Time{}) }
 
 	var recorded int
@@ -220,6 +227,17 @@ func (p *Proxy) captureConfiguration(
 		if !recordableConfigPacket(pkt.ID) {
 			continue
 		}
+		if !replayable(pkt) {
+			// A packet the recording could hold but the waiting world could not
+			// send back. The client link runs uncompressed, so a frame over the
+			// protocol's own limit would be refused on replay — after Login
+			// Success has gone out, with no way left to fall back. Better to
+			// have no recording for this version than one that disconnects
+			// everybody it is replayed to.
+			resume()
+			return abandon(fmt.Sprintf(
+				"a configuration packet of %d bytes is too large to replay", len(pkt.Data)))
+		}
 		recorded += len(pkt.Data)
 		if recorded > maxCaptureBytes {
 			resume()
@@ -234,6 +252,24 @@ func (p *Proxy) captureConfiguration(
 	}
 	if err := client.WritePacket(login); err != nil {
 		return nil, fmt.Errorf("relay login (play): %w", err)
+	}
+	// Both checks below are reached with the login packet already forwarded
+	// whole, so the session is healthy and the copy must be let out of the
+	// configuration-phase deadline even though the recording is being thrown
+	// away.
+	if !replayable(login) {
+		resume()
+		return abandon(fmt.Sprintf(
+			"the login (play) packet is %d bytes, too large to replay", len(login.Data)))
+	}
+	if len(snap.Config) == 0 {
+		resume()
+		// A configuration phase that described no world at all. Replaying it
+		// would take a client into the play phase with none of the registries
+		// it insists on, which is the exact failure the recording exists to
+		// avoid — and storing it would make that failure stick for a day,
+		// because a stored recording stops the next join being watched.
+		return abandon("the backend sent no registry data at all")
 	}
 	snap.LoginPlay = clonePacket(login)
 	resume()
@@ -256,6 +292,13 @@ func (p *Proxy) captureConfiguration(
 // to go. An id this proxy has not heard of gets the same treatment as those,
 // because an unknown packet is far more likely to be another piece of
 // connection state than another registry.
+// replayable reports whether a recorded packet could be sent back to a client
+// later. The waiting world never turns compression on, so the protocol's frame
+// limit is the whole of the budget.
+func replayable(pkt *protocol.Packet) bool {
+	return len(pkt.Data) <= protocol.MaxPacketLength-protocol.MaxVarIntLen
+}
+
 func recordableConfigPacket(id int32) bool {
 	switch id {
 	case idRegistryData, idUpdateTags, idUpdateEnabledFeatures:
@@ -283,18 +326,14 @@ func clonePacket(pkt *protocol.Packet) protocol.Packet {
 // packet by packet so that the Known Packs reply can be replaced, then hands
 // the rest of the direction to a raw copy.
 //
-// It records in completed whether it saw the configuration phase through to the
-// client's acknowledgement, which is the caller's only evidence that the reply
-// really was emptied — and therefore that what was recorded in the other direction is
+// It sets completed when it sees the configuration phase through to the client's
+// acknowledgement, which is the caller's only evidence that the reply really was
+// emptied — and therefore that what was recorded in the other direction is
 // complete rather than full of holes. It cannot fail a join on its own: if it
 // stops early the session continues as an opaque copy, and if the connection is
 // dead the copy ends and the caller's teardown closes both sides.
 func (p *Proxy) relayClientConfiguration(client, backend *protocol.Conn, completed *atomic.Bool) {
-	aligned, sawAck := p.rewriteKnownPacks(client, backend)
-	// Recorded before the copy rather than returned after it: the copy runs for
-	// as long as the player is on the server, and the answer is needed the
-	// moment the recording finishes, which is seconds from now.
-	completed.Store(sawAck)
+	aligned := p.rewriteKnownPacks(client, backend, completed)
 	if aligned {
 		_, _ = io.Copy(backend.StreamWriter(), client.StreamReader())
 	}
@@ -303,12 +342,11 @@ func (p *Proxy) relayClientConfiguration(client, backend *protocol.Conn, complet
 // rewriteKnownPacks forwards the client's configuration packets to the backend,
 // replacing its Known Packs reply with an empty list.
 //
-// It reports two separate things. The first is whether the stream is still on a
-// frame boundary, and so whether the remainder can be copied byte for byte. The
-// second is whether the configuration phase was seen all the way through to the
-// client's acknowledgement: only then is it certain that no un-emptied reply
-// reached the backend, and only then is the recording in the other direction
-// worth keeping.
+// It reports whether the stream is still on a frame boundary, and so whether the
+// remainder can be copied byte for byte, and separately sets completed if the
+// configuration phase was seen all the way through to the client's
+// acknowledgement. Only then is it certain that no un-emptied reply reached the
+// backend, and only then is the recording in the other direction worth keeping.
 //
 // # Why the reply is replaced
 //
@@ -329,14 +367,14 @@ func (p *Proxy) relayClientConfiguration(client, backend *protocol.Conn, complet
 // Answering "I have nothing" leaves the backend able to assume nothing, so it
 // spells out every entry in full. That is the only form of the data that stands
 // on its own once the connection it came from is gone.
-func (p *Proxy) rewriteKnownPacks(client, backend *protocol.Conn) (aligned, completed bool) {
+func (p *Proxy) rewriteKnownPacks(client, backend *protocol.Conn, completed *atomic.Bool) (aligned bool) {
 	for seen := 0; seen < maxClientConfigPackets; seen++ {
 		pkt, err := client.ReadPacket()
 		if err != nil {
 			// Either the player left or the frame is half-read; in both cases
 			// there is nothing safe or useful left to copy.
 			p.log.Debug("stopped rewriting the client's configuration", "error", err)
-			return false, false
+			return false
 		}
 
 		// The first packet is Login Acknowledged, which is still a login-phase
@@ -346,19 +384,33 @@ func (p *Proxy) rewriteKnownPacks(client, backend *protocol.Conn) (aligned, comp
 		if seen > 0 && pkt.ID == idKnownPacksReply {
 			empty := protocol.NewWriter(idKnownPacksReply).VarInt(0).Packet()
 			if err := backend.WritePacket(empty); err != nil {
-				return false, false
+				return false
 			}
 			p.log.Debug("emptied the client's known packs reply so the backend sends full registry data")
 			continue
 		}
 
+		if seen > 0 && pkt.ID == idAckFinishConfiguration {
+			// Recorded before the acknowledgement is forwarded, not after.
+			//
+			// Forwarding it is what lets the backend move to the play phase and
+			// send the packet that ends the recording in the other direction,
+			// and that direction reads this flag the moment it does. Setting it
+			// afterwards leaves a window in which a sound recording is thrown
+			// away for want of a confirmation that had already been earned.
+			//
+			// Claiming it before the write succeeds is safe: a backend that
+			// never receives the acknowledgement never leaves the configuration
+			// phase, so the recording never completes and nothing is stored.
+			completed.Store(true)
+		}
 		if err := backend.WritePacket(pkt); err != nil {
-			return false, false
+			return false
 		}
 		if seen > 0 && pkt.ID == idAckFinishConfiguration {
 			// The client is entering the play phase and sends nothing else this
 			// proxy has any reason to rewrite.
-			return true, true
+			return true
 		}
 	}
 	// A client this talkative during configuration is not one whose packets are
@@ -366,5 +418,5 @@ func (p *Proxy) rewriteKnownPacks(client, backend *protocol.Conn) (aligned, comp
 	// that is up, so the session continues as a copy. What cannot continue is
 	// the recording: a reply may have slipped past unread.
 	p.log.Debug("stopped rewriting the client's configuration", "reason", "packet limit")
-	return true, false
+	return true
 }

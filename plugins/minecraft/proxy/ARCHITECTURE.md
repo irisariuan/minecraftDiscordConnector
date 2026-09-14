@@ -148,6 +148,14 @@ Two details make the recording trustworthy:
   an un-emptied reply may have reached the backend, and a hollow recording looks
   perfectly healthy right up until it disconnects whoever it is replayed to.
 
+Two more recordings are thrown away rather than kept, both for the same reason:
+a stored one stops the next join being watched, so a bad recording does not
+merely fail once, it takes that version out of service for a day. One is a
+configuration phase that carried no registry data at all. The other is one
+holding a packet too large to send back — the backend link is usually
+compressed and the waiting world's is not, so a frame that arrived comfortably
+can be one the proxy could never replay.
+
 Recordings are re-taken after a day, because a data pack, a mod or a game update
 changes what a backend sends and nothing here can detect that.
 

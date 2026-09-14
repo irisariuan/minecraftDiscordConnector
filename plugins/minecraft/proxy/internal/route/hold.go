@@ -200,13 +200,25 @@ func (p *Proxy) hold(
 			"player", profile.Name, "server", label)
 	}
 
-	online := make(chan struct{})
+	// "The process started" and "the port is open" are different moments, and
+	// the gap between them can run to tens of seconds on a cold world. Both
+	// waits happen behind the keep-alive rather than in front of it, because a
+	// held client that hears nothing for thirty seconds disconnects itself —
+	// waiting quietly for the port would undo the whole point of the hold.
+	ready := make(chan struct{})
 	go func() {
-		defer close(online)
-		_ = p.opts.Poller.WaitOnline(ctx, target)
+		defer close(ready)
+		if err := p.opts.Poller.WaitOnline(ctx, target); err != nil {
+			return
+		}
+		entry, ok := p.entryFor(target)
+		if !ok {
+			return
+		}
+		_ = p.awaitBackendAccepting(ctx, entry)
 	}()
 
-	if err := p.keepAliveUntil(ctx, conn, online); err != nil {
+	if err := p.keepAliveUntil(ctx, conn, ready); err != nil {
 		return err
 	}
 	if ctx.Err() != nil {
@@ -216,10 +228,6 @@ func (p *Proxy) hold(
 	entry, ok := p.entryFor(target)
 	if !ok {
 		return fmt.Errorf("server %d disappeared while holding", target)
-	}
-	// "The process started" and "the port is open" are different moments.
-	if err := p.awaitBackendAccepting(ctx, entry); err != nil {
-		return err
 	}
 
 	p.log.Info("hold resolved", "player", profile.Name, "server", entry.Tag)

@@ -29,6 +29,20 @@ const (
 	// already disconnected or about to disconnect itself.
 	keepAliveGrace = 30 * time.Second
 
+	// writeTimeout bounds a single write to the client.
+	//
+	// The waiting world pushes a lot of unsolicited data — a replayed registry
+	// set runs to hundreds of kilobytes — at a client that has done nothing to
+	// ask for it. A client that opens a connection and then simply stops
+	// reading, without closing, would otherwise wedge the goroutine writing to
+	// it for ever, and with it the keep-alive loop that is supposed to notice.
+	// A read deadline does not help: the write is where it stops.
+	//
+	// The deadline is set before each write and deliberately never cleared.
+	// Several goroutines write here, and clearing it after one of them finished
+	// would lift the deadline out from under another that was still going.
+	writeTimeout = 30 * time.Second
+
 	// voidY is where the player is put.
 	//
 	// It is not decoration. A client will not leave its loading screen until it
@@ -66,12 +80,12 @@ func (s *Session) configure(snap *Snapshot) error {
 	defer func() { _ = s.conn.SetReadDeadline(time.Time{}) }()
 
 	for i := range snap.Config {
-		if err := s.conn.WritePacket(&snap.Config[i]); err != nil {
+		if err := s.write(&snap.Config[i]); err != nil {
 			return fmt.Errorf("replaying configuration packet %d of %d: %w", i+1, len(snap.Config), err)
 		}
 	}
 
-	if err := s.conn.WritePacket(protocol.NewWriter(cbFinishConfiguration).Packet()); err != nil {
+	if err := s.write(protocol.NewWriter(cbFinishConfiguration).Packet()); err != nil {
 		return fmt.Errorf("finish configuration: %w", err)
 	}
 
@@ -95,7 +109,7 @@ func (s *Session) spawn(snap *Snapshot) error {
 	// index into the registry set replayed a moment ago, so the two agree by
 	// construction — which is the entire reason this packet is copied rather
 	// than built.
-	if err := s.conn.WritePacket(&snap.LoginPlay); err != nil {
+	if err := s.write(&snap.LoginPlay); err != nil {
 		return fmt.Errorf("login (play): %w", err)
 	}
 
@@ -104,7 +118,7 @@ func (s *Session) spawn(snap *Snapshot) error {
 		Float(0.05).
 		Float(0.1).
 		Packet()
-	if err := s.conn.WritePacket(abilities); err != nil {
+	if err := s.write(abilities); err != nil {
 		return fmt.Errorf("player abilities: %w", err)
 	}
 
@@ -112,11 +126,11 @@ func (s *Session) spawn(snap *Snapshot) error {
 		UByte(gameEventStartWaitingForChunks).
 		Float(0).
 		Packet()
-	if err := s.conn.WritePacket(event); err != nil {
+	if err := s.write(event); err != nil {
 		return fmt.Errorf("game event: %w", err)
 	}
 
-	return s.conn.WritePacket(s.positionPacket())
+	return s.write(s.positionPacket())
 }
 
 // positionPacket places the player, in whichever of the two layouts this
@@ -156,7 +170,7 @@ func (s *Session) Say(line string) error {
 	if err != nil {
 		return fmt.Errorf("encoding chat: %w", err)
 	}
-	return s.conn.WritePacket(protocol.NewWriter(s.profile.systemChat).
+	return s.write(protocol.NewWriter(s.profile.systemChat).
 		Raw(content).
 		Bool(false). // chat, not the action bar
 		Packet())
@@ -169,7 +183,7 @@ func (s *Session) Say(line string) error {
 // just chose", and the reason the choice does not have to be remembered
 // anywhere on this side.
 func (s *Session) StoreCookie(key string, payload []byte) error {
-	return s.conn.WritePacket(protocol.NewWriter(s.profile.storeCookie).
+	return s.write(protocol.NewWriter(s.profile.storeCookie).
 		String(key).
 		ByteArray(payload).
 		Packet())
@@ -182,10 +196,18 @@ func (s *Session) StoreCookie(key string, payload []byte) error {
 // no state to carry across and nothing to keep in step. What it is not is a
 // disconnection — the player is never returned to the server list.
 func (s *Session) Transfer(host string, port int) error {
-	return s.conn.WritePacket(protocol.NewWriter(s.profile.transfer).
+	return s.write(protocol.NewWriter(s.profile.transfer).
 		String(host).
 		VarInt(int32(port)).
 		Packet())
+}
+
+// write sends one packet under a deadline. See [writeTimeout].
+func (s *Session) write(pkt *protocol.Packet) error {
+	if err := s.conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		return err
+	}
+	return s.conn.WritePacket(pkt)
 }
 
 // Close ends the session. Closing the connection is what stops the read loop,
@@ -199,7 +221,8 @@ func (s *Session) Close() error {
 // keeps the keep-alive bookkeeping honest.
 //
 // Everything else the client sends — movement, held-item changes, the teleport
-// confirmation, whatever a future version adds — is dropped without comment.
+// confirmation, whatever a future version adds — is dropped without comment, and
+// without the proxy needing to know its number.
 // That is not laziness: a waiting world has no state for any of it to act on,
 // and refusing to ignore an unrecognised packet would mean a new client version
 // could not stand in a room it is otherwise perfectly able to stand in.
@@ -282,7 +305,7 @@ func (s *Session) keepAliveLoop(ctx context.Context) {
 		id := rand.Int64()
 		s.expectAnswer()
 		pkt := protocol.NewWriter(s.profile.keepAlive).Long(id).Packet()
-		if err := s.conn.WritePacket(pkt); err != nil {
+		if err := s.write(pkt); err != nil {
 			// The player has gone, or the connection has. Either way the read
 			// loop is about to notice and close the channel.
 			return

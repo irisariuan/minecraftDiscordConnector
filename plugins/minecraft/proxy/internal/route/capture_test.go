@@ -553,3 +553,79 @@ func TestRecordJoinHandsTheClientStreamOverWithoutLosingBytes(t *testing.T) {
 		t.Fatalf("recordJoin: %v", err)
 	}
 }
+
+// TestRecordJoinKeepsNothingThatWouldDisconnectAReplayedClient covers the two
+// recordings that look healthy and are not: one that describes no world, and one
+// carrying a packet too large to send back.
+//
+// Both matter more than they look. A stored recording stops the next join being
+// watched for a day, so a bad one does not merely fail — it takes the version
+// out of service and keeps it out.
+func TestRecordJoinKeepsNothingThatWouldDisconnectAReplayedClient(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a configuration phase with no registry data at all", func(t *testing.T) {
+		t.Parallel()
+
+		rig := newCaptureRig(t)
+		rig.completeClientConfiguration()
+
+		// Only packets that are forwarded but never recorded, then the end of
+		// the phase: nothing describing a world went past.
+		script := []*protocol.Packet{
+			capturePacket(0x01, "minecraft:brand"),
+			capturePacket(idFinishConfiguration, ""),
+			capturePacket(capturePlayLogin, "the world the player is entering"),
+		}
+		rig.fromBackend(script...)
+		for _, want := range script {
+			rig.expectPlayer(want.ID)
+		}
+
+		snap, err := rig.finish()
+		if err != nil {
+			t.Fatalf("recordJoin: %v", err)
+		}
+		if snap != nil {
+			t.Fatalf("kept a recording of %d packets that describes no world", len(snap.Config))
+		}
+	})
+}
+
+// TestReplayableRejectsWhatTheWaitingWorldCouldNotSendBack guards the size gap
+// between the two links.
+//
+// A backend connection usually has compression on, and a compressed frame well
+// under the protocol's frame limit can decompress to several times it — the
+// codec allows up to eight megabytes. The waiting world's connection has
+// compression off, so anything over the frame limit is refused when it is
+// replayed, and refused *after* Login Success has gone out, with no way left to
+// put the player anywhere else. It has to be caught while recording.
+//
+// This is a unit test rather than an end-to-end one because such a packet cannot
+// be staged through an uncompressed connection at all: the writer refuses it,
+// which is the very behaviour being guarded against.
+func TestReplayableRejectsWhatTheWaitingWorldCouldNotSendBack(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		size int
+		want bool
+	}{
+		{"an ordinary registry packet", 64 * 1024, true},
+		{"empty", 0, true},
+		{"just inside the frame limit", protocol.MaxPacketLength - 16, true},
+		{"past the frame limit", protocol.MaxPacketLength, false},
+		{"what a compressed backend link can legitimately deliver", 4 * 1024 * 1024, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pkt := &protocol.Packet{ID: idRegistryData, Data: make([]byte, tc.size)}
+			if got := replayable(pkt); got != tc.want {
+				t.Errorf("replayable(%d bytes) = %v, want %v", tc.size, got, tc.want)
+			}
+		})
+	}
+}
