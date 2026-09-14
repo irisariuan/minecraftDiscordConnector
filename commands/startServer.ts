@@ -5,6 +5,7 @@ import {
 	time,
 	userMention,
 } from "discord.js";
+
 import { buildInteractionFetcher, sendApprovalPoll } from "../lib/approval";
 import type { CommandFile } from "../lib/commandFile";
 import { spendCredit } from "../lib/credit";
@@ -66,16 +67,17 @@ export default {
 				});
 			}
 			console.log(`Server started with PID ${pid}`);
-			return await interaction.editReply({
+			await interaction.editReply({
 				content: "Server started successfully",
 			});
+			return;
 		}
 		await interaction.deleteReply();
 
 		const transaction = await spendCredit({
 			user: interaction.user,
 			channel: interaction.channel,
-			cost: server.creditSettings.newStartServerPollFee,
+			cost: server.settings.newStartServerPollFee,
 			reason: "New Start Server Poll",
 			serverId: server.id,
 		});
@@ -85,16 +87,16 @@ export default {
 				flags: MessageFlags.Ephemeral,
 			});
 		}
-		let approvalCount = server.approvalSettings.startServerApproval;
+		let approvalCount = server.settings.startServerApproval;
 		const customApprovalTicket = transaction.ticketUsed?.find(
 			(t) => t.effect.effect === TicketEffectType.CustomApprovalCount,
 		);
 		if (
 			customApprovalTicket &&
-			customApprovalTicket.effect?.value !== null &&
-			Number.isInteger(customApprovalTicket?.effect?.value)
+			customApprovalTicket.effect.effect ===
+				TicketEffectType.CustomApprovalCount
 		) {
-			approvalCount = customApprovalTicket.effect.value;
+			approvalCount = customApprovalTicket.effect.count;
 		}
 		if (approvalCount === 0) {
 			const pid = await server.start(serverManager);
@@ -104,9 +106,10 @@ export default {
 				});
 			}
 			console.log(`Server started with PID ${pid}`);
-			return await interaction.editReply({
+			await interaction.editReply({
 				content: "Server started successfully",
 			});
+			return;
 		}
 
 		sendApprovalPoll(buildInteractionFetcher(interaction), {
@@ -133,14 +136,13 @@ export default {
 								(t) =>
 									t.effect.effect ===
 										TicketEffectType.RepeatApprove &&
-									t.effect.value !== null &&
-									t.effect.value >= approvalCount + 1, // +1 because the current vote has not been counted in approvalCount yet
+									t.effect.maxCount >= approvalCount + 1, // +1 because the current vote has not been counted in approvalCount yet
 							);
 						},
 					});
 					return !!transaction;
 				},
-				startPollFee: server.creditSettings.newStartServerPollFee,
+				startPollFee: server.settings.newStartServerPollFee,
 				callerId: interaction.user.id,
 				description: `Start Server (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
@@ -167,9 +169,8 @@ export default {
 					});
 				},
 				approvalCount,
-				disapprovalCount:
-					server.approvalSettings.startServerDisapproval,
-				credit: server.creditSettings.startServerVoteFee,
+				disapprovalCount: server.settings.startServerDisapproval,
+				credit: server.settings.startServerVoteFee,
 			},
 			server,
 		});

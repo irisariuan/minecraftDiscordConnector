@@ -6,25 +6,48 @@ import {
 	StringSelectMenuBuilder,
 	type InteractionReplyOptions,
 } from "discord.js";
+import { getGamePlugin } from "../plugin/registry";
 import type { Server, ServerManager, TagPair } from "../server";
 import { trimTextWithSuffix } from "../utils";
 
 export enum ServerSelectionMenuAction {
 	SERVER_SELECT_ID = "server_select",
 }
+
+/** Human-readable game name for a server's plugin id (falls back to the id). */
+function gameName(pluginId: string): string {
+	return getGamePlugin(pluginId)?.displayName ?? pluginId;
+}
+
 export function createServerSelectionMenu(options: TagPair[]) {
 	options = options.slice(0, 25); // Discord limit
+
+	// When the selectable servers span more than one game, disambiguate by
+	// appending the game name to each label — e.g. "First Server (Minecraft)"
+	// vs "First Server (COD)". The option value stays the server id, so the
+	// choice always resolves to the correct server (and thus the correct plugin).
+	const spansMultipleGames =
+		new Set(options.map((o) => o.pluginId)).size > 1;
+
 	const selectMenu = new StringSelectMenuBuilder()
 		.setCustomId(ServerSelectionMenuAction.SERVER_SELECT_ID)
 		.setPlaceholder("Select a server")
 		.addOptions(
-			options.map((option) => ({
-				label: trimTextWithSuffix(
-					trimTextWithSuffix(option.tag ?? option.id.toString(), 100),
-					25,
-				),
-				value: option.id.toString(),
-			})),
+			options.map((option) => {
+				const game = gameName(option.pluginId);
+				const base = option.tag ?? option.id.toString();
+				return {
+					// Discord caps labels at 100 chars; keep the tag readable
+					// while leaving room for the " (Game)" suffix.
+					label: trimTextWithSuffix(
+						`${trimTextWithSuffix(base, 80)}${spansMultipleGames ? ` (${game})` : ""}`,
+						100,
+					),
+					// The game type is always shown as a subtitle for clarity.
+					description: trimTextWithSuffix(game, 100),
+					value: option.id.toString(),
+				};
+			}),
 		);
 	return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 		selectMenu,
@@ -34,8 +57,12 @@ export async function getUserSelectedServer(
 	serverManager: ServerManager,
 	interaction: ChatInputCommandInteraction,
 	ephemeral: boolean,
+	ignoreServerRestrictions = false,
 ): Promise<Server | null> {
-	const serverCount = serverManager.getServerCount();
+	const userId = interaction.user.id;
+	const serverCount = ignoreServerRestrictions
+		? serverManager.getServerCount()
+		: await serverManager.getAccessibleServerCount(userId);
 	if (serverCount === 0) {
 		if (interaction.replied) {
 			const followUp = await interaction.followUp({
@@ -46,14 +73,21 @@ export async function getUserSelectedServer(
 			}, 1000 * 5);
 			return null;
 		}
-		await interaction.reply({
-			content: "No servers available",
-			flags: MessageFlags.Ephemeral,
-		});
+		if (!interaction.deferred || !interaction.replied)
+			await interaction.reply({
+				content: "No servers available",
+				flags: MessageFlags.Ephemeral,
+			});
+		else
+			await interaction.editReply({
+				content: "No servers available",
+			});
 		return null;
 	}
 	if (serverCount === 1) {
-		const servers = serverManager.getAllServerEntries();
+		const servers = ignoreServerRestrictions
+			? serverManager.getAllServerEntries()
+			: await serverManager.getAccessibleServerEntries(userId);
 		if (!servers[0]) {
 			if (interaction.replied) {
 				const followUp = await interaction.followUp({
@@ -64,10 +98,15 @@ export async function getUserSelectedServer(
 				}, 1000 * 5);
 				return null;
 			}
-			await interaction.reply({
-				content: "No servers available",
-				flags: MessageFlags.Ephemeral,
-			});
+			if (!interaction.deferred || !interaction.replied)
+				await interaction.reply({
+					content: "No servers available",
+					flags: MessageFlags.Ephemeral,
+				});
+			else
+				await interaction.editReply({
+					content: "No servers available",
+				});
 			return null;
 		}
 		if (!interaction.deferred)
@@ -79,7 +118,9 @@ export async function getUserSelectedServer(
 		const content = {
 			content: "Please select a server:",
 			components: [
-				createServerSelectionMenu(serverManager.getAllTagPairs()),
+				createServerSelectionMenu(
+					await serverManager.getAccessibleTagPairs(userId),
+				),
 			],
 		};
 		const contentWithFlags: InteractionReplyOptions = {
@@ -118,7 +159,7 @@ export async function getUserSelectedServer(
 				components: [],
 			});
 			const followUp = await selection.followUp({
-				content: `Selected ${selectedServer.config.tag || `*Server #${selectedServer.id}*`}`,
+				content: `Selected ${selectedServer.config.tag || `*Server #${selectedServer.id}*`} (${gameName(selectedServer.pluginId)})`,
 				flags: ephemeral ? MessageFlags.Ephemeral : [],
 			});
 			setTimeout(() => {

@@ -52,6 +52,131 @@ export function getRandomOtp(): string {
 		.padStart(6, "0");
 }
 
+export function separate<T>(arr: T[], m: number): T[][] {
+	if (arr.length <= m) return [arr];
+	const final: T[][] = [];
+	let size = 0;
+	while (size < arr.length) {
+		const chunk = arr.slice(size, size + m);
+		final.push(chunk);
+		size += chunk.length;
+	}
+	return final;
+}
+
+/**
+ * Limits the number of concurrent fetch requests to the same hostname.
+ * Requests that exceed the cap are queued and released as active ones finish.
+ */
+export class DomainConcurrencyLimiter {
+	defaultMaxConcurrent: number;
+	defaultMaxRetry: number;
+	private readonly maxConcurrent: Map<string, number> = new Map();
+	private readonly queues = new Map<
+		string,
+		{ active: number; pending: Array<() => void> }
+	>();
+
+	constructor(maxConcurrent = 5, maxRetry = 15) {
+		this.defaultMaxConcurrent = maxConcurrent;
+		this.defaultMaxRetry = maxRetry;
+	}
+
+	private hostname(url: string | URL): string {
+		try {
+			return new URL(url).hostname;
+		} catch {
+			return String(url);
+		}
+	}
+
+	private slot(host: string) {
+		let q = this.queues.get(host);
+		if (!q) {
+			q = { active: 0, pending: [] };
+			this.queues.set(host, q);
+		}
+		return q;
+	}
+	private getMaxConcurrent(host: string): number {
+		const r = this.maxConcurrent.get(host);
+		if (r !== undefined) return r;
+		this.maxConcurrent.set(host, this.defaultMaxConcurrent);
+		return this.defaultMaxConcurrent;
+	}
+	private changeMaxConcurrent(host: string, change: number) {
+		const current = this.getMaxConcurrent(host);
+		const newValue = Math.max(this.defaultMaxConcurrent, current + change);
+		this.maxConcurrent.set(host, newValue);
+	}
+
+	private async _fetch(
+		url: string | URL,
+		options?: RequestInit,
+		retry = 0,
+	): Promise<Response> {
+		const host = this.hostname(url);
+		const q = this.slot(host);
+
+		if (q.active >= this.getMaxConcurrent(host)) {
+			await new Promise<void>((resolve) => q.pending.push(resolve));
+		}
+
+		q.active++;
+		// Use a definite-assignment assertion — res is always assigned before
+		// use because fetch() throwing causes the error to propagate before
+		// `return res` is ever reached.
+		let res: Response;
+		let retryDelay: number | null = null;
+		try {
+			res = await fetch(url, options);
+			if (!res.ok) {
+				this.changeMaxConcurrent(host, -1);
+				if (res.status === 429 && retry < this.defaultMaxRetry) {
+					// Record the delay but do NOT await or recurse here.
+					// The slot must be released (finally) before we wait and
+					// retry — otherwise the recursive _fetch call would queue
+					// behind a slot that is still held by this call, causing
+					// a deadlock when all slots are occupied.
+					retryDelay =
+						(Number(res.headers.get("Retry-After")) || 0) +
+						1000 * 2 ** retry;
+				}
+			} else {
+				this.changeMaxConcurrent(host, 1);
+			}
+		} finally {
+			// Always release the slot so waiting requests can proceed.
+			q.active--;
+			q.pending.shift()?.();
+		}
+
+		// Slot is now free. Wait outside of any slot and then retry fresh.
+		if (retryDelay !== null) {
+			await new Promise((r) => setTimeout(r, retryDelay));
+			return this._fetch(url, options, retry + 1);
+		}
+
+		return res;
+	}
+
+	async fetch(url: string | URL, options?: RequestInit): Promise<Response> {
+		return this._fetch(url, options);
+	}
+
+	/** Snapshot of per-domain concurrency state, useful for debugging. */
+	stats(): Record<string, { active: number; queued: number }> {
+		const out: Record<string, { active: number; queued: number }> = {};
+		for (const [host, q] of this.queues) {
+			out[host] = { active: q.active, queued: q.pending.length };
+		}
+		return out;
+	}
+}
+
+/** Global limiter — max 5 concurrent requests per domain. */
+export const fetchLimiter = new DomainConcurrencyLimiter(5);
+
 export async function safeFetch(
 	url: string | URL,
 	options?: RequestInit,
@@ -59,28 +184,24 @@ export async function safeFetch(
 	timeout: null | number = null,
 	cache = false,
 ): Promise<Response | null> {
+	let cancel: (() => void) | undefined;
+	const opts: RequestInit = {
+		...options,
+		...(cache ? { cache: "force-cache" } : {}),
+	};
+
 	if (timeout) {
-		const { signal, cancel } = newTimeoutSignal(timeout);
-		const opts: RequestInit = {
-			...options,
-			signal,
-			cache: cache ? "force-cache" : "default",
-		};
-		try {
-			try {
-				return await fetch(url, opts);
-			} finally {
-				cancel();
-				return null;
-			}
-		} catch (err) {
-			if (logError) console.error(`Fetch error (${url}): ${err}`);
-			return null;
-		}
+		const tc = newTimeoutSignal(timeout);
+		opts.signal = tc.signal;
+		cancel = tc.cancel;
 	}
+
 	try {
-		return await fetch(url, options);
+		const res = await fetchLimiter.fetch(url, opts);
+		cancel?.();
+		return res;
 	} catch (err) {
+		cancel?.();
 		if (logError) console.error(`Fetch error (${url}): ${err}`);
 		return null;
 	}
@@ -117,13 +238,12 @@ export function setActivity(
 	client: Client,
 	online: boolean,
 	suspended: boolean,
-	minecraftVersion: string,
+	/** Generic server label (e.g. its tag or game id) shown in the presence. */
+	label: string,
 ) {
 	client.user?.setActivity({
 		name: `${
-			online
-				? `Running Minecraft Server ${minecraftVersion}`
-				: "Server offline"
+			online ? `Running Server ${label}` : "Server offline"
 		}${suspended ? " (Suspending)" : "(Public)"}`,
 		type: ActivityType.Custom,
 	});
@@ -286,6 +406,107 @@ export function parseTimeString(timeStr: string): number | null {
 }
 
 /**
+ * Parses an expiration input into an absolute Date.
+ *
+ * Absolute date formats (interpreted in local time):
+ *   +HH:MM              today at HH:MM (e.g. +14:30 = today at 14:30)
+ *   +HH:MM:SS           today at HH:MM:SS
+ *   YYYY/M/D            midnight on that date
+ *   M/D                 midnight on that date in the current year
+ *   YYYY/M/D+HH:MM      that date at HH:MM  (+ is a separator, not UTC offset)
+ *   YYYY/M/D+HH:MM:SS   that date at HH:MM:SS
+ *
+ * Relative duration formats (added to current time):
+ *   DD:HH:MM:SS, HH:MM:SS, MM:SS, Ns  (same as parseTimeString)
+ *
+ * Returns null if the string cannot be parsed.
+ */
+export function parseExpireDate(input: string): Date | null {
+	const s = input.trim();
+
+	// +HH:MM[:SS] — today at a specific clock time
+	const todayTimeMatch = s.match(/^\+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+	if (todayTimeMatch) {
+		const h = Number(todayTimeMatch[1]);
+		const m = Number(todayTimeMatch[2]);
+		const sec =
+			todayTimeMatch[3] !== undefined ? Number(todayTimeMatch[3]) : 0;
+		if (h > 23 || m > 59 || sec > 59) return null;
+		const now = new Date();
+		return new Date(
+			now.getFullYear(),
+			now.getMonth(),
+			now.getDate(),
+			h,
+			m,
+			sec,
+			0,
+		);
+	}
+
+	// Any format containing / — absolute date
+	if (s.includes("/")) {
+		// Split on first + to separate date and optional time parts.
+		// (Skip index 0 in case s starts with +, but that case is already
+		//  handled above, so indexOf('+') will be > 0 here.)
+		const plusIdx = s.indexOf("+");
+		const datePart = plusIdx !== -1 ? s.slice(0, plusIdx) : s;
+		const timePart = plusIdx !== -1 ? s.slice(plusIdx + 1) : null;
+
+		const dateParts = datePart.split("/").map(Number);
+		if (dateParts.some((n) => isNaN(n))) return null;
+
+		let year: number;
+		let month: number;
+		let day: number;
+
+		if (dateParts.length === 3) {
+			// YYYY/M/D
+			year = dateParts[0]!;
+			month = dateParts[1]!;
+			day = dateParts[2]!;
+		} else if (dateParts.length === 2) {
+			// M/D — default to current year
+			year = new Date().getFullYear();
+			month = dateParts[0]!;
+			day = dateParts[1]!;
+		} else {
+			return null;
+		}
+
+		if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+		let h = 0,
+			m = 0,
+			sec = 0;
+		if (timePart !== null) {
+			const timeParts = timePart.split(":").map(Number);
+			if (
+				timeParts.some((n) => isNaN(n)) ||
+				timeParts.length < 2 ||
+				timeParts.length > 3
+			)
+				return null;
+			h = timeParts[0]!;
+			m = timeParts[1]!;
+			sec = timeParts[2] ?? 0;
+			if (h > 23 || m > 59 || sec > 59) return null;
+		}
+
+		const result = new Date(year, month - 1, day, h, m, sec, 0);
+		// Guard against invalid calendar dates (e.g. Feb 30)
+		if (result.getMonth() !== month - 1 || result.getDate() !== day)
+			return null;
+		return result;
+	}
+
+	// Fall back to duration format (relative to now)
+	const ms = parseTimeString(s);
+	if (ms === null) return null;
+	return new Date(Date.now() + ms);
+}
+
+/**
  * Format time duration string from the parsed format
  * Returns a human-readable string like "7 days 12 hours" or "30 minutes"
  */
@@ -426,6 +647,15 @@ export function joinPath(...segments: string[]): string {
 	return segments
 		.map((v) => removePrefix(removeSuffix(v, "/"), "/"))
 		.join("/");
+}
+
+export function joinPathWithBase(
+	base: string,
+	...segments: string[]
+): string | null {
+	const joined = joinPathSafe(...segments);
+	if (joined === null) return null;
+	return join(base, joined);
 }
 
 /**

@@ -1,5 +1,4 @@
-import { joinPath } from "../utils";
-import { buildInit } from "../utils/web";
+import { buildInit, joinPath } from "../../api";
 import type {
 	GetPaperProjectsReturn,
 	PaperProject,

@@ -50,7 +50,7 @@ export async function deleteHandler(
 	const payment = await spendCredit({
 		user: interaction.user,
 		channel: interaction.channel,
-		cost: server.creditSettings.editFileFee,
+		cost: server.settings.editFileFee,
 		reason: `Delete File ${filename}`,
 		serverId: server.id,
 	});

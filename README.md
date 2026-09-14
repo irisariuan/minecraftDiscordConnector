@@ -1,6 +1,19 @@
-# Discord Minecraft Linkage
+# Discord Server Manager
 
-A Discord bot for managing a Minecraft server, including plugin management, server control, DNS updates, permission-based access, and a web UI for uploading custom plugins. Built with [discord.js](https://discord.js.org/), [Bun](https://bun.sh/), [Astro](https://astro.build/), and [Prisma](https://prisma.io/).
+A modular, **multi-game** Discord bot for managing game servers, including
+process lifecycle control, mod/package management, permission-based access,
+credits, approvals, and a web UI for uploading custom files. Built with
+[discord.js](https://discord.js.org/), [Bun](https://bun.sh/),
+[Astro](https://astro.build/), and [Prisma](https://prisma.io/).
+
+The **core** is game-agnostic — server records, generic process lifecycle,
+settings, permissions, credits, tickets, approvals, and plugin infrastructure.
+All game-specific behaviour lives in **plugins**. Minecraft is one such plugin
+(`plugins/minecraft/`); adding another game means adding another plugin without
+touching the core. See **[docs/PLUGINS.md](docs/PLUGINS.md)**.
+
+> **Upgrading an existing install?** Follow **[docs/MIGRATION.md](docs/MIGRATION.md)**
+> to run the data-preserving multi-game migration (back up first).
 
 ## Features
 
@@ -60,20 +73,31 @@ A Discord bot for managing a Minecraft server, including plugin management, serv
    Create a `.env` file with the following (see `.gitignore` for sensitive files):
 
     ```env
-    # Discord bot configuration
+    # ── Core (required, game-agnostic) ─────────────────────────────
     TOKEN=your_discord_bot_token
     CLIENT_ID=your_discord_client_id
-    
-    # Fallback server configuration
+    DATABASE_URL=postgresql://username:password@localhost:5432/database_name
+    UPLOAD_URL=https://your-domain.com # URL for the web UI upload server
+
+    # ── Cloudflare plugin (optional) ───────────────────────────────
+    CF_KEY=your_cloudflare_api_key
+    UPDATE_URL=https://api.cloudflare.com/client/v4/zones/ZONE_ID/dns_records/RECORD_ID
+
+    # ── Minecraft plugin (optional) ────────────────────────────────
+    # Only used by the Minecraft plugin to bootstrap a default server
+    # when the database is empty. Not read by the core.
     SERVER_DIR=/path/to/minecraft/server
     MINECRAFT_VERSION=1.21.4 # or your server version
     LOADER_TYPE=paper        # or your server type
     MOD_TYPE=plugin          # or your mod type
-    CF_KEY=your_cloudflare_api_key # Cloudflare API key, you may need to edit the code to fit your needs
-    UPDATE_URL=https://api.cloudflare.com/client/v4/zones/ZONE_ID/dns_records/RECORD_ID # Cloudflare DNS record update URL
-    UPLOAD_URL=https://your-domain.com # URL for the web UI upload server
-    DATABASE_URL=postgresql://username:password@localhost:5432/database_name
+    SERVER_PORT=25565        # optional (default 25565)
+    SERVER_API_PORT=6001     # optional (connector REST API port)
+    SERVER_TAG=Default Server # optional display tag
     ```
+
+    The core needs none of the Minecraft variables. They belong to the
+    Minecraft plugin's env-based bootstrap; see
+    [docs/PLUGINS.md](docs/PLUGINS.md) and [docs/MIGRATION.md](docs/MIGRATION.md).
 
 6. **Register Discord commands:**
 
@@ -170,10 +194,16 @@ Permissions are managed via `/editperm` and stored in the PostgreSQL database. S
 ## Development
 
 - TypeScript project, configured for Bun and ESNext.
-- Commands are auto-loaded from the `commands/` directory, following the structure of `CommandFile` in `lib/commandFile.ts`.
-- Database schema managed with Prisma; run `npx prisma studio` to view data.
+- **Architecture**: a game-agnostic core plus game plugins. Core commands are
+  auto-loaded from `commands/`; plugins live in `plugins/<name>/` and are
+  discovered by glob (`*.game.ts`, `*.command.ts`, `*.script.ts`). Plugins
+  import only from `plugins/api.ts`. See **[docs/PLUGINS.md](docs/PLUGINS.md)**
+  for the extension contracts and how to add a second game.
+- Database schema managed with Prisma; run `bunx prisma studio` to view data.
+  For the multi-game upgrade see **[docs/MIGRATION.md](docs/MIGRATION.md)**.
 - Web UI built with Astro; source in `webUi/` directory.
-- See `lib/` for core logic.
+- Scripts: `bun run typecheck`, `bun run test`, `bun run migrate`.
+- See `lib/` for core logic and `lib/plugin/` for the extension contracts + registry.
 
 ## License
 

@@ -51,9 +51,8 @@ export default {
 			});
 
 		if (
-			server.config.apiPort !== null &&
-			((await server.haveServerSideScheduledShutdown()) ||
-				server.haveLocalSideScheduledShutdown())
+			(await server.hasScheduledShutdown()) ||
+			server.haveLocalSideScheduledShutdown()
 		) {
 			return await interaction.followUp({
 				content:
@@ -69,7 +68,9 @@ export default {
 				PermissionFlags.stopServer,
 			)
 		) {
-			const { success, promise } = await server.stop(seconds * 20);
+			const { success, promise } = await server.stop({
+				grace: seconds,
+			});
 			if (!success) {
 				await interaction.editReply({ content: "Failed to shutdown" });
 				return;
@@ -98,7 +99,7 @@ export default {
 			!(await spendCredit({
 				user: interaction.user,
 				channel: interaction.channel,
-				cost: server.creditSettings.newStopServerPollFee,
+				cost: server.settings.newStopServerPollFee,
 				reason: "New Stop Server Poll",
 				serverId: server.id,
 			}))
@@ -111,13 +112,13 @@ export default {
 		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: displayString,
 			options: {
-				startPollFee: server.creditSettings.newStopServerPollFee,
+				startPollFee: server.settings.newStopServerPollFee,
 				callerId: interaction.user.id,
 				description: displayString,
 				async onSuccess(approval, message) {
-					const { success, promise } = await server.stop(
-						seconds * 20,
-					);
+					const { success, promise } = await server.stop({
+						grace: seconds * 20,
+					});
 					if (!success)
 						return await message.edit({
 							content: "Failed to shutdown",
@@ -149,9 +150,9 @@ export default {
 						content: "Server stopped successfully",
 					});
 				},
-				approvalCount: server.approvalSettings.stopServerApproval,
-				disapprovalCount: server.approvalSettings.stopServerDisapproval,
-				credit: server.creditSettings.stopServerVoteFee,
+				approvalCount: server.settings.stopServerApproval,
+				disapprovalCount: server.settings.stopServerDisapproval,
+				credit: server.settings.stopServerVoteFee,
 			},
 			server,
 		});

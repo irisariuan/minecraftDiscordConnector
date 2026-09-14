@@ -5,6 +5,11 @@ export enum RequestComponentId {
 	Deny = "REQUEST_DENY",
 	Cancel = "REQUEST_CANCEL",
 }
+export enum UpdateAction {
+	Apply = "update_apply",
+	Cancel = "update_cancel",
+}
+
 
 export function createRequestComponent({
 	showDeny = true,

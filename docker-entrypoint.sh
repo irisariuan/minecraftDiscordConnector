@@ -49,9 +49,13 @@ wait_for_db() {
 run_migrations() {
     print_status "Running database migrations..."
 
-    # Check if database exists and create if needed
-    if ! bunx prisma db push --accept-data-loss; then
-        print_error "Failed to push database schema"
+    # Apply pending migrations. IMPORTANT: use `migrate deploy`, not
+    # `db push --accept-data-loss` — the multi-game migration is
+    # data-preserving and must run as a migration so existing Minecraft
+    # columns are copied into `Server.config` before they are dropped.
+    # See docs/MIGRATION.md.
+    if ! bunx prisma migrate deploy; then
+        print_error "Failed to apply database migrations"
         exit 1
     fi
 

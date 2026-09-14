@@ -38,6 +38,9 @@ export const PermissionFlags = {
 	editTicket: 1 << 21,
 	approveEditFiles: 1 << 22,
 	skipPayment: 1 << 23,
+	serverModify: 1 << 24,
+	serverCreate: 1 << 25,
+	unrestrictedServerAccess: 1 << 26,
 } as const;
 
 export const allPermission = Object.values(PermissionFlags).reduce(

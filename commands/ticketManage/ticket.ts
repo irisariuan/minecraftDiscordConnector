@@ -29,6 +29,7 @@ import {
 import { settings } from "../../lib/settings";
 import {
 	addTicketToUser,
+	formatEffectData,
 	getUserTicketsByUserId,
 	isTicketAvailable,
 	removeTicketFromUser,
@@ -38,7 +39,7 @@ import {
 } from "../../lib/ticket";
 import {
 	extractUser,
-	parseTimeString,
+	parseExpireDate,
 	trimTextWithSuffix,
 } from "../../lib/utils";
 
@@ -91,7 +92,7 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 					option
 						.setName("expire")
 						.setDescription(
-							"Expiration time (DD:HH:MM:SS, HH:MM:SS, MM:SS, or Ns)",
+							"Standard Time Representation",
 						)
 						.setRequired(false),
 				)
@@ -152,7 +153,7 @@ export function initTicketGroup(group: SlashCommandSubcommandGroupBuilder) {
 					option
 						.setName("expire")
 						.setDescription(
-							"New expiration time (DD:HH:MM:SS, HH:MM:SS, MM:SS, Ns, or 'remove' to clear)",
+							"Standard Time Representation, or 'remove' to clear",
 						)
 						.setRequired(false),
 				)
@@ -289,7 +290,7 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 						value: `Ticket ID: \`${ticket.ticketId}\`\nTicket Type ID: \`${ticket.ticketTypeId}\`\nEffect: ${
 							TicketEffectTypeNames[ticket.effect.effect] ??
 							"Unknown effect"
-						} (${ticket.effect.value})\n${
+						} (${formatEffectData(ticket.effect)})\n${
 							ticket.description || "No description"
 						}\n${expireText}\nAvailability: ${
 							isTicketAvailable(ticket)
@@ -364,14 +365,14 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 			// Parse expire input using utility function or use default from ticket type
 			let expiresAt: Date | null = null;
 			if (expireInput) {
-				const expireMs = parseTimeString(expireInput);
-				if (expireMs === null) {
+				const parsedExpire = parseExpireDate(expireInput);
+				if (parsedExpire === null) {
 					return await interaction.editReply({
 						content:
-							"Invalid expire format. Supported formats: DD:HH:MM:SS, HH:MM:SS, MM:SS, or Ns (e.g., 102s)",
+							"Invalid expire format. Supported: duration (DD:HH:MM:SS, Ns), date (YYYY/M/D, M/D, YYYY/M/D+HH:MM:SS), or today's time (+HH:MM).",
 					});
 				}
-				expiresAt = new Date(Date.now() + expireMs);
+				expiresAt = parsedExpire;
 			}
 
 			// Check if ticket type exists
@@ -480,14 +481,14 @@ export async function ticketHandler(interaction: ChatInputCommandInteraction) {
 				if (expireInput.toLowerCase() === "remove") {
 					newExpiresAt = null;
 				} else {
-					const expireMs = parseTimeString(expireInput);
-					if (expireMs === null) {
+					const parsedExpire = parseExpireDate(expireInput);
+					if (parsedExpire === null) {
 						return await interaction.editReply({
 							content:
-								"Invalid expire format. Use DD:HH:MM:SS, HH:MM:SS, MM:SS, Ns, or 'remove' to clear expiration.",
+								"Invalid expire format. Use a duration (DD:HH:MM:SS, Ns), a date (YYYY/M/D, M/D, YYYY/M/D+HH:MM:SS), today's time (+HH:MM), or 'remove' to clear.",
 						});
 					}
-					newExpiresAt = new Date(Date.now() + expireMs);
+					newExpiresAt = parsedExpire;
 				}
 			}
 

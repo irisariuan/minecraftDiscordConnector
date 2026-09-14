@@ -83,11 +83,11 @@ export default {
 				name: history.changed >= 0 ? "Income" : "Expense",
 				value: `${italic(`${history.changed > 0 ? "+" : ""}${history.changed}`)}\n\`${
 					history.creditBefore
-				}\`➡️\`${history.creditAfter}\`\nDate: ${time(
+				}\`➡️\`${history.creditAfter}\`\n🗓️Date: ${time(
 					new Date(history.timestamp),
-				)}${history.reason ? `\nReason: \`${history.reason}\`` : ""}${
+				)}${history.reason ? `\n💡Reason: \`${history.reason}\`` : ""}${
 					history.ticketUsed !== null
-						? `\nTicket Used: ${formatTicketNames(history.ticketUsed)}`
+						? `\n🎫Ticket Used: ${formatTicketNames(history.ticketUsed)}`
 						: ""
 				}\nID: \`${history.trackingId}\`\n${
 					history.serverTag !== null

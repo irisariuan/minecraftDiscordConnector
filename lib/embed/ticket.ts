@@ -2,6 +2,8 @@ import { EmbedBuilder, time } from "discord.js";
 import {
 	TicketEffectType,
 	TicketEffectTypeNames,
+	formatEffectData,
+	deserializeEffectData,
 	type DbTicketType,
 	type Ticket,
 } from "../ticket";
@@ -43,7 +45,7 @@ export function createTicketEmbed(
 			},
 			{
 				name: "Effect",
-				value: `${TicketEffectTypeNames[ticket.effect.effect] ?? "Unknown effect"} (${ticket.effect.value})`,
+				value: `${TicketEffectTypeNames[ticket.effect.effect] ?? "Unknown effect"} (${formatEffectData(ticket.effect)})`,
 				inline: true,
 			},
 			{
@@ -137,7 +139,7 @@ export function createTicketTypeUpdateEmbed(ticketType: DbTicketType) {
 			},
 			{
 				name: "Effect",
-				value: `${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? "Unknown effect"} (${ticketType.value})`,
+				value: `${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? "Unknown effect"} (${formatEffectData(deserializeEffectData(ticketType.effect, ticketType.effectData))})`,
 				inline: true,
 			},
 		);
@@ -164,7 +166,7 @@ export function createTicketsUsageEmbed(tickets: TicketUsage[]) {
 							value: `Effect: ${
 								TicketEffectTypeNames[t.ticket.effect.effect] ??
 								"Unknown effect"
-							} (${t.ticket.effect.value})\nStarted at: ${time(
+							} (${formatEffectData(t.ticket.effect)})\nStarted at: ${time(
 								t.usedAt,
 							)}\nExpires at: ${
 								t.ticket.expiresAt

@@ -15,7 +15,7 @@ export default {
 			client,
 			(await server.isOnline.getData()) || false,
 			server.suspendingEvent.isSuspending(),
-			server.config.minecraftVersion,
+			server.config.tag ?? server.pluginId,
 		);
 		return await interaction.reply({
 			content: "Server is suspending",

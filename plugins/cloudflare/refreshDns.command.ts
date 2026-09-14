@@ -1,8 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
-import type { CommandFile } from "../../lib/commandFile";
+import { data, type CommandFile } from "../api";
 import { updateDnsRecord, type UpdateResult } from "./lib";
-import { settings } from "../../lib/settings";
-import { spendCredit } from "../../lib/credit";
 
 export default {
 	command: new SlashCommandBuilder()
@@ -13,7 +11,8 @@ export default {
 	requireServer: false,
 	async execute({ interaction }) {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-		await spendCredit({
+		const settings = await data.request("settings:get");
+		await data.request("credit:spend", {
 			user: interaction.user,
 			channel: interaction.channel,
 			cost: settings.refreshDnsFee,

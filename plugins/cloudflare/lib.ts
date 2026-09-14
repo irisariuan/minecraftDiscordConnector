@@ -1,21 +1,24 @@
-import { CF_KEY, UPDATE_URL } from "../../lib/env";
-
-export const apiHeader = {
-	Authorization: `Bearer ${CF_KEY}`,
-};
+import { data } from "../api";
 
 export type UpdateResult = "ok" | "noChange" | "error";
 
 export async function updateDnsRecord(): Promise<UpdateResult> {
-	if (!UPDATE_URL || !CF_KEY) {
+	const [cfKey, updateUrl] = await Promise.all([
+		data.request("env:get", { key: "CF_KEY" }),
+		data.request("env:get", { key: "UPDATE_URL" }),
+	]);
+	if (!updateUrl || !cfKey) {
 		console.log("No update URL or authentication details provided");
 		return "error";
 	}
+	const apiHeader = {
+		Authorization: `Bearer ${cfKey}`,
+	};
 	const ipReq = await fetch("https://api.ipify.org?format=json");
 	const ipData = (await ipReq.json()) as { ip: string };
 	const ip = ipData.ip;
 
-	const currentReq = await fetch(UPDATE_URL, {
+	const currentReq = await fetch(updateUrl, {
 		headers: apiHeader,
 	});
 	if (!currentReq.ok) {
@@ -36,7 +39,7 @@ export async function updateDnsRecord(): Promise<UpdateResult> {
 		return "noChange";
 	}
 	console.log("IP address has changed, updating...");
-	const updateRes = await fetch(UPDATE_URL, {
+	const updateRes = await fetch(updateUrl, {
 		method: "PATCH",
 		headers: {
 			...apiHeader,

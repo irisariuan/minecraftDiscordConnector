@@ -26,7 +26,10 @@ export default {
 				content: "Server is offline",
 				flags: MessageFlags.Ephemeral,
 			});
-		if (server.config.apiPort === null) {
+		if (
+			!server.hasCapability("cancelScheduledShutdown") &&
+			!server.haveLocalSideScheduledShutdown()
+		) {
 			return await interaction.followUp({
 				content:
 					"Server-side scheduled shutdown is not supported on this server",
@@ -34,7 +37,7 @@ export default {
 			});
 		}
 		if (
-			!(await server.haveServerSideScheduledShutdown()) &&
+			!(await server.hasScheduledShutdown()) &&
 			!server.haveLocalSideScheduledShutdown()
 		)
 			return await interaction.followUp({
@@ -52,7 +55,7 @@ export default {
 				server.cancelLocalScheduledShutdown();
 				success = true;
 			}
-			if (await server.cancelServerSideShutdown()) {
+			if (await server.cancelScheduledShutdown()) {
 				success = true;
 			}
 			if (!success)
@@ -69,7 +72,7 @@ export default {
 			!(await spendCredit({
 				user: interaction.user,
 				channel: interaction.channel,
-				cost: server.creditSettings.newCancelStopServerPollFee,
+				cost: server.settings.newCancelStopServerPollFee,
 				serverId: server.id,
 				reason: "Cancel Stop Server Poll",
 			}))
@@ -83,7 +86,7 @@ export default {
 		sendApprovalPoll(buildInteractionFetcher(interaction), {
 			content: `Cancel Server Shutdown at ${server.config.tag ?? `Server #${server.id}`}`,
 			options: {
-				startPollFee: server.creditSettings.newCancelStopServerPollFee,
+				startPollFee: server.settings.newCancelStopServerPollFee,
 				callerId: interaction.user.id,
 				description: `Cancel Server Shutdown (${server.config.tag ?? `Server #${server.id}`})`,
 				async onSuccess(approval, message) {
@@ -92,7 +95,7 @@ export default {
 						server.cancelLocalScheduledShutdown();
 						success = true;
 					}
-					if (await server.cancelServerSideShutdown()) {
+					if (await server.cancelScheduledShutdown()) {
 						success = true;
 					}
 					if (!success)
@@ -103,10 +106,9 @@ export default {
 						content: "Cancelled scheduled shutdown",
 					});
 				},
-				approvalCount: server.approvalSettings.cancelStopServerApproval,
-				disapprovalCount:
-					server.approvalSettings.cancelStopServerDisapproval,
-				credit: server.creditSettings.cancelStopServerVoteFee,
+				approvalCount: server.settings.cancelStopServerApproval,
+				disapprovalCount: server.settings.cancelStopServerDisapproval,
+				credit: server.settings.cancelStopServerVoteFee,
 			},
 			server,
 		});

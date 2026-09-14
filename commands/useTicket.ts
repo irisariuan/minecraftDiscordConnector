@@ -23,6 +23,7 @@ import {
 	TicketEffectTypeNames,
 	userUsableTicketEffects,
 	useUserTicket,
+	formatEffectData,
 } from "../lib/ticket";
 import { trimTextWithSuffix } from "../lib/utils";
 import { ticketEffectManager } from "../lib/ticket/effect";
@@ -62,7 +63,7 @@ export default {
 			const effectDescriptions = activeEffects
 				.map(({ ticket, ticketId }) => {
 					const expireDate = new Date(ticket.expireTime);
-					return `Effect: ${TicketEffectTypeNames[ticket.effect.effect] ?? "Unknown effect"} (${ticket.effect.value}), expires at ${time(expireDate)} (Ticket ID: \`${ticketId}\`)`;
+					return `Effect: ${TicketEffectTypeNames[ticket.effect.effect] ?? "Unknown effect"} (${formatEffectData(ticket.effect)}), expires at ${time(expireDate)} (Ticket ID: \`${ticketId}\`)`;
 				})
 				.join("\n");
 			await interaction.reply({
@@ -120,7 +121,7 @@ export default {
 					value: `Ticket ID: \`${ticket.ticketId}\`\nTicket Type ID: \`${ticket.ticketTypeId}\`\nEffect: ${
 						TicketEffectTypeNames[ticket.effect.effect] ??
 						"Unknown effect"
-					} (${ticket.effect.value})\n${
+					} (${formatEffectData(ticket.effect)})\n${
 						ticket.description || "No description"
 					}\n${expireText}\n${maxUseText}`,
 				};
@@ -144,7 +145,7 @@ export default {
 			interactionFilter: (i) => i.user.id === interaction.user.id,
 			selectMenuOptions: {
 				showSelectMenu: true,
-				// limit to select up to 5 tickets at once, to prevent abuse of using too many tickets at once and 
+				// limit to select up to 5 tickets at once, to prevent abuse of using too many tickets at once and
 				// hitting text limits or embed limits
 				maxSelect: (opt) => Math.min(opt.length, 5),
 			},
@@ -202,6 +203,11 @@ async function handleReply(
 		});
 		return false;
 	}
+	await interaction.editReply({
+		content: "Processing your ticket usage...",
+		embeds: [],
+		components: [],
+	});
 	await useUserTicket(
 		tickets.map((v) => v.ticketId),
 		"Used via /useticket command",
@@ -218,7 +224,7 @@ async function handleReply(
 				() => {
 					interaction.user
 						.send(
-							`Your ticket **${ticket.name}** effect (${TicketEffectTypeNames[ticket.effect.effect]}: ${ticket.effect.value}) has passed.`,
+							`Your ticket **${ticket.name}** effect (${TicketEffectTypeNames[ticket.effect.effect]}: ${formatEffectData(ticket.effect)}) has passed.`,
 						)
 						.catch(() => null);
 				},
@@ -226,6 +232,7 @@ async function handleReply(
 		});
 	}
 	await response.update({
+		content: '',
 		embeds: [createTicketsUsageEmbed(usages)],
 	});
 

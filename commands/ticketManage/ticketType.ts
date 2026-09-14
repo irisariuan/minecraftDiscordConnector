@@ -13,6 +13,11 @@ import {
 import { sendPaginationMessage } from "../../lib/pagination";
 import {
 	TicketEffectTypeNames,
+	buildEffectFromValue,
+	serializeEffectData,
+	deserializeEffectData,
+	formatEffectData,
+	getEffectSingleValue,
 	type DbTicketType,
 	type TicketEffectType,
 } from "../../lib/ticket";
@@ -51,16 +56,18 @@ export function initTicketTypeGroup(group: SlashCommandSubcommandGroupBuilder) {
 						.setRequired(true)
 						.setAutocomplete(true),
 				)
-				.addNumberOption((option) =>
-					option
-						.setName("value")
-						.setDescription("Value of the ticket effect, always fill in a value unless specified"),
-				)
 				.addStringOption((option) =>
 					option
 						.setName("name")
 						.setDescription("Name of the ticket type")
 						.setRequired(true),
+				)
+				.addNumberOption((option) =>
+					option
+						.setName("value")
+						.setDescription(
+							"Value of the ticket effect, always fill in a value unless specified",
+						),
 				)
 				.addStringOption((option) =>
 					option
@@ -218,7 +225,7 @@ export async function ticketTypeHandler(
 				},
 				formatter: (ticketType: DbTicketType) => ({
 					name: `${ticketType.name} (${ticketType.id})`,
-					value: `Effect: ${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? "Unknown effect"} (${ticketType.value})\n${ticketType.description || "No description"}`,
+					value: `🧪Effect: ${TicketEffectTypeNames[ticketType.effect as TicketEffectType] ?? "❓Unknown effect"} (${formatEffectData(deserializeEffectData(ticketType.effect, ticketType.effectData))})\n${ticketType.description || "No description"}`,
 				}),
 				filterFunc: (filter?: string) => (ticketType: DbTicketType) => {
 					if (!filter) return true;
@@ -260,13 +267,14 @@ export async function ticketTypeHandler(
 			}
 
 			try {
+				const ticketEffect = buildEffectFromValue(effect, value ?? 0);
 				const newTicketType = await createRawTicketType({
 					data: {
 						id,
 						name,
 						description,
 						effect,
-						value,
+						effectData: serializeEffectData(ticketEffect),
 					},
 				});
 
@@ -308,11 +316,22 @@ export async function ticketTypeHandler(
 				updateData.description =
 					newDescription.length > 0 ? newDescription : null;
 			}
-			if (newEffect !== null) {
-				updateData.effect = newEffect;
-			}
-			if (newValue !== null) {
-				updateData.value = newValue;
+			if (newEffect !== null || newValue !== null) {
+				const resolvedEffect =
+					newEffect ??
+					(existingTicketType.effect as TicketEffectType);
+				const resolvedValue =
+					newValue ??
+					getEffectSingleValue(
+						deserializeEffectData(
+							existingTicketType.effect,
+							existingTicketType.effectData,
+						),
+					);
+				updateData.effectData = serializeEffectData(
+					buildEffectFromValue(resolvedEffect, resolvedValue),
+				);
+				if (newEffect !== null) updateData.effect = newEffect;
 			}
 
 			// Check if there's anything to update
