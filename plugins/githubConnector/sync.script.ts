@@ -1,5 +1,5 @@
 import { data, events } from "../api";
-import { pluginDirOf, syncConnector } from "./lib";
+import { loaderTypeOf, pluginDirOf, syncConnector } from "./lib";
 
 const TAG = "[githubConnector]";
 
@@ -7,19 +7,31 @@ const TAG = "[githubConnector]";
 async function syncForServer(serverId: number, config: unknown) {
 	const pluginDir = pluginDirOf(config);
 	if (!pluginDir) return; // not a plugin-dir server (e.g. a non-Minecraft game)
-	const result = await syncConnector(serverId, pluginDir).catch((err) => {
+	const loaderType = loaderTypeOf(config);
+	if (!loaderType) return; // no loader recorded, so no jar can be chosen
+	const result = await syncConnector(
+		serverId,
+		pluginDir,
+		loaderType,
+	).catch((err) => {
 		console.error(`${TAG} sync failed for server ${serverId}:`, err);
 		return null;
 	});
+	if (!result) return;
 	if (
-		result &&
-		(result.status === "installed" ||
-			result.status === "updated" ||
-			result.status === "matched")
+		result.status === "installed" ||
+		result.status === "updated" ||
+		result.status === "matched"
 	) {
 		console.log(
 			`${TAG} ${result.status} ${result.assetName} (${result.tag}) for server ${serverId}`,
 		);
+		return;
+	}
+	// A loader with no matching jar is a silent no-op otherwise, which is how a
+	// wrong-platform install went unnoticed in the first place.
+	if (result.status === "noAsset") {
+		console.warn(`${TAG} server ${serverId}: ${result.message}`);
 	}
 }
 

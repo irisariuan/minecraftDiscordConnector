@@ -4,6 +4,7 @@ import {
 	checkForUpdate,
 	getInstalled,
 	GITHUB_SLUG,
+	loaderTypeOf,
 	pluginDirOf,
 	syncConnector,
 } from "./lib";
@@ -38,10 +39,17 @@ export default {
 	permissions: PermissionFlags.downloadPlugin,
 	ephemeral: true,
 	async execute({ interaction, server }) {
-		const pluginDir = pluginDirOf(server.getPluginConfig());
+		const config = server.getPluginConfig();
+		const pluginDir = pluginDirOf(config);
 		if (!pluginDir) {
 			return interaction.editReply(
 				"This server has no plugin directory, so the connector cannot be managed here.",
+			);
+		}
+		const loaderType = loaderTypeOf(config);
+		if (!loaderType) {
+			return interaction.editReply(
+				"This server has no loader type recorded, so the right connector jar cannot be chosen.",
 			);
 		}
 		const sub = interaction.options.getSubcommand(true);
@@ -68,7 +76,7 @@ export default {
 		}
 
 		if (sub === "check") {
-			const check = await checkForUpdate(server.id);
+			const check = await checkForUpdate(server.id, loaderType);
 			return interaction.editReply(
 				check.updateAvailable
 					? `⬆️ Update available: ${check.reason}`
@@ -78,7 +86,12 @@ export default {
 
 		// install
 		const force = interaction.options.getBoolean("force") ?? false;
-		const result = await syncConnector(server.id, pluginDir, force);
+		const result = await syncConnector(
+			server.id,
+			pluginDir,
+			loaderType,
+			force,
+		);
 		switch (result.status) {
 			case "installed":
 				return interaction.editReply(
@@ -102,7 +115,7 @@ export default {
 				);
 			case "noAsset":
 				return interaction.editReply(
-					"❌ The latest release has no .jar asset.",
+					`❌ ${result.message ?? "The latest release has no .jar asset."}`,
 				);
 			default:
 				return interaction.editReply(
