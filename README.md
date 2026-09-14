@@ -238,6 +238,14 @@ re-run `/launcher pipeline action:apply`. Steps have a 10-minute timeout each.
 Because the launcher tracks what is applied rather than what is on disk,
 `unapply` still runs steps that only existed on the version being left behind.
 
+This repository ships one step, `20-build-proxy.sh`: it compiles the Go
+Minecraft proxy on apply and deletes `plugins/minecraft/proxy/bin/` on unapply.
+The binary is gitignored build output, so a checkout neither brings it nor
+takes it away — without the step, switching between versions whose proxy
+sources differ would silently keep running the previous version's binary. On a
+version with no proxy sources the step is a no-op, and on a host without Go it
+fails loudly rather than leaving a stale binary in place.
+
 ### Permission System Commands
 
 - `/getperm [user] [local]` — View permissions for yourself or another user

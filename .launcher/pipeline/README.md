@@ -57,5 +57,11 @@ directory can document itself.
 - Each step gets 10 minutes before it is killed.
 - A step with nothing to undo should exit 0 on `unapply`.
 
+## What ships here
+
+- `20-build-proxy.sh` — compiles the Go Minecraft proxy (`bun run build:proxy`)
+  on apply, and removes `plugins/minecraft/proxy/bin/` on unapply. A no-op on
+  versions that carry no proxy sources.
+
 Run `/launcher pipeline` to see the steps and which of them are applied, or
 `/launcher switch target:… pipeline:false` to move without running any.
