@@ -79,10 +79,11 @@ bun tools/backfill-minecraft.ts             # apply
 
 Nothing in the launch path passes a port to the JVM — a Minecraft server binds
 whatever its `server.properties` says, while the recorded `Server.port` drives
-port-conflict checks and the proxy's dial target. `/mcserver create` and
-`/mcserver edit` now keep the file in step, but servers registered before that
-may disagree with their own record. This idempotent tool settles it in the
-record's favour, rewriting only the `server-port` line:
+port-conflict checks and the proxy's dial target. `/mcserver create` writes the
+file for a new server, but servers registered before that — and any whose ports
+were changed with `/manageserver browse` — may disagree with their own record.
+This idempotent tool settles it in the record's favour, rewriting only the
+`server-port` line:
 
 ```sh
 bun tools/backfill-server-port.ts --dry-run   # preview

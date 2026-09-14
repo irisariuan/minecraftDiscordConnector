@@ -155,15 +155,16 @@ JSON. It is optional with defaults, so existing servers keep working untouched:
 - **`forwardingSecret`** — the Velocity modern-forwarding secret. Only read for
   `"velocity"`; leave it `null` otherwise.
 
-Edit the block from Discord with `/mcserver edit` (it also covers the server's
-port(s), the plugin/mod directory and the IPC socket override). The proxy re-reads
-each server record, so proxy changes apply to the next connection even while the
-server is running.
+Edit the block from Discord with `/mcserver edit` (it also covers the plugin/mod
+directory and the IPC socket override). The proxy re-reads each server record, so
+proxy changes apply to the next connection even while the server is running.
 
-A port change also rewrites `server-port` in the backend's `server.properties` —
-nothing in the launch path passes the port to the JVM, so the record alone would
-leave the proxy dialling a port nobody listens on. The backend only reads that
-file at startup, so restart it to actually bind the new port.
+The backend port is the server record's first port, edited with `/manageserver
+browse`. Nothing in the launch path passes that port to the JVM — the server
+binds whatever `server-port` in its `server.properties` says — so the two have to
+agree or the proxy dials a port nobody listens on. `/mcserver create` writes
+`server-port` for a new server; for servers registered earlier, run
+`bun tools/backfill-server-port.ts` (see `docs/MIGRATION.md`).
 
 ### ⚠️ Forwarding requires an unreachable backend
 
