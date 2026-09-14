@@ -13,11 +13,6 @@ import { connect } from "node:net";
 import { z } from "zod";
 import { comparePermission, data, PermissionFlags } from "../api";
 import {
-	beginLink,
-	linkTtlSeconds,
-	type PendingLink,
-} from "./runtime/proxyLinks";
-import {
 	getIpcPath,
 	getListenPort,
 	getMaxPlayers,
@@ -54,10 +49,6 @@ const startSchema = z.object({
 	uuid: uuidSchema,
 	name: z.string().min(1).max(64),
 	serverId: z.number().int(),
-});
-const linkBeginSchema = z.object({
-	uuid: uuidSchema,
-	name: z.string().min(1).max(64),
 });
 
 /**
@@ -118,7 +109,6 @@ function createControlApp(token: string): Express {
 				publicHost,
 				maxPlayers,
 				motd,
-				linkTtlSeconds,
 				voteChannelConfigured: voteChannelId !== null,
 				servers,
 			});
@@ -142,18 +132,30 @@ function createControlApp(token: string): Express {
 			]);
 			const voteChannelConfigured = voteChannelId !== null;
 
+			// An unlinked player is not turned away. Server access and the
+			// right to start a server are per-Discord-account, so neither can
+			// be resolved for them, but they are still routed and held like
+			// anyone else. Linking happens in game through /link, which needs
+			// them to be able to get in.
 			if (!link) {
+				const polls = await Promise.all(
+					proxied.map((server) =>
+						data.request("server:pendingStartPoll", {
+							id: server.id,
+						}),
+					),
+				);
 				res.json({
 					linked: false,
 					voteChannelConfigured,
-					servers: proxied.map((server) => ({
+					servers: proxied.map((server, index) => ({
 						id: server.id,
 						tag: server.tag,
 						online: server.online,
-						accessible: false,
+						accessible: true,
 						canStart: false,
-						pollPending: false,
-						pollUrl: null,
+						pollPending: polls[index]?.pending ?? false,
+						pollUrl: polls[index]?.url ?? null,
 					})),
 				});
 				return;
@@ -214,7 +216,7 @@ function createControlApp(token: string): Express {
 				res.json({
 					status: "not_linked",
 					message:
-						"Your Minecraft account is not linked to Discord yet. Run /link in game to get a code.",
+						"Your Minecraft account is not linked to Discord yet. Run /link on Discord once you are in game.",
 				});
 				return;
 			}
@@ -245,31 +247,6 @@ function createControlApp(token: string): Express {
 				status: "failed",
 				message: "The bot could not handle that request, try again later.",
 			});
-		}
-	});
-
-	app.post("/link/begin", jsonParser, async (req, res) => {
-		const parsed = linkBeginSchema.safeParse(req.body);
-		if (!parsed.success) {
-			res.status(400).json({ error: "invalid_request" });
-			return;
-		}
-		try {
-			if (await identityOf(parsed.data.uuid)) {
-				res.status(409).json({ error: "already_linked" });
-				return;
-			}
-			const pending: PendingLink = beginLink(
-				parsed.data.uuid,
-				parsed.data.name,
-			);
-			res.json({
-				code: pending.code,
-				expiresInSeconds: linkTtlSeconds,
-			});
-		} catch (err) {
-			console.error(`${LOG_PREFIX} POST /link/begin failed:`, err);
-			res.status(500).json({ error: "internal_error" });
 		}
 	});
 

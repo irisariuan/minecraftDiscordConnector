@@ -26,7 +26,6 @@ const configJSON = `{
   "publicHost": "mc.example.com",
   "maxPlayers": 100,
   "motd": "§bServer Hub§r\n§7Join to start a server",
-  "linkTtlSeconds": 300,
   "voteChannelConfigured": true,
   "servers": [
     {"id": 1, "tag": "Survival", "host": "127.0.0.1", "port": 25566, "online": true, "forwarding": "bungeecord", "forwardingSecret": null},
@@ -67,7 +66,7 @@ func TestConfig(t *testing.T) {
 	if cfg.ListenPort != 25565 || cfg.PublicHost != "mc.example.com" || cfg.MaxPlayers != 100 {
 		t.Errorf("scalars decoded wrong: %+v", cfg)
 	}
-	if cfg.LinkTTLSeconds != 300 || !cfg.VoteChannelConfigured {
+	if !cfg.VoteChannelConfigured {
 		t.Errorf("linkTtlSeconds/voteChannelConfigured decoded wrong: %+v", cfg)
 	}
 	if !strings.Contains(cfg.MOTD, "\n") || !strings.Contains(cfg.MOTD, "§") {
@@ -264,65 +263,6 @@ func TestStartAllStatuses(t *testing.T) {
 				t.Errorf("request body = %+v", got)
 			}
 		})
-	}
-}
-
-func TestBeginLink(t *testing.T) {
-	var got linkRequest
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/link/begin" {
-			t.Errorf("path = %s, want /link/begin", r.URL.Path)
-		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Errorf("decode request: %v", err)
-		}
-		_, _ = w.Write([]byte(`{"code":"123456","expiresInSeconds":300}`))
-	}))
-	defer srv.Close()
-
-	res, err := newTestClient(srv).BeginLink(context.Background(), "uuid", "Notch")
-	if err != nil {
-		t.Fatalf("BeginLink: %v", err)
-	}
-	if res.Code != "123456" || res.ExpiresInSeconds != 300 {
-		t.Errorf("result = %+v", res)
-	}
-	if got.UUID != "uuid" || got.Name != "Notch" {
-		t.Errorf("request body = %+v", got)
-	}
-}
-
-func TestBeginLinkAlreadyLinked(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"error":"already_linked"}`))
-	}))
-	defer srv.Close()
-
-	_, err := newTestClient(srv).BeginLink(context.Background(), "uuid", "Notch")
-	if !errors.Is(err, ErrAlreadyLinked) {
-		t.Fatalf("err = %v, want ErrAlreadyLinked", err)
-	}
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
-		t.Error("a 409 already_linked must not surface as a generic APIError")
-	}
-}
-
-func TestBeginLinkOtherError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"error":"boom"}`))
-	}))
-	defer srv.Close()
-
-	_, err := newTestClient(srv).BeginLink(context.Background(), "uuid", "Notch")
-	if errors.Is(err, ErrAlreadyLinked) {
-		t.Fatal("a 500 must not be reported as ErrAlreadyLinked")
-	}
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusInternalServerError {
-		t.Errorf("err = %v, want an *APIError carrying 500", err)
 	}
 }
 

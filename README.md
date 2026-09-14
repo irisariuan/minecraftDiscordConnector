@@ -15,7 +15,7 @@ touching the core. See **[docs/PLUGINS.md](docs/PLUGINS.md)**.
 Documentation:
 
 - **[docs/PLUGINS.md](docs/PLUGINS.md)** — the plugin architecture and how to add a game.
-- **[docs/PROXY.md](docs/PROXY.md)** — the Minecraft proxy: setup, forwarding, server selection and linking.
+- **[docs/PROXY.md](docs/PROXY.md)** — the Minecraft proxy: setup, forwarding and server selection.
 - **[docs/MIGRATION.md](docs/MIGRATION.md)** — upgrading an existing install to multi-game.
 - **[DOCKER.md](DOCKER.md)** — running the bot in Docker.
 
@@ -183,7 +183,6 @@ All commands are available as Discord slash commands. Some require specific perm
 - `/proxy status` — Show whether the proxy is enabled, its listen port, the vote channel, and every proxied server
 - `/proxy setchannel channel` — Set the channel in-game start votes are posted to (requires `editSetting`)
 - `/proxy clearchannel` — Stop posting in-game start votes (requires `editSetting`)
-- `/linkcode code` — Link your Minecraft account using the six-digit code the proxy showed you when it refused the join
 
 ### Permission System Commands
 

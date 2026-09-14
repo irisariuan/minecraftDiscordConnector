@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -65,10 +64,6 @@ const (
 	ForwardingBungeeCord = "bungeecord"
 	ForwardingVelocity   = "velocity"
 )
-
-// ErrAlreadyLinked is returned by BeginLink when the bot answers 409
-// {"error":"already_linked"}. It is an expected outcome, not a fault.
-var ErrAlreadyLinked = errors.New("account already linked")
 
 // APIError is a non-2xx response from the control API. It carries the status
 // code and a truncated body so that, for example, a 401 caused by a bad
@@ -149,7 +144,6 @@ type Config struct {
 	PublicHost            string        `json:"publicHost"`
 	MaxPlayers            int           `json:"maxPlayers"`
 	MOTD                  string        `json:"motd"`
-	LinkTTLSeconds        int           `json:"linkTtlSeconds"`
 	VoteChannelConfigured bool          `json:"voteChannelConfigured"`
 	Servers               []ServerEntry `json:"servers"`
 }
@@ -237,47 +231,6 @@ func (c *Client) Start(ctx context.Context, uuid, name string, serverID int) (*S
 		return nil, err
 	}
 	return &out, nil
-}
-
-// LinkResult is a freshly minted six-digit link code.
-type LinkResult struct {
-	Code             string `json:"code"`
-	ExpiresInSeconds int    `json:"expiresInSeconds"`
-}
-
-type linkRequest struct {
-	UUID string `json:"uuid"`
-	Name string `json:"name"`
-}
-
-// BeginLink calls POST /link/begin. It returns ErrAlreadyLinked, rather than a
-// generic error, when the bot answers 409 {"error":"already_linked"}.
-func (c *Client) BeginLink(ctx context.Context, uuid, name string) (*LinkResult, error) {
-	req := linkRequest{UUID: uuid, Name: name}
-	var out LinkResult
-	err := c.do(ctx, http.MethodPost, "/link/begin", req, &out)
-	if err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict && isAlreadyLinked(apiErr.Body) {
-			return nil, ErrAlreadyLinked
-		}
-		return nil, err
-	}
-	return &out, nil
-}
-
-// isAlreadyLinked reports whether a 409 body is the documented
-// {"error":"already_linked"}.
-func isAlreadyLinked(body string) bool {
-	var e struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal([]byte(body), &e); err != nil {
-		// A truncated or unparseable 409 body from this endpoint still means
-		// the only conflict the API defines.
-		return true
-	}
-	return e.Error == "" || e.Error == "already_linked"
 }
 
 // do performs one request, encoding body as JSON when non-nil and decoding the

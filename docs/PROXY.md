@@ -235,35 +235,23 @@ vote channel, and every proxied server with its forwarding mode and online state
 
 ## Linking a new player
 
-Unlinked players cannot join: the bot removes them from a running server anyway,
-so the proxy stops them at the door where it can still explain itself. It does
-more than explain — it hands them the code they need.
+The proxy does **not** check whether a player has linked their Discord account.
+Verification stays entirely where it was: `/link` on Discord, talking to the
+running server's connector, exactly as before the proxy existed.
 
-A player who has never linked their account is disconnected with a message like:
+That is deliberate rather than an omission. `/link` needs a server to be running,
+because the connector is what delivers the one-time code. If the proxy turned
+unlinked players away, a new player could never reach the state in which linking
+is possible. So an unlinked player is routed and held like anyone else, joins
+when a server is up, and links from in game.
 
-```
-Your Minecraft account is not linked to Discord yet.
+Two consequences worth knowing:
 
-Run /linkcode 481920 on Discord within 5 minutes, then join again.
-```
-
-The code is **six digits, single use, and expires after five minutes**. Pending
-codes live in the bot's memory only; nothing is written to the database until
-the link is actually made. On Discord the player runs:
-
-```
-/linkcode code:481920
-```
-
-and their Minecraft account is linked to the Discord account that ran the
-command. `/unlink` removes the link as usual. Asking for a code for an account
-that is already linked is refused.
-
-This works on every client version, because a login-phase disconnect message is
-the one thing every Minecraft client since 1.7 will display.
-
-Note that this route and the Discord `/link` command are two independent ways to
-reach the same result. `/link` on Discord talks to a **running** server's REST
-API to deliver an in-game one-time password, so it only works while that server
-is up. The proxy route is the one that works while everything is down, which is
-exactly when a new player first arrives.
+- **An unlinked player cannot start a server.** Starting is decided by a Discord
+  account's permission and paid for with its credit, and there is no account to
+  check or charge. They are still held rather than refused, so if somebody else
+  starts the server, or a vote passes, they are let in with everyone else.
+- **Whatever your connector does with unverified players in game, it still
+  does.** The bot's own join callback reports a player as unverified exactly as
+  it did before, so any restriction or kick your server applies is unchanged.
+  The proxy has simply stopped adding a second gate in front of it.

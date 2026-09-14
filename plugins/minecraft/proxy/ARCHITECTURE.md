@@ -27,8 +27,8 @@ client ──► first byte 0xFE ──► legacy pre-1.7 ping, answered and clo
    target is up              nothing up
         │                        │
    join backend            hold mid-login
-   (forward identity,       (POST /start, keep the client alive,
-    relay login,             wait for the server, then join backend)
+   (forward identity,       (POST /start if linked, keep the client
+    relay login,             alive, wait, then join backend)
     tunnel)
 ```
 
@@ -51,6 +51,13 @@ What it costs is the ability to say anything to a waiting player. The proxy
 therefore acts for them rather than asking them: joining *is* the request to
 start, and the bot applies the same permission and voting rules it would apply
 to `/startserver` on Discord.
+
+The proxy does not gate on whether a player has linked a Discord account.
+Linking happens in game through `/link`, which needs a server to be running, so
+refusing unlinked players here would make linking unreachable for anyone new.
+They are routed and held like anyone else. The one thing they cannot do is ask
+for a server to be started, because that is decided by a Discord account's
+permission and paid for with its credit.
 
 A client stalled mid-login disconnects itself after about thirty seconds of
 silence, so the hold sends a login plugin message every ten seconds on a channel
@@ -117,6 +124,9 @@ The proxy has no third-party dependencies; everything is standard library.
 - **A waiting player cannot be sent messages.** See "Holding" above for why.
   Giving them chat and commands means building a holding world, which means
   shipping and maintaining per-version registry data.
+- **An unlinked player with no server running waits indefinitely.** They cannot
+  raise a start request themselves, and nothing can be shown to them, so unless
+  somebody else brings a server up they will sit on the connecting screen.
 - **Clients older than 1.13 cannot be held**, only routed to a server that is
   already running.
 - **`publicHost` in the control API is currently unused** by the proxy. It exists

@@ -20,7 +20,6 @@ const (
 	msgNoServers  = "No servers are set up on this proxy yet. Ask an administrator to add one."
 	msgTooOld     = "This client is too old to connect. Minecraft 1.7.2 or newer is required."
 	msgCannotHold = "No server is running right now, and your client is too old to be held while one starts. Start the server from Discord, then join again."
-	msgNotLinked  = "Your Minecraft account is not linked to Discord, and a link code could not be issued right now. Try again in a moment."
 	msgNoAccess   = "You do not have access to any server on this proxy."
 	msgAuthFailed = "Mojang could not verify your session. Restart your launcher and try again."
 )
@@ -58,13 +57,6 @@ func (p *Proxy) handleLogin(ctx context.Context, conn *protocol.Conn, raw net.Co
 		return fmt.Errorf("session lookup for %s: %w", profile.Name, err)
 	}
 
-	if !sess.Linked {
-		// The bot removes unlinked players on its own once they are in game, so
-		// letting one through only to have them ejected is worse than stopping
-		// them here, where the message is the first thing they read — and where
-		// it can carry the code they need to fix it.
-		return disconnectLogin(conn, p.linkInstructions(ctx, profile))
-	}
 	if len(sess.Servers) == 0 {
 		return disconnectLogin(conn, msgNoServers)
 	}
@@ -86,33 +78,7 @@ func (p *Proxy) handleLogin(ctx context.Context, conn *protocol.Conn, raw net.Co
 	if !mcver.CanBeHeld(hs.Protocol) {
 		return disconnectLogin(conn, msgCannotHold)
 	}
-	return p.hold(ctx, conn, hs, target, profile, ip)
-}
-
-// linkInstructions builds the disconnect message an unlinked player gets.
-//
-// A player who has never linked their account cannot be helped by waiting, so
-// they are told to link instead. Issuing the code here and putting it straight
-// into the disconnect text is the only way to reach them: the login phase has
-// no chat, and this message is the one thing every client version will display.
-func (p *Proxy) linkInstructions(ctx context.Context, profile *auth.Profile) string {
-	res, err := p.opts.Control.BeginLink(ctx, profile.ID.String(), profile.Name)
-	if err != nil {
-		if errors.Is(err, control.ErrAlreadyLinked) {
-			// The link landed between the session lookup and now.
-			return "Your account is already linked. Join again."
-		}
-		p.log.Warn("link code request failed", "player", profile.Name, "error", err)
-		return msgNotLinked
-	}
-
-	minutes := res.ExpiresInSeconds / 60
-	if minutes < 1 {
-		minutes = 1
-	}
-	return fmt.Sprintf(
-		"Your Minecraft account is not linked to Discord yet.\n\nRun /linkcode %s on Discord within %d minutes, then join again.",
-		res.Code, minutes)
+	return p.hold(ctx, conn, hs, target, profile, ip, sess.Linked)
 }
 
 // chooseTarget picks the server a player is routed to, and reports whether it
@@ -153,8 +119,9 @@ func (p *Proxy) chooseTarget(sess *control.Session, host string) (int, bool) {
 //
 // Nothing has been sent past the encryption exchange, so the client stays on
 // its own connecting screen: it is never kicked, never shown an error, and
-// never asked to reconnect. What it cannot be shown is a message, so the proxy
-// acts for the player instead, raising the start request on their behalf.
+// never asked to reconnect. What it cannot be shown is a message, so where it
+// can the proxy acts for the player instead, raising the start request on their
+// behalf.
 func (p *Proxy) hold(
 	ctx context.Context,
 	conn *protocol.Conn,
@@ -162,6 +129,7 @@ func (p *Proxy) hold(
 	target int,
 	profile *auth.Profile,
 	ip string,
+	linked bool,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -172,15 +140,23 @@ func (p *Proxy) hold(
 	}
 	p.log.Info("holding player", "player", profile.Name, "server", label, "protocol", hs.Protocol)
 
-	res, err := p.opts.Control.Start(ctx, profile.ID.String(), profile.Name, target)
-	switch {
-	case err != nil:
-		p.log.Warn("start request failed", "player", profile.Name, "error", err)
-	case res.Status == control.StatusNoAccess || res.Status == control.StatusNotLinked:
-		return disconnectLogin(conn, res.Message)
-	default:
-		p.log.Info("start requested",
-			"player", profile.Name, "server", label, "status", res.Status, "message", res.Message)
+	// Asking for a server to be started is gated on a linked Discord account:
+	// the bot has to know whose permission to check and whose credit to charge.
+	// A player without one simply waits, rather than being turned away for it.
+	if linked {
+		res, err := p.opts.Control.Start(ctx, profile.ID.String(), profile.Name, target)
+		switch {
+		case err != nil:
+			p.log.Warn("start request failed", "player", profile.Name, "error", err)
+		case res.Status == control.StatusNoAccess:
+			return disconnectLogin(conn, res.Message)
+		default:
+			p.log.Info("start requested",
+				"player", profile.Name, "server", label, "status", res.Status, "message", res.Message)
+		}
+	} else {
+		p.log.Info("holding an unlinked player; not requesting a start",
+			"player", profile.Name, "server", label)
 	}
 
 	online := make(chan struct{})

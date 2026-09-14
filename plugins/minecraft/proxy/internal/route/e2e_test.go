@@ -41,7 +41,6 @@ type e2eBot struct {
 	backendPort  int
 	linked       bool
 	startCalls   atomic.Int32
-	linkCalls    atomic.Int32
 	sessionCalls atomic.Int32
 	server       *httptest.Server
 }
@@ -54,10 +53,9 @@ func newE2EBot(t *testing.T, backendPort int, online, linked bool) *e2eBot {
 	mux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
 		bot.mu.Lock()
 		cfg := control.Config{
-			ListenPort:     25565,
-			MaxPlayers:     20,
-			MOTD:           "test",
-			LinkTTLSeconds: 300,
+			ListenPort: 25565,
+			MaxPlayers: 20,
+			MOTD:       "test",
 			Servers: []control.ServerEntry{{
 				ID: 1, Tag: "Survival", Host: "127.0.0.1",
 				Port: bot.backendPort, Online: bot.online, Forwarding: "bungeecord",
@@ -77,20 +75,12 @@ func newE2EBot(t *testing.T, backendPort int, online, linked bool) *e2eBot {
 			}},
 		}
 		bot.mu.Unlock()
-		if !sess.Linked {
-			sess.Servers = nil
-		}
 		writeJSON(w, sess)
 	})
 	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
 		bot.startCalls.Add(1)
 		writeJSON(w, control.StartResult{Status: control.StatusStarted, Message: "starting"})
 	})
-	mux.HandleFunc("/link/begin", func(w http.ResponseWriter, r *http.Request) {
-		bot.linkCalls.Add(1)
-		writeJSON(w, control.LinkResult{Code: "424242", ExpiresInSeconds: 300})
-	})
-
 	bot.server = httptest.NewServer(mux)
 	t.Cleanup(bot.server.Close)
 	return bot
@@ -559,35 +549,80 @@ func TestHoldUntilBackendComesUp(t *testing.T) {
 	t.Fatal("the hold never resolved into a login")
 }
 
-// TestUnlinkedPlayerGetsALinkCode checks that a player who cannot be helped by
-// waiting is told exactly what to do, with the code in the message.
-func TestUnlinkedPlayerGetsALinkCode(t *testing.T) {
+// TestUnlinkedPlayerIsLetThrough checks that the proxy does not gate on
+// verification at all.
+//
+// Linking is the game side's business: a player who has not linked yet joins
+// like anyone else and completes /link on Discord from in game, exactly as they
+// did before the proxy existed. The proxy turning them away here would have
+// made that impossible, since the server has to be running for /link to work.
+func TestUnlinkedPlayerIsLetThrough(t *testing.T) {
 	rig := newE2ERig(t, true, false)
 
 	client := e2eDial(t, rig.addr, "mc.example.com")
 	client.encrypt()
 
-	pkt := client.expect(idLoginDisconnect)
+	pkt := client.expect(idLoginSuccess)
 	r := protocol.NewReader(pkt.Data)
-	raw, err := r.String(32767)
+	gotUUID, err := r.UUID()
 	if err != nil {
-		t.Fatalf("read disconnect reason: %v", err)
+		t.Fatalf("read login success uuid: %v", err)
 	}
-	var msg struct {
-		Text string `json:"text"`
+	if gotUUID.String() != e2ePlayerUUID {
+		t.Errorf("login success carried uuid %s, wanted %s", gotUUID, e2ePlayerUUID)
 	}
-	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
-		t.Fatalf("disconnect reason is not a JSON component: %v (%q)", err, raw)
+
+	select {
+	case <-rig.backend.handshakes:
+	case <-time.After(5 * time.Second):
+		t.Fatal("an unlinked player never reached the backend")
 	}
-	if !strings.Contains(msg.Text, "424242") {
-		t.Errorf("disconnect message did not carry the link code: %q", msg.Text)
+}
+
+// TestUnlinkedPlayerIsHeldWithoutRequestingAStart checks the one thing that
+// does stay gated. Starting a server needs a Discord account to check
+// permission against and charge, so an unlinked player waits instead of having
+// a request raised in their name. They are still not turned away.
+func TestUnlinkedPlayerIsHeldWithoutRequestingAStart(t *testing.T) {
+	rig := newE2ERig(t, false, false)
+
+	client := e2eDial(t, rig.addr, "mc.example.com")
+	client.encrypt()
+
+	// The hold is live: the client is being kept alive rather than dropped.
+	client.answerHoldPing()
+
+	if got := rig.bot.startCalls.Load(); got != 0 {
+		t.Errorf("the bot was asked to start a server %d times for an unlinked player, wanted 0", got)
 	}
-	if !strings.Contains(msg.Text, "/linkcode") {
-		t.Errorf("disconnect message did not name the command to run: %q", msg.Text)
+
+	// Once the server is up by other means, they are joined like anyone else.
+	rig.bot.setOnline(true)
+	for i := 0; i < 20; i++ {
+		_ = client.raw.SetReadDeadline(time.Now().Add(10 * time.Second))
+		pkt, err := client.conn.ReadPacket()
+		if err != nil {
+			t.Fatalf("read while waiting for login success: %v", err)
+		}
+		switch pkt.ID {
+		case idLoginPluginRequest:
+			r := protocol.NewReader(pkt.Data)
+			msgID, _ := r.VarInt()
+			reply := protocol.NewWriter(idLoginPluginResponse).VarInt(msgID).Bool(false).Packet()
+			if err := client.conn.WritePacket(reply); err != nil {
+				t.Fatalf("answer hold ping: %v", err)
+			}
+		case idLoginSuccess:
+			return
+		case idLoginDisconnect:
+			r := protocol.NewReader(pkt.Data)
+			msg, _ := r.String(32767)
+			t.Fatalf("the unlinked player was disconnected: %s", msg)
+		default:
+			t.Fatalf("unexpected packet 0x%02x while held", pkt.ID)
+		}
 	}
-	if rig.bot.linkCalls.Load() != 1 {
-		t.Errorf("the bot was asked for %d link codes, wanted 1", rig.bot.linkCalls.Load())
-	}
+	t.Fatal("the hold never resolved into a login")
 }
 
 // TestForcedHostSelectsServer pins the one selection mechanism available during

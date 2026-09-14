@@ -33,7 +33,6 @@ which backends exist and whether they are up.
   "publicHost": "mc.example.com",
   "maxPlayers": 100,
   "motd": "§bServer Hub§r\n§7Join to start a server",
-  "linkTtlSeconds": 300,
   "voteChannelConfigured": true,
   "servers": [
     {
@@ -91,10 +90,13 @@ Mojang. Tells the proxy who this player is and what they may do.
 }
 ```
 
-- `accessible` applies the core per-server access list. For an unlinked player
-  `linked` is false, `discordId` is absent and every `accessible` is false.
+- `accessible` applies the core per-server access list. An unlinked player gets
+  `linked: false`, no `discordId`, and every server marked accessible: the proxy
+  does not gate on verification, because a player has to be able to get in
+  before they can link from in game.
 - `canStart` means the linked user holds the `startServer` permission, so a start
-  would happen immediately rather than through a vote.
+  would happen immediately rather than through a vote. It is always false for an
+  unlinked player, who cannot ask for a server to be started at all.
 - `pollPending` means a start vote for that server is already open;
   `pollUrl` links to it when known.
 
@@ -132,18 +134,3 @@ The player asked, in game, for a server to be started.
 
 `message` is safe to show verbatim in game. It must be plain text, no `§` codes,
 no newlines.
-
-## `POST /link/begin`
-
-An unlinked player tried to join. The proxy issues them a code and puts it into
-the disconnect message, so they can finish the link on Discord with `/linkcode`
-and come straight back.
-
-**Request** `{ "uuid": "…", "name": "Notch" }`
-
-**Response `200`** `{ "code": "123456", "expiresInSeconds": 300 }`
-
-**Response `409`** `{ "error": "already_linked" }`
-
-The bot keeps the pending code in memory only. A code is six digits, single use,
-and expires after `linkTtlSeconds`.
