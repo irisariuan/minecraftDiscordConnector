@@ -60,13 +60,16 @@ function plainText(message: string): string {
 }
 
 /** Look up the Discord account linked to a Minecraft UUID, or null. */
-function identityOf(uuid: string) {
-	return data
-		.request("identity:getByExternal", {
-			pluginId: PLUGIN_ID,
-			externalId: uuid,
-		})
-		.catch(() => null);
+async function identityOf(uuid: string) {
+	try {
+        return await data
+            .request("identity:getByExternal", {
+                pluginId: PLUGIN_ID,
+                externalId: uuid,
+            });
+    } catch {
+        return null;
+    }
 }
 
 /**
