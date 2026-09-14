@@ -120,7 +120,11 @@ generic behaviour.
 - `plugins/githubConnector/` — a standalone installer that tracks a GitHub
   release by tag and records it as a `provider = "github"` artifact.
 - `plugins/cloudflare/` — a game-independent utility command.
-- `plugins/launcher/` — bot self-management: tracks the git remote, switches
-  branches, and restarts the bot in place. `launcher.ts` is the wrapper
-  process that keeps the bot on the same terminal across restarts (it exits
-  with a dedicated code that the wrapper re-spawns on).
+- `plugins/launcher/` — bot self-management: tracks the git remote, checks out
+  branches/tags/commits, and restarts the bot in place. `launcher.ts` is the
+  wrapper process that keeps the bot on the same terminal across restarts (it
+  exits with a dedicated code that the wrapper re-spawns on). `pipeline.ts`
+  runs the optional `.launcher/pipeline/` steps around every version change —
+  unapply (reverse order) before the checkout, apply (forward order) after —
+  so work a version needs done, not just checked out, travels with it. See
+  the version pipeline section in [README.md](../README.md).

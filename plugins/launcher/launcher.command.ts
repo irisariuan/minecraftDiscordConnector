@@ -6,13 +6,24 @@ import {
 	isUnderLauncher,
 	launcherPid,
 	listBranches,
+	listRecentCommits,
+	listTags,
 	pullFastForward,
 	readGitStatus,
 	requestRestart,
-	switchBranch,
+	runPipelineManually,
+	switchVersion,
 } from "./lib";
+import {
+	getPipelineState,
+	listSteps,
+	pipelineDir,
+	type PipelineRun,
+} from "./pipeline";
 
 const MAX_AUTOCOMPLETE = 25;
+/** Discord rejects an autocomplete choice name longer than this. */
+const MAX_CHOICE_NAME = 100;
 
 function relative(ms: number) {
 	return `<t:${Math.floor(ms / 1000)}:R>`;
@@ -27,6 +38,31 @@ function describeDeps(deps: "unchanged" | "installed" | "failed"): string {
 		default:
 			return "";
 	}
+}
+
+function clip(text: string, max: number): string {
+	return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/** One line summarising a pipeline run, or "" when there was nothing to run. */
+function describePipeline(run: PipelineRun | null): string {
+	if (!run || run.empty) return "";
+	const verb = run.mode === "apply" ? "Applied" : "Unapplied";
+	const ran = run.steps.filter((s) => s.ok && !s.skipped).length;
+	if (run.ok) {
+		return ran === 0 ? "" : `⚙️ ${verb} ${ran} pipeline step(s).`;
+	}
+	const failed = run.failed;
+	return [
+		`❌ Pipeline ${run.mode} failed at \`${failed?.step}\`` +
+			(failed?.timedOut ? " (timed out)" : ` (exit ${failed?.code})`) +
+			(ran > 0 ? ` — ${ran} earlier step(s) had already run.` : "."),
+		failed?.output
+			? `\`\`\`\n${clip(failed.output, 1200)}\n\`\`\``
+			: "",
+	]
+		.filter(Boolean)
+		.join("\n");
 }
 
 export default {
@@ -49,19 +85,46 @@ export default {
 		.addSubcommand((s) =>
 			s
 				.setName("switch")
-				.setDescription("Check out another branch (restart afterwards to apply)")
+				.setDescription(
+					"Check out another branch, tag or commit (restart afterwards to apply)",
+				)
 				.addStringOption((o) =>
 					o
-						.setName("branch")
-						.setDescription("Branch to switch to")
+						.setName("target")
+						.setDescription("Branch, tag or commit to check out")
 						.setRequired(true)
 						.setAutocomplete(true),
+				)
+				.addBooleanOption((o) =>
+					o
+						.setName("pipeline")
+						.setDescription("Run the version pipeline (default: yes)"),
 				),
 		)
 		.addSubcommand((s) =>
 			s
 				.setName("pull")
-				.setDescription("Fast-forward the current branch to its remote"),
+				.setDescription("Fast-forward the current branch to its remote")
+				.addBooleanOption((o) =>
+					o
+						.setName("pipeline")
+						.setDescription("Run the version pipeline (default: yes)"),
+				),
+		)
+		.addSubcommand((s) =>
+			s
+				.setName("pipeline")
+				.setDescription("Inspect or re-run the version pipeline by hand")
+				.addStringOption((o) =>
+					o
+						.setName("action")
+						.setDescription("What to do with the pipeline (default: list)")
+						.addChoices(
+							{ name: "list — show the steps and what is applied", value: "list" },
+							{ name: "apply — run every step for this checkout", value: "apply" },
+							{ name: "unapply — undo the applied steps in reverse", value: "unapply" },
+						),
+				),
 		)
 		.addSubcommand((s) =>
 			s
@@ -78,25 +141,51 @@ export default {
 
 	async autoComplete({ interaction }) {
 		const focused = interaction.options.getFocused().toLowerCase();
-		const { current, local, remote } = await listBranches().catch(() => ({
-			current: "",
-			local: [] as string[],
-			remote: new Map<string, string>(),
-		}));
-		const names = [...new Set([...local, ...remote.keys()])]
+		const [branches, tags, commits] = await Promise.all([
+			listBranches().catch(() => ({
+				current: "",
+				local: [] as string[],
+				remote: new Map<string, string>(),
+			})),
+			listTags().catch(() => [] as string[]),
+			listRecentCommits().catch(() => []),
+		]);
+		const { current, local, remote } = branches;
+
+		// Branches first (the common case), then tags, then recent commits — a
+		// commit is matched on both its sha and its subject so it can be found
+		// by what it did as well as by its hash.
+		const choices: { name: string; value: string }[] = [];
+		for (const n of [...new Set([...local, ...remote.keys()])]
 			.filter((n) => n !== current && n.toLowerCase().includes(focused))
 			.sort((a, b) => {
 				const la = local.includes(a) ? 0 : 1;
 				const lb = local.includes(b) ? 0 : 1;
 				return la - lb || a.localeCompare(b);
-			})
-			.slice(0, MAX_AUTOCOMPLETE);
-		await interaction.respond(
-			names.map((n) => ({
+			})) {
+			choices.push({
 				name: local.includes(n) ? n : `${n} (remote only)`,
 				value: n,
-			})),
-		);
+			});
+		}
+		for (const t of tags.filter((t) => t.toLowerCase().includes(focused))) {
+			choices.push({ name: `${t} (tag)`, value: t });
+		}
+		for (const c of commits) {
+			if (
+				focused &&
+				!c.sha.startsWith(focused) &&
+				!c.subject.toLowerCase().includes(focused)
+			) {
+				continue;
+			}
+			choices.push({
+				name: clip(`${c.shortSha} — ${c.subject}`, MAX_CHOICE_NAME),
+				value: c.shortSha,
+			});
+		}
+
+		await interaction.respond(choices.slice(0, MAX_AUTOCOMPLETE));
 	},
 
 	async execute({ interaction, client, serverManager }) {
@@ -204,30 +293,49 @@ export default {
 		}
 
 		if (sub === "switch") {
-			const name = interaction.options.getString("branch", true).trim();
-			const result = await switchBranch(name);
+			const name = interaction.options.getString("target", true).trim();
+			const pipeline = interaction.options.getBoolean("pipeline") ?? true;
+			const result = await switchVersion(name, { pipeline });
 			switch (result.status) {
-				case "switched":
+				case "switched": {
+					const detached = result.target.branch === null;
 					return interaction.editReply(
 						[
-							`✅ Switched \`${result.from}\` → \`${result.to}\`.`,
+							`✅ Switched \`${result.from}\` → \`${result.to}\`` +
+								(detached
+									? ` (detached at \`${result.target.shortSha}\` ${result.target.subject}).`
+									: "."),
+							describePipeline(result.unapply),
 							describeDeps(result.deps),
-							"Run `/launcher restart` to start the bot from this branch.",
+							describePipeline(result.apply),
+							result.apply && !result.apply.ok
+								? "The checkout moved but the pipeline did not finish — fix the step and re-run `/launcher pipeline action:apply`."
+								: "Run `/launcher restart` to start the bot from this version.",
 						]
 							.filter(Boolean)
 							.join("\n"),
 					);
+				}
 				case "alreadyOn":
-					return interaction.editReply(`Already on \`${result.branch}\`.`);
+					return interaction.editReply(`Already on \`${result.target}\`.`);
 				case "dirty":
 					return interaction.editReply(
 						`❌ Working tree has ${result.files} modified/untracked path(s). Commit or stash them on the host before switching.`,
 					);
 				case "invalidName":
-					return interaction.editReply(`❌ \`${name}\` is not a valid branch name.`);
+					return interaction.editReply(
+						`❌ \`${clip(name, 80)}\` is not a usable branch, tag or commit.`,
+					);
 				case "notFound":
 					return interaction.editReply(
-						`❌ No local or remote branch named \`${result.branch}\`. Try \`/launcher status fetch:true\` to refresh remote branches.`,
+						`❌ Nothing named \`${clip(result.target, 80)}\` — no such branch, tag or commit. Try \`/launcher status fetch:true\` to refresh from the remote.`,
+					);
+				case "unapplyFailed":
+					return interaction.editReply(
+						[
+							"❌ Nothing was checked out: the current version's pipeline could not be unapplied.",
+							describePipeline(result.run),
+						].join("\n"),
 					);
 				default:
 					return interaction.editReply(
@@ -237,14 +345,19 @@ export default {
 		}
 
 		if (sub === "pull") {
-			const result = await pullFastForward();
+			const pipeline = interaction.options.getBoolean("pipeline") ?? true;
+			const result = await pullFastForward({ pipeline });
 			switch (result.status) {
 				case "updated":
 					return interaction.editReply(
 						[
 							`✅ Fast-forwarded \`${result.branch}\` by ${result.commits} commit(s): \`${result.from?.shortSha ?? "?"}\` → \`${result.to?.shortSha ?? "?"}\` ${result.to?.subject ?? ""}`,
+							describePipeline(result.unapply),
 							describeDeps(result.deps),
-							"Run `/launcher restart` to apply.",
+							describePipeline(result.apply),
+							result.apply && !result.apply.ok
+								? "The branch moved but the pipeline did not finish — fix the step and re-run `/launcher pipeline action:apply`."
+								: "Run `/launcher restart` to apply.",
 						]
 							.filter(Boolean)
 							.join("\n"),
@@ -261,11 +374,73 @@ export default {
 					return interaction.editReply(
 						`❌ Working tree has ${result.files} modified/untracked path(s). Commit or stash them on the host before pulling.`,
 					);
+				case "unapplyFailed":
+					return interaction.editReply(
+						[
+							"❌ Nothing was pulled: the current version's pipeline could not be unapplied.",
+							describePipeline(result.run),
+						].join("\n"),
+					);
 				default:
 					return interaction.editReply(
 						`❌ Pull failed:\n\`\`\`\n${result.message.slice(0, 1500)}\n\`\`\``,
 					);
 			}
+		}
+
+		if (sub === "pipeline") {
+			const action = interaction.options.getString("action") ?? "list";
+
+			if (action === "list") {
+				const [steps, state] = await Promise.all([
+					listSteps(),
+					getPipelineState(),
+				]);
+				const embed = new EmbedBuilder()
+					.setTitle("⚙️ Version Pipeline")
+					.setColor(steps.length === 0 ? 0x95a5a6 : 0x3498db)
+					.setFooter({ text: pipelineDir() });
+				if (steps.length === 0) {
+					embed.setDescription(
+						"No pipeline steps. Add executable files to the directory below to run work around every `/launcher switch` and `/launcher pull`; each one is called with `apply` or `unapply`.",
+					);
+				} else {
+					const applied = new Set(state?.steps ?? []);
+					embed.addFields(
+							{
+							name: "Steps (apply order)",
+							// An embed field caps at 1024 characters.
+							value: clip(
+								steps
+									.map((n, i) => `${i + 1}. ${applied.has(n) ? "✅" : "▫️"} \`${n}\``)
+									.join("\n"),
+								1024,
+							),
+						},
+						{
+							name: "Applied",
+							value: state
+								? `${state.steps.length} step(s) from \`${state.sha.slice(0, 7)}\`, ${relative(state.at)}`
+								: "nothing recorded — the pipeline has not run yet",
+						},
+					);
+				}
+				return interaction.editReply({ embeds: [embed] });
+			}
+
+			const mode = action === "unapply" ? "unapply" : "apply";
+			const run = await runPipelineManually(mode);
+			if (run.empty) {
+				return interaction.editReply(
+					`No pipeline steps to ${mode} — \`${pipelineDir()}\` is empty or absent.`,
+				);
+			}
+			const summary = describePipeline(run);
+			return interaction.editReply(
+				run.ok
+					? summary || `✅ Pipeline ${mode} finished with nothing to do.`
+					: summary,
+			);
 		}
 
 		// restart
