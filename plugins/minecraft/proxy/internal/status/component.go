@@ -59,7 +59,16 @@ func LegacyToComponent(s string) component {
 			b.WriteRune(runes[i])
 			continue
 		}
-		code := byte(runes[i+1])
+		next := runes[i+1]
+		if next > 127 {
+			// Narrowing a multibyte rune to a byte would let something like
+			// U+0142 masquerade as the colour code its low byte happens to
+			// spell. No formatting code is outside ASCII, so this is literal
+			// text and the section sign stays with it.
+			b.WriteRune(runes[i])
+			continue
+		}
+		code := byte(next)
 		if code >= 'A' && code <= 'Z' {
 			code += 'a' - 'A'
 		}

@@ -138,6 +138,13 @@ func (p *Proxy) chooseTarget(sess *control.Session, host string) (int, bool) {
 		return up[0], true
 	}
 	ids := accessibleIDs(sess)
+	if len(ids) == 0 {
+		// handleLogin rejects this case before calling here, but the guard
+		// belongs with the indexing rather than in the caller: a second caller
+		// added later would otherwise inherit a panic. Zero is not a valid
+		// server id, so it cannot be mistaken for a real target.
+		return 0, false
+	}
 	return ids[0], false
 }
 
