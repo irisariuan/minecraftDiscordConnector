@@ -185,7 +185,8 @@ start_app() {
         exec bun --hot index.ts
     else
         print_status "Running in production mode..."
-        exec bun index.ts
+        # Run through the launcher so /launcher restart re-spawns the bot in place
+        exec bun plugins/launcher/launcher.ts
     fi
 }
 

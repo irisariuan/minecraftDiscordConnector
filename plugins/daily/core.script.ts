@@ -16,19 +16,26 @@ export default function run() {
 				for await (const file of glob(
 					`${process.cwd()}/scripts/*.ts`,
 				)) {
-					console.log(
-						`Running daily script: ${file.split("/").pop()?.slice(0, -3)}`,
-					);
-					import(file)
-						.then((module) => module.default())
-						.catch((e: Error) => {
-							console.error(
-								`Error running daily script ${file}:`,
-								e,
+					const name = file.split("/").pop()?.slice(0, -3);
+					try {
+						const module = await import(file);
+						if (typeof module.default !== "function") {
+							console.warn(
+								`Skipping daily script ${name}: it has no default-exported function.`,
 							);
-						});
+							continue;
+						}
+						console.log(`Running daily script: ${name}`);
+						await module.default();
+					} catch (e) {
+						console.error(
+							`Error running daily script ${file}:`,
+							e,
+						);
+					}
 				}
 			}
+			void func();
 			setInterval(func, 24 * 60 * 60 * 1000);
 		},
 		getNextTimestamp({

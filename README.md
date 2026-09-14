@@ -128,8 +128,12 @@ Documentation:
 7. **Start the bot:**
 
     ```sh
-    bun index.ts
+    bun run start
     ```
+
+    This runs `plugins/launcher/launcher.ts`, which keeps the bot attached to
+    your terminal and re-spawns it in place when you use `/launcher restart`.
+    Run `bun index.ts` directly if you do not want in-place restarts.
 
 8. **Optional: Give permission to admin account in Discord**
 
@@ -183,6 +187,14 @@ All commands are available as Discord slash commands. Some require specific perm
 - `/proxy status` — Show whether the proxy is enabled, its listen port, the vote channel, and every proxied server
 - `/proxy setchannel channel` — Set the channel in-game start votes are posted to (requires `editSetting`)
 - `/proxy clearchannel` — Stop posting in-game start votes (requires `editSetting`)
+
+### Bot Maintenance Commands (launcher plugin)
+
+- `/launcher status [fetch]` — Show the bot's branch, commit, ahead/behind vs. remote, and working-tree state
+- `/launcher branches` — List local and remote branches
+- `/launcher switch branch` — Check out another branch (runs `bun install` if dependencies changed)
+- `/launcher pull` — Fast-forward the current branch to its remote
+- `/launcher restart [force]` — Stop game servers and restart the bot in the same terminal (requires starting via `bun run start`)
 
 ### Permission System Commands
 

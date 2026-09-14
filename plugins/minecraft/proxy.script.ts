@@ -5,7 +5,7 @@ import express, {
 	type Request,
 	type Response,
 } from "express";
-import { chmodSync } from "node:fs";
+import { chmodSync, unlinkSync } from "node:fs";
 import { mkdir, stat, unlink } from "node:fs/promises";
 import type { Server as HttpServer } from "node:http";
 import { dirname } from "node:path";
@@ -455,6 +455,20 @@ export default async function run() {
 	process.once("SIGINT", shutdown);
 	process.once("SIGTERM", shutdown);
 	process.once("beforeExit", shutdown);
+	/**
+	 * `process.exit()` — how `/launcher restart` ends the bot — runs neither
+	 * `beforeExit` nor any signal handler, and a spawned child outlives the bun
+	 * process that started it. Without this the old proxy keeps the listen port
+	 * and the restarted bot's proxy can never bind to it. Only synchronous work
+	 * runs in an `exit` handler, so kill the child and drop the socket by hand
+	 * instead of waiting on `connection.close()`.
+	 */
+	process.once("exit", () => {
+		supervisor.stop();
+		try {
+			unlinkSync(ipcPath);
+		} catch {}
+	});
 
 	await supervisor.start();
 }
