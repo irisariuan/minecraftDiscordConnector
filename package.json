@@ -37,6 +37,6 @@
 		"test": "bun test",
 		"typecheck": "bunx tsc --noEmit",
 		"migrate": "bunx prisma migrate deploy && bunx prisma generate",
-		"backfill:minecraft": "bun scripts/backfill-minecraft.ts"
+		"backfill:minecraft": "bun tools/backfill-minecraft.ts"
 	}
 }

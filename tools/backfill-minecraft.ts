@@ -10,7 +10,7 @@
  * It is idempotent — rows whose config is already complete are skipped and
  * reported as such. Running it twice makes no further changes.
  *
- * Usage:  bun scripts/backfill-minecraft.ts [--dry-run]
+ * Usage:  bun tools/backfill-minecraft.ts [--dry-run]
  *
  * Back up your database first (see docs/MIGRATION.md).
  */

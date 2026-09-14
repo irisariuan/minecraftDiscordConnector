@@ -71,8 +71,8 @@ created between deploys), run the idempotent safety tool. It fills any missing
 Minecraft config keys from the environment and is safe to run repeatedly:
 
 ```sh
-bun scripts/backfill-minecraft.ts --dry-run   # preview
-bun scripts/backfill-minecraft.ts             # apply
+bun tools/backfill-minecraft.ts --dry-run   # preview
+bun tools/backfill-minecraft.ts             # apply
 ```
 
 ## Rollback
