@@ -166,9 +166,51 @@ All commands are available as Discord slash commands. Some require specific perm
 
 - `/launcher status [fetch]` — Show the bot's branch, commit, ahead/behind vs. remote, and working-tree state
 - `/launcher branches` — List local and remote branches
-- `/launcher switch branch` — Check out another branch (runs `bun install` if dependencies changed)
-- `/launcher pull` — Fast-forward the current branch to its remote
+- `/launcher switch target [pipeline]` — Check out another **branch, tag or commit** (runs `bun install` if dependencies changed, and the version pipeline unless `pipeline:false`)
+- `/launcher pull [pipeline]` — Fast-forward the current branch to its remote
+- `/launcher pipeline [action]` — List the version pipeline's steps, or `apply`/`unapply` them by hand
 - `/launcher restart [force]` — Stop game servers and restart the bot in the same terminal (requires starting via `bun run start`)
+
+#### The version pipeline
+
+A checkout only moves files. Anything a version needs *done* — compiling a
+binary, applying migrations, rebuilding the web UI — goes in
+`.launcher/pipeline/` as numbered steps:
+
+```
+.launcher/pipeline/10-install.sh
+.launcher/pipeline/20-build.sh
+.launcher/pipeline/30-migrate.ts
+```
+
+Each file is one step and handles both directions: it is called with `apply`
+or `unapply` as its first argument. `/launcher switch` and `/launcher pull`
+run the pipeline around the checkout:
+
+1. **unapply** the version being left, in reverse filename order, *before* the
+   checkout — so each step is torn down by its own version's code, while that
+   code is still in the working tree;
+2. move the checkout (and `bun install` if the dependency manifest changed);
+3. **apply** the new version's steps, in ascending filename order.
+
+The directory is optional: with no `.launcher/pipeline/`, every launcher
+command behaves exactly as it did before. `*.ts`/`*.js` steps run under bun,
+`*.sh` under bash, anything else needs its own executable bit and shebang;
+`*.md` files are ignored, so the directory can document itself.
+
+Steps see the move in their environment: `LAUNCHER_PIPELINE_MODE`,
+`LAUNCHER_PIPELINE_STEP`, `LAUNCHER_REASON` (`switch`/`pull`/`manual`),
+`LAUNCHER_FROM_REF`, `LAUNCHER_TO_REF`, `LAUNCHER_FROM_SHA`, `LAUNCHER_TO_SHA`.
+
+A run stops at the first failing step and reports which ones had already run;
+nothing is rolled back automatically, so **write steps to be idempotent**. A
+failed *unapply* aborts the switch entirely — nothing is checked out — rather
+than stranding the host between two versions. A failed *apply* leaves the
+checkout on the new version with the pipeline half-applied; fix the step and
+re-run `/launcher pipeline action:apply`. Steps have a 10-minute timeout each.
+
+Because the launcher tracks what is applied rather than what is on disk,
+`unapply` still runs steps that only existed on the version being left behind.
 
 ### Permission System Commands
 
