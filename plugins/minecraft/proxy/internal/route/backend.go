@@ -117,16 +117,9 @@ func (p *Proxy) joinBackend(
 	// what a client of this version needs before it will enter a world. When it
 	// does not already know, it watches this one go past.
 	if p.shouldRecord(hs.Protocol) {
-		snap, err := p.recordJoin(client, backend, hs.Protocol, entry)
-		if snap != nil {
-			if putErr := p.opts.Snapshots.Put(snap); putErr != nil {
-				p.log.Warn("could not keep the recorded world",
-					"protocol", hs.Protocol, "server", entry.Tag, "error", putErr)
-			} else {
-				p.log.Info("recorded a waiting world",
-					"protocol", hs.Protocol, "server", entry.Tag, "packets", len(snap.Config))
-			}
-		}
+		// The recording is filed by recordJoin itself, as soon as it is taken.
+		// What comes back here arrives only when the player leaves.
+		_, err := p.recordJoin(client, backend, hs.Protocol, entry)
 		return err
 	}
 

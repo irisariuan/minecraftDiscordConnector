@@ -179,21 +179,25 @@ func (p *Proxy) statusInfo(clientProtocol int32) status.Info {
 
 const defaultMOTD = "§bServer Hub§r\n§7Join to start a server"
 
-// canOfferWorld reports whether this client could be put into the waiting world
-// right now.
+// worldUnavailable reports why this client cannot be put into the waiting world,
+// or "" if it can.
 //
-// Two things have to be true, and they fail for different reasons. The proxy
-// must know the play-phase packet numbering for the version, which is a
-// question about this code; and it must have a recorded configuration phase for
-// it, which is a question about whether anybody has yet joined a running server
-// with a client like this one. Either way the answer is the same: no world, so
-// the player gets the hold instead.
-func (p *Proxy) canOfferWorld(protocolVersion int32) bool {
-	if p.opts.Snapshots == nil || !limbo.Supports(protocolVersion) {
-		return false
+// The three reasons are genuinely different problems and only one of them is
+// anybody's fault, so they are worth telling apart. An operator watching players
+// land on a connecting screen has no other way to find out which of these is
+// happening to them.
+func (p *Proxy) worldUnavailable(protocolVersion int32) string {
+	if p.opts.Snapshots == nil {
+		return "the waiting world is switched off"
 	}
-	_, ok := p.opts.Snapshots.Get(protocolVersion)
-	return ok
+	if !limbo.Supports(protocolVersion) {
+		return "no packet numbering is known for this client version"
+	}
+	if _, ok := p.opts.Snapshots.Get(protocolVersion); !ok {
+		return "nothing has been recorded for this client version yet; " +
+			"it is learned the first time somebody joins a running server with one"
+	}
+	return ""
 }
 
 // entryFor looks up a backend's connection details.

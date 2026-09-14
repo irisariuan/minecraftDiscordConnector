@@ -145,6 +145,14 @@ func (p *Proxy) recordJoin(
 			"server", entry.Tag, "protocol", protocolVersion)
 		snap = nil
 	}
+
+	// Kept here rather than by the caller, because the caller does not get this
+	// function back until the copy below has run its course — which is when the
+	// player leaves, an hour or a day from now. A recording is finished seconds
+	// into the session and is useful to everybody arriving in the meantime, so
+	// it is put away the moment it exists.
+	p.keepSnapshot(snap, entry)
+
 	if err == nil {
 		_, _ = io.Copy(client.StreamWriter(), backend.StreamReader())
 	}
@@ -278,6 +286,22 @@ func (p *Proxy) captureConfiguration(
 		"server", entry.Tag, "protocol", protocolVersion,
 		"packets", len(snap.Config), "bytes", recorded)
 	return snap, nil
+}
+
+// keepSnapshot files a finished recording, if there is one and there is
+// anywhere to put it. Failing to store it costs nothing permanent: the next
+// join at this version is watched again.
+func (p *Proxy) keepSnapshot(snap *limbo.Snapshot, entry control.ServerEntry) {
+	if snap == nil || p.opts.Snapshots == nil {
+		return
+	}
+	if err := p.opts.Snapshots.Put(snap); err != nil {
+		p.log.Warn("could not keep the recorded world",
+			"protocol", snap.Protocol, "server", entry.Tag, "error", err)
+		return
+	}
+	p.log.Info("recorded a waiting world",
+		"protocol", snap.Protocol, "server", entry.Tag, "packets", len(snap.Config))
 }
 
 // recordableConfigPacket reports whether a configuration packet describes the

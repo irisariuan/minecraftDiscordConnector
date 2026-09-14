@@ -1,6 +1,7 @@
 package route
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/control"
@@ -158,4 +159,55 @@ func proxyWithWorldFor(protocolVersion int32) *Proxy {
 	store := limbo.NewMemoryStore()
 	_ = store.Put(&limbo.Snapshot{Protocol: protocolVersion})
 	return &Proxy{opts: Options{Snapshots: store}}
+}
+
+// An operator watching players land on a connecting screen has nothing to go on
+// but this reason, and the three causes need different things done about them.
+func TestDecideSaysWhyThereIsNoWaitingWorld(t *testing.T) {
+	t.Parallel()
+
+	sess := &control.Session{Servers: []control.SessionServerInfo{
+		{ID: 1, Tag: "Survival", Accessible: true},
+		{ID: 2, Tag: "Creative", Accessible: true},
+	}}
+
+	cases := []struct {
+		name     string
+		proxy    *Proxy
+		protocol int32
+		want     string
+	}{
+		{
+			name:     "switched off",
+			proxy:    &Proxy{},
+			protocol: mcver.V1_20_5,
+			want:     "switched off",
+		},
+		{
+			name:     "a version with no packet numbering",
+			proxy:    proxyWithWorldFor(mcver.V1_20_5),
+			protocol: 774,
+			want:     "no packet numbering",
+		},
+		{
+			name:     "nothing recorded yet",
+			proxy:    proxyWithWorldFor(mcver.V1_20_5),
+			protocol: 770,
+			want:     "nothing has been recorded",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tc.proxy.decide(sess, "", tc.protocol, 0)
+			if got.Plan == planWorld {
+				t.Fatalf("a world was offered when it should not have been: %+v", got)
+			}
+			if !strings.Contains(got.Reason, tc.want) {
+				t.Errorf("reason = %q, want it to mention %q", got.Reason, tc.want)
+			}
+		})
+	}
 }

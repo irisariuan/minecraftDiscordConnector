@@ -116,6 +116,25 @@ What this means in practice:
 Set `MC_PROXY_WORLD_CACHE` to move it, or to an empty string to turn the waiting
 room off entirely and hold every player instead.
 
+### When the waiting room does not appear
+
+Almost always one of three things, and the proxy log says which. Every login
+writes a `routing player` line carrying a `plan` and a `reason`; when the plan is
+`hold` the reason names the cause:
+
+| reason | what to do |
+| --- | --- |
+| `nothing has been recorded for this client version yet` | Start a server, join it through the proxy once with that client, and stay a few seconds. That is the cold start; it happens once per client version. |
+| `no packet numbering is known for this client version` | The proxy cannot build a world for 1.21.11 or 26.1, or for anything older than 1.20.5. Those players are held instead. |
+| `the waiting world is switched off` | `MC_PROXY_WORLD_CACHE` is empty, or the cache directory could not be opened — there will be a warning at startup saying so. |
+
+`/proxy status` shows the same thing from Discord, as a list of the client
+versions that have a recorded room.
+
+If `data/mcproxy-worlds/` does not exist at all, the proxy is not running this
+build: the directory is created at startup. Run `bun run build:proxy` and
+restart the bot.
+
 ## Choosing between servers
 
 In order of precedence:

@@ -55,6 +55,13 @@ type captureOutcome struct {
 
 func newCaptureRig(t *testing.T) *captureRig {
 	t.Helper()
+	return newCaptureRigWith(t, nil)
+}
+
+// newCaptureRigWith builds a rig whose proxy has somewhere to file what it
+// records.
+func newCaptureRigWith(t *testing.T, snapshots limbo.Store) *captureRig {
+	t.Helper()
 
 	proxyToPlayer, playerRaw := net.Pipe()
 	proxyToBackend, backendRaw := net.Pipe()
@@ -78,7 +85,10 @@ func newCaptureRig(t *testing.T) *captureRig {
 		done:       make(chan captureOutcome, 1),
 	}
 
-	p := &Proxy{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	p := &Proxy{
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		opts: Options{Snapshots: snapshots},
+	}
 	entry := control.ServerEntry{ID: 1, Tag: "Survival"}
 	go func() {
 		snap, err := p.recordJoin(
@@ -628,4 +638,41 @@ func TestReplayableRejectsWhatTheWaitingWorldCouldNotSendBack(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRecordJoinFilesTheRecordingWhileTheSessionIsStillLive is a regression test
+// for a recording that was taken in seconds and filed hours later.
+//
+// recordJoin does not return until the byte copy behind it ends, which is when
+// the player disconnects. Filing the recording from its return value therefore
+// left every player who arrived during that session — the ones it was taken for
+// — waiting on a connecting screen, and lost the recording altogether if the
+// proxy was restarted first.
+func TestRecordJoinFilesTheRecordingWhileTheSessionIsStillLive(t *testing.T) {
+	t.Parallel()
+
+	store := limbo.NewMemoryStore()
+	rig := newCaptureRigWith(t, store)
+	rig.completeClientConfiguration()
+
+	script := []*protocol.Packet{
+		capturePacket(idRegistryData, "minecraft:dimension_type"),
+		capturePacket(idFinishConfiguration, ""),
+		capturePacket(capturePlayLogin, "the world the player is entering"),
+	}
+	rig.fromBackend(script...)
+	for _, want := range script {
+		rig.expectPlayer(want.ID)
+	}
+
+	// The session is still open: nothing has closed either connection, and
+	// recordJoin has not returned.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := store.Get(captureProtocol); ok {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the recording was not filed until the player left; everyone arriving in the meantime is held for nothing")
 }

@@ -107,19 +107,21 @@ func (p *Proxy) decide(sess *control.Session, host string, protocol int32, chose
 		return decision{Plan: planJoin, Server: ids[0], Reason: "the only server, and it is up"}
 	}
 
-	if p.canOfferWorld(protocol) {
+	why := p.worldUnavailable(protocol)
+	if why == "" {
 		return decision{Plan: planWorld, Reason: "letting the player choose"}
 	}
 
-	// No world to offer: either the client is too old for one, or nothing has
-	// been recorded for its version yet. Fall back to the mute hold, which works
-	// on any client from 1.13 but cannot ask the player anything, so the
-	// long-standing precedence picks for them.
+	// No world to offer. Fall back to the mute hold, which works on any client
+	// from 1.13 but cannot ask the player anything, so the long-standing
+	// precedence picks for them. The reason travels with the decision: a player
+	// held when they expected a world is otherwise indistinguishable, from the
+	// outside, from a proxy that has simply broken.
 	target, up := p.chooseTarget(sess, host)
 	if up {
-		return decision{Plan: planJoin, Server: target, Reason: "client too old for the waiting world"}
+		return decision{Plan: planJoin, Server: target, Reason: "no waiting world: " + why}
 	}
-	return holdOrRefuse(target, protocol, "client too old for the waiting world")
+	return holdOrRefuse(target, protocol, "no waiting world: "+why)
 }
 
 // holdOrRefuse parks a player until their server is up, unless their client is
