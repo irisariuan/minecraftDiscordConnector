@@ -35,10 +35,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 bun.lock*
 
-data/permissions.json
-data/credit.json
-data/settings.json
-data/plugins.json
+# runtime state: permissions/credit/settings/plugins JSON, per-plugin state
+# store (data/pluginState/*.json), and the Docker entrypoint's first-run
+# marker (data/.initialized) — all generated, never checked in.
+data/
 lib/compiled
 test/**/*
 !test/**/*.test.*
