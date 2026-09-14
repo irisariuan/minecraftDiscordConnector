@@ -16,14 +16,22 @@ import { join } from "node:path";
 /** Name of the properties file, relative to the server directory. */
 export const SERVER_PROPERTIES_FILE = "server.properties";
 
-/** Matches an uncommented `server-port=…` line, without eating its `\r`. */
-const SERVER_PORT_LINE = /^[ \t]*server-port[ \t]*=[^\r\n]*/m;
+/**
+ * Matches every uncommented `server-port=…` line, without eating its `\r`.
+ *
+ * Global because a file can carry the key more than once (a hand-appended
+ * line, a merge gone wrong). `java.util.Properties` keeps the *last* one, so
+ * rewriting only the first would look like a successful write that changes
+ * nothing.
+ */
+const SERVER_PORT_LINES = /^[ \t]*server-port[ \t]*=[^\r\n]*/gm;
 
-/** Reads the port a properties file currently declares, if any. */
+/** The port a properties file currently declares — the last wins, as Java does. */
 function currentPort(raw: string): string | null {
-	const match = raw.match(SERVER_PORT_LINE);
-	if (!match) return null;
-	return match[0].split("=").slice(1).join("=").trim();
+	const matches = raw.match(SERVER_PORT_LINES);
+	const last = matches?.at(-1);
+	if (!last) return null;
+	return last.slice(last.indexOf("=") + 1).trim();
 }
 
 export interface WriteServerPortOptions {
@@ -79,9 +87,10 @@ export async function writeServerPort(
 		const eol = raw.includes("\r\n") ? "\r\n" : "\n";
 		const previous = currentPort(raw);
 
-		const next = SERVER_PORT_LINE.test(raw)
-			? raw.replace(SERVER_PORT_LINE, line)
-			: `${raw}${raw.length === 0 || raw.endsWith("\n") ? "" : eol}${line}${eol}`;
+		const next =
+			previous === null
+				? `${raw}${raw.length === 0 || raw.endsWith("\n") ? "" : eol}${line}${eol}`
+				: raw.replace(SERVER_PORT_LINES, line);
 
 		if (next === raw)
 			return { ok: true, action: "unchanged", previous, path };
