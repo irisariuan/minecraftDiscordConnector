@@ -162,6 +162,11 @@ export {
 	type PhasedValues,
 } from "../lib/component/phasedInput";
 export {
+	createOtpButtonRow,
+	createOtpInputModal,
+	OTPAction,
+} from "../lib/component/otp";
+export {
 	createRequestComponent,
 	RequestComponentId,
 } from "../lib/component/request";

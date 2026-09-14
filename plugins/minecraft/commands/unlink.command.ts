@@ -28,24 +28,30 @@ export default {
 			pluginId: PLUGIN_ID,
 			discordId: interaction.user.id,
 		});
-		const match = links.find((link) => {
+		// All of them, not just the first: a player linked from the waiting room
+		// is recorded under both the identity Mojang verified and the one an
+		// offline-mode backend derives from their name. Removing one of those
+		// would leave them still linked from the other side.
+		const matches = links.filter((link) => {
 			const meta = link.metadata as Record<string, unknown> | null;
 			return meta && meta.playername === playerName;
 		});
-		if (!match) {
+		if (matches.length === 0) {
 			return await interaction.editReply(
 				"No linked account found with that player name for your Discord account!\n\nIf you have changed your player name recently, please relogin to the server to update it first!",
 			);
 		}
 
-		await data.request("identity:unlink", {
-			pluginId: PLUGIN_ID,
-			externalId: match.externalId,
-		});
+		for (const match of matches) {
+			await data.request("identity:unlink", {
+				pluginId: PLUGIN_ID,
+				externalId: match.externalId,
+			});
 
-		// Best-effort: poke the running server about the player. No-op when the
-		// connector plugin is not attached.
-		await markVerifiedOnServer(server.id, match.externalId);
+			// Best-effort: poke the running server about the player. No-op when
+			// the connector plugin is not attached.
+			await markVerifiedOnServer(server.id, match.externalId);
+		}
 
 		await interaction.editReply("Successfully unlinked your account!");
 	},

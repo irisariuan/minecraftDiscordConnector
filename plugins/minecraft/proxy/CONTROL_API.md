@@ -91,6 +91,7 @@ Mojang. Tells the proxy who this player is and what they may do.
   "linked": true,
   "discordId": "123456789",
   "voteChannelConfigured": true,
+  "linkRequest": null,
   "servers": [
     {
       "id": 1,
@@ -106,14 +107,77 @@ Mojang. Tells the proxy who this player is and what they may do.
 ```
 
 - `accessible` applies the core per-server access list. An unlinked player gets
-  `linked: false`, no `discordId`, and every server marked accessible: the proxy
-  does not gate on verification, because a player has to be able to get in
-  before they can link from in game.
+  `linked: false`, no `discordId`, and every server marked accessible: the bot
+  refuses nobody here, because a player has to be able to get as far as the
+  waiting world to link from in game. What the *proxy* does with `linked: false`
+  is send them to that world and let them do nothing else until they have used
+  `POST /link`.
 - `canStart` means the linked user holds the `startServer` permission, so a start
   would happen immediately rather than through a vote. It is always false for an
   unlinked player, who cannot ask for a server to be started at all.
 - `pollPending` means a start vote for that server is already open;
   `pollUrl` links to it when known.
+- `linkRequest` reports a `POST /link` this player started earlier, and is
+  `null` when they have not started one. It is how the outcome of a link gets
+  back to a player still standing in the waiting room, since settling one takes
+  a person reading a direct message:
+
+  ```json
+  { "state": "pending", "message": "", "discord": "notch" }
+  ```
+
+  `state` is `pending`, `linked` or `failed`; `message` explains a `failed` one
+  and is empty otherwise. An attempt is forgotten five minutes after it settles.
+
+## `POST /link`
+
+The player named, in game, the Discord account they want to be linked to.
+
+The bot answers as soon as there is a code to put on their screen; whether
+anybody types it is settled later and reported through the `linkRequest` field
+of `POST /session`.
+
+**Request**
+
+```json
+{
+  "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+  "offlineUuid": "b50ad385-829d-3141-a216-7e7d7539ba7f",
+  "name": "Notch",
+  "discord": "notch"
+}
+```
+
+`discord` is what the player typed: a Discord username or a raw user id. It is
+matched exactly — a near miss is a different person — and only against users who
+share a server with the bot, since the bot has no way to message anyone else.
+
+**Response `200`**
+
+```json
+{ "status": "pending", "message": "", "code": "418209", "discord": "notch" }
+```
+
+`status` is one of:
+
+| status | meaning |
+| --- | --- |
+| `pending` | a direct message is on its way; show `code` to the player |
+| `already_linked` | this Minecraft account already has a Discord account |
+| `unknown_user` | no such Discord user shares a server with the bot |
+| `unreachable` | the Discord user could not be messaged |
+| `failed` | anything else; `message` explains |
+
+`code` is set only for `pending`, and is shown **in game** rather than sent
+anywhere. That is the whole proof: the code appears where only the holder of the
+Minecraft account can read it and has to be typed where only the holder of the
+Discord account can type it, so having both is what a link means. Asking again
+while one is still live re-shows the same code rather than sending a second
+message.
+
+A confirmed link is recorded against both identities in the request, because a
+player behind `forwarding: none` is known by the offline one inside their own
+server.
 
 ## `POST /start`
 

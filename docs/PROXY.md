@@ -9,7 +9,8 @@ Its real purpose is what happens when that backend is **down**. Instead of
 refusing the connection with "Can't connect to server", the proxy *keeps* the
 player, in an empty world where they can see what is available and ask for a
 server to be started — immediately if they are allowed to, otherwise by raising
-a start vote in Discord.
+a start vote in Discord. It is also where a player who has never linked a
+Discord account goes, since it is the only place the proxy can tell them how.
 
 **Connecting starts nothing by itself.** A server comes up because somebody
 asked for it, in the waiting room or on Discord, and never because a player
@@ -39,24 +40,68 @@ running, and takes commands:
 
 | typed in game | what it does |
 | --- | --- |
-| `/join <server>` | go there, starting it first if it is down |
+| `/join <server>` | go to a server that is already running |
+| `/start <server>` | ask for a stopped server to be brought up |
+| `/link <discord name>` | connect a Discord account |
 | `/servers` | print the list again |
 | `/help` | what can be typed |
-| `/link` | how to connect a Discord account |
 
 Names can be given as the server's tag, its simplified form, its id, or any
 unambiguous prefix — `surv` finds `Survival` as long as nothing else starts the
 same way. Plain chat works too, so a player who types `join survival` without
 the slash is understood.
 
-Asking for a stopped server applies exactly the rules `/startserver` applies on
-Discord: an immediate start for a linked account holding the `startServer`
-permission, and otherwise a start-approval poll with the usual fees and counts.
-Whatever the bot says about it is what the player is shown, word for word.
+**Joining and starting are separate commands.** `/join` only ever moves a player
+to something already up; it never starts anything. Bringing a server up spends
+somebody's credit, or posts a vote in a channel other people are reading, or
+both, and that should not happen because a player typed the wrong name at the
+command for moving. A `/join` naming a stopped server says so and names the
+`/start` that would bring it up.
+
+`/start` applies exactly the rules `/startserver` applies on Discord: an
+immediate start for a linked account holding the `startServer` permission, and
+otherwise a start-approval poll with the usual fees and counts. With no vote
+channel configured and no permission, the player is told to run `/startserver`
+on Discord instead. Whatever the bot says about it is what the player is shown,
+word for word.
 
 When the server is up the player is **transferred**: their client reconnects to
 the same address by itself, carrying the choice they made, and lands on the
 server. They are never returned to the server list and never see an error.
+
+### Linking from the waiting room
+
+A player with no Discord account attached can type `/link` and nothing else.
+Everywhere else a decision gets made — which servers they may use, whether they
+may start one, what it costs — is decided against a Discord account and paid for
+out of its credit, so until there is one there is nothing to decide with.
+
+```
+/link <your Discord username>
+```
+
+A username or a raw user id, matched exactly, against people who share a Discord
+server with the bot. The bot then messages that account, and shows the player a
+six-digit code **in game**:
+
+- the code appears where only whoever holds this Minecraft account can read it,
+- and has to be typed where only whoever owns that Discord account can type it.
+
+Having both is what makes it a link rather than a claim. It is the same exchange
+the Discord `/link` runs, with the two halves swapped round, and it exists
+because the Discord one needs a server to be running — the connector plugin is
+what puts the code on screen there. A player who arrives to find everything down
+could never reach the state in which linking was possible; from the waiting room
+they can.
+
+Nothing happens to the person named if they ignore the message. The player is
+told how it went — linked, expired, or "that account has direct messages turned
+off" — without leaving the waiting room, usually within a few seconds.
+
+A confirmed link is recorded against both identities the player can be known by,
+the Mojang one and the offline one a `forwarding: none` backend derives from
+their name, so they are recognised on either side of the proxy. `/unlink` on
+Discord removes both.
 
 There is no tab completion, and a typed command shows red in the chat box before
 it is sent. That is deliberate — see "Known limitations" in the design notes.
@@ -92,6 +137,13 @@ The waiting room needs two things, and both have to be true:
 
 Anything else is held. Nothing needs configuring either way, and no player is
 ever worse off than they were before the waiting room existed.
+
+A player with no linked Discord account gets the waiting room wherever one can
+be built, even when a single server is running and there is nothing to choose
+between — it is the only place they can be told how to link. Where one cannot be
+built they take the old path instead, and link the old way: `/link` on Discord,
+from in game, once somebody brings a server up. Refusing them there would only
+leave them unable to link at all.
 
 ## Recorded worlds
 
@@ -153,6 +205,10 @@ restart the bot.
 ## Choosing between servers
 
 In order of precedence:
+
+**0. Whether they have linked a Discord account at all.** Somebody who has not
+goes to the waiting room to attend to it, ahead of everything below, because
+nothing below can be worked out without one.
 
 **1. A choice just made in the waiting room.** Carried in a cookie the client
 holds for two minutes. It is re-checked against the player's own permissions on
@@ -391,25 +447,34 @@ vote channel, and every proxied server with its forwarding mode and online state
 
 ## Linking a new player
 
-The proxy does **not** check whether a player has linked their Discord account.
-Verification stays entirely where it was: `/link` on Discord, talking to the
-running server's connector, exactly as before the proxy existed.
+There are now two ways to link, and which one a player needs depends only on
+whether the proxy can build them a waiting room.
 
-That is deliberate rather than an omission. `/link` needs a server to be running,
-because the connector is what delivers the one-time code. If the proxy turned
-unlinked players away, a new player could never reach the state in which linking
-is possible. So an unlinked player is routed and held like anyone else, joins
-when a server is up, and links from in game.
+- **In the waiting room**, with `/link <discord name>`: the code is shown in
+  game and typed into a Discord direct message. Nothing has to be running. See
+  "Linking from the waiting room" above.
+- **On Discord**, with `/link <playername>`: the code is delivered in game by the
+  connector plugin and typed into Discord. This is the original flow and is
+  unchanged; it needs a server to be running, because the connector is what puts
+  the code on screen.
+
+A player who can be shown a waiting room is sent to one until they have linked,
+and can do nothing else while they are there. That is not a gate added in front
+of the game so much as the only thing that can usefully happen: every other
+decision the proxy makes is made against a Discord account.
+
+A player who **cannot** be shown one is not turned away. There would be nothing
+to tell them and no way to tell it, so they are routed and held exactly as
+before, join when a server comes up, and link on Discord from in game. Refusing
+them would leave a new player on an old client unable to link at all.
 
 Two consequences worth knowing:
 
 - **An unlinked player cannot start a server.** Starting is decided by a Discord
   account's permission and paid for with its credit, and there is no account to
-  check or charge. They are still kept rather than refused, so if somebody else
-  starts the server, or a vote passes, they are let in with everyone else. In the
-  waiting room they are told this, and told to run `/link` on Discord; in a
-  silent hold they cannot be told anything.
+  check or charge. Held silently, they are still kept rather than refused, so if
+  somebody else starts the server, or a vote passes, they are let in with
+  everyone else.
 - **Whatever your connector does with unverified players in game, it still
   does.** The bot's own join callback reports a player as unverified exactly as
   it did before, so any restriction or kick your server applies is unchanged.
-  The proxy has simply stopped adding a second gate in front of it.

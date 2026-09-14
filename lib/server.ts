@@ -15,6 +15,7 @@ import {
 	type Approval,
 } from "./approval";
 import { CacheItem } from "./cache";
+import { confirmOtpByDm, findDiscordUser } from "./component/otp";
 import { changeCredit, sendCreditNotification, spendCredit } from "./credit";
 import { getAllServers, getUserAccessibleServerIds } from "./db";
 import { appEvents } from "./events/appEvents";
@@ -984,6 +985,14 @@ function registerServerRuntimeHandlers(manager: ServerManager, client: Client) {
 			}
 			return true;
 		},
+	);
+
+	appEvents.handle("discord:findUser", ({ query }) =>
+		findDiscordUser(client, query),
+	);
+
+	appEvents.handle("discord:confirmOtp", (params) =>
+		confirmOtpByDm(client, params),
 	);
 }
 

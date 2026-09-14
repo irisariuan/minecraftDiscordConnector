@@ -78,18 +78,29 @@ func (e menuEntry) nameFor() string {
 }
 
 // menuLines renders the list a player sees on arrival and on /servers.
-func menuLines(entries []menuEntry) []string {
+//
+// The footer differs by whether the player has linked a Discord account,
+// because the two of them can do different things: an unlinked player has
+// exactly one command available and should be told which, rather than being
+// shown two they will only be refused.
+func menuLines(entries []menuEntry, linked bool) []string {
 	if len(entries) == 0 {
 		return []string{"§cThere are no servers you can use here."}
 	}
-	lines := make([]string, 0, len(entries)+2)
+	lines := make([]string, 0, len(entries)+3)
 	lines = append(lines, "§8§m                              ")
 	for _, e := range entries {
 		lines = append(lines, "  "+e.line())
 	}
-	lines = append(lines,
-		"§8§m                              ",
-		"§7Type §f/join <server>§7 to go there.")
+	lines = append(lines, "§8§m                              ")
+	if linked {
+		lines = append(lines,
+			"§7§f/join <server>§7 goes to one that is running.",
+			"§7§f/start <server>§7 brings a stopped one up.")
+	} else {
+		lines = append(lines,
+			"§7Link your Discord account first: §f/link <your Discord name>§7.")
+	}
 	return lines
 }
 
@@ -103,9 +114,9 @@ func (e menuEntry) line() string {
 	case e.PollPending:
 		return fmt.Sprintf("§e● §f%s §7— a vote is already open on Discord", e.Tag)
 	case e.CanStart:
-		return fmt.Sprintf("§7● §f%s §7— stopped, §fyou can start it§7 (§f/join %s§7)", e.Tag, name)
+		return fmt.Sprintf("§7● §f%s §7— stopped, §fyou can start it§7 (§f/start %s§7)", e.Tag, name)
 	default:
-		return fmt.Sprintf("§7● §f%s §7— stopped, joining will ask for a vote", e.Tag)
+		return fmt.Sprintf("§7● §f%s §7— stopped, §f/start %s§7 will ask for a vote", e.Tag, name)
 	}
 }
 
@@ -118,11 +129,16 @@ const (
 	intentUnknown intent = iota
 	// intentList reprints the menu.
 	intentList
-	// intentJoin picks a server, starting it first if it is down.
+	// intentJoin goes to a server that is already running. It never starts
+	// one: bringing a server up costs somebody credit, or a vote, or both, and
+	// that is not something to do as a side effect of a player picking a name
+	// off a list.
 	intentJoin
+	// intentStart asks for a stopped server to be brought up.
+	intentStart
 	// intentHelp explains what can be typed.
 	intentHelp
-	// intentLink explains how to connect a Discord account.
+	// intentLink connects the player's Discord account, naming it.
 	intentLink
 )
 
@@ -155,12 +171,17 @@ func parseCommand(line string) command {
 			return command{Intent: intentList, Verb: verb}
 		}
 		return command{Intent: intentJoin, Arg: arg, Verb: verb}
+	case "start":
+		if arg == "" {
+			return command{Intent: intentList, Verb: verb}
+		}
+		return command{Intent: intentStart, Arg: arg, Verb: verb}
 	case "servers", "list":
 		return command{Intent: intentList, Verb: verb}
 	case "help", "?":
 		return command{Intent: intentHelp, Verb: verb}
 	case "link":
-		return command{Intent: intentLink, Verb: verb}
+		return command{Intent: intentLink, Arg: arg, Verb: verb}
 	default:
 		return command{Intent: intentUnknown, Verb: verb}
 	}

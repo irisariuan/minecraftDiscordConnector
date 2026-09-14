@@ -107,6 +107,14 @@ func TestParseCommand(t *testing.T) {
 		{"list", intentList, ""},
 		{"help", intentHelp, ""},
 		{"", intentHelp, ""},
+		// Starting is its own verb. Nothing that costs credit or raises a vote
+		// should be reachable by typing a name at the verb for moving.
+		{"start survival", intentStart, "survival"},
+		{"/start Survival", intentStart, "Survival"},
+		{"START 3", intentStart, "3"},
+		{"start", intentList, ""},
+		{"link Notch", intentLink, "Notch"},
+		{"/link 123456789", intentLink, "123456789"},
 		{"link", intentLink, ""},
 		{"tp @a", intentUnknown, ""},
 	}
@@ -121,6 +129,48 @@ func TestParseCommand(t *testing.T) {
 				t.Errorf("parseCommand(%q).Arg = %q, want %q", tc.line, got.Arg, tc.wantArg)
 			}
 		})
+	}
+}
+
+// The footer of the list is the only instruction most players will read, so it
+// has to name commands they can actually use. Offering /join and /start to
+// somebody who will be refused both is worse than offering nothing.
+func TestMenuFooterOffersOnlyWhatThePlayerCanUse(t *testing.T) {
+	t.Parallel()
+
+	entries := []menuEntry{{ID: 1, Tag: "Survival", Slug: "survival", Online: true}}
+
+	linked := strings.Join(menuLines(entries, true), "\n")
+	for _, want := range []string{"/join <server>", "/start <server>"} {
+		if !strings.Contains(linked, want) {
+			t.Errorf("a linked player was not offered %q: %s", want, linked)
+		}
+	}
+
+	unlinked := strings.Join(menuLines(entries, false), "\n")
+	if !strings.Contains(unlinked, "/link") {
+		t.Errorf("an unlinked player was not told to link: %s", unlinked)
+	}
+	for _, unwanted := range []string{"/join <server>", "/start <server>"} {
+		if strings.Contains(unlinked, unwanted) {
+			t.Errorf("an unlinked player was offered %q, which they cannot use: %s", unwanted, unlinked)
+		}
+	}
+}
+
+// A stopped server is only ever offered as something to /start, never as
+// something to /join: the two are kept apart everywhere a player can read them,
+// not just where the command is parsed.
+func TestMenuNeverOffersJoinForAStoppedServer(t *testing.T) {
+	t.Parallel()
+
+	for _, e := range []menuEntry{
+		{Tag: "Survival", Slug: "survival", CanStart: true},
+		{Tag: "Survival", Slug: "survival"},
+	} {
+		if got := e.line(); strings.Contains(got, "/join") {
+			t.Errorf("line for a stopped server offers /join: %q", got)
+		}
 	}
 }
 
@@ -191,6 +241,51 @@ func TestResolve(t *testing.T) {
 			t.Fatal("resolve accepted an empty name")
 		}
 	})
+}
+
+// A pending link is the one case where the proxy has something of its own to
+// say: the code exists only to be read off the screen, so it has to be there,
+// and it has to be legible among everything else.
+func TestLinkReplyShowsTheCodeAndWhoItWentTo(t *testing.T) {
+	t.Parallel()
+
+	got := strings.Join(linkReply(&control.LinkResult{
+		Status:  control.LinkPending,
+		Code:    "418209",
+		Discord: "notch",
+	}), "\n")
+
+	for _, want := range []string{"418209", "notch"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("reply = %q, want it to carry %q", got, want)
+		}
+	}
+}
+
+// Everything that is not a pending code is the bot explaining a refusal, and
+// the bot's wording is the one that knows what actually went wrong.
+func TestLinkReplyPrefersTheBotsOwnWording(t *testing.T) {
+	t.Parallel()
+
+	got := strings.Join(linkReply(&control.LinkResult{
+		Status:  control.LinkUnknownUser,
+		Message: "No Discord user called \"notch\" shares a server with the bot.",
+	}), "\n")
+
+	if !strings.Contains(got, "shares a server with the bot") {
+		t.Errorf("reply = %q, want the bot's own explanation", got)
+	}
+}
+
+// A failure with nothing said about it still has to say something: silence in
+// the waiting room reads as a broken server.
+func TestLinkReplyAlwaysSaysSomething(t *testing.T) {
+	t.Parallel()
+
+	got := linkReply(&control.LinkResult{Status: control.LinkFailed})
+	if len(got) == 0 || strings.TrimSpace(got[0]) == "" {
+		t.Errorf("reply = %q, want something for the player to read", got)
+	}
 }
 
 // The bot owns the wording for anything involving permission, price or votes.

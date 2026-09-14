@@ -94,6 +94,9 @@ type worldSession struct {
 	// waitingFor is the server the player asked for, or zero if they have not
 	// asked yet. Once set, the session's job is to watch for it coming up.
 	waitingFor int
+	// linkState is the last state reported for a /link this player started, so
+	// that a change in it can be announced once rather than every refresh.
+	linkState string
 }
 
 func (w *worldSession) run(ctx context.Context) error {
@@ -135,40 +138,92 @@ func (w *worldSession) greet() {
 		"§7Nothing here but the choices below.",
 		"",
 	}
-	lines = append(lines, menuLines(w.menu)...)
+	lines = append(lines, menuLines(w.menu, w.linked)...)
 	if !w.linked {
-		lines = append(lines,
-			"",
-			"§7Your Discord account is not linked, so you cannot ask for a",
-			"§7server to be started. You can still join one that is running.")
+		lines = append(lines, "")
+		lines = append(lines, linkPromptLines()...)
 	}
 	w.say(lines...)
 }
 
 // handle acts on one typed command, reporting whether the stay is over.
+//
+// An unlinked player gets one command and no others. Going anywhere and
+// starting anything are both decided against a Discord account and paid for out
+// of its credit, so for somebody without one there is nothing to route and
+// nothing to charge — only the linking itself is available to them.
 func (w *worldSession) handle(ctx context.Context, line string) (bool, error) {
 	cmd := parseCommand(line)
+	if !w.linked && (cmd.Intent == intentJoin || cmd.Intent == intentStart) {
+		w.say("§eYour Discord account is not linked yet, so that is not available.")
+		w.say(linkPromptLines()...)
+		return false, nil
+	}
 	switch cmd.Intent {
 	case intentList:
-		w.say(menuLines(w.menu)...)
+		w.say(menuLines(w.menu, w.linked)...)
 	case intentHelp:
-		w.say(
-			"§7§lWhat you can type§r",
-			"  §f/join <server>§7 — go to a server, starting it if it is down",
-			"  §f/servers§7 — show the list again",
-			"  §f/link§7 — how to connect your Discord account")
+		w.sayHelp()
 	case intentLink:
-		w.sayLinkHelp()
+		return false, w.link(ctx, cmd.Arg)
 	case intentJoin:
-		return w.join(ctx, cmd.Arg)
+		return w.join(cmd.Arg)
+	case intentStart:
+		return w.start(ctx, cmd.Arg)
 	default:
 		w.say(fmt.Sprintf("§cThere is no §f/%s§c here. Type §f/help§c to see what there is.", cmd.Verb))
 	}
 	return false, nil
 }
 
-// join is the whole point of the room.
-func (w *worldSession) join(ctx context.Context, arg string) (bool, error) {
+// sayHelp lists what this particular player can type, which is not the same
+// list for everybody: offering an unlinked player commands that will refuse
+// them is worse than not offering them at all.
+func (w *worldSession) sayHelp() {
+	if !w.linked {
+		w.say(
+			"§7§lWhat you can type§r",
+			"  §f/link <your Discord name>§7 — connect your Discord account",
+			"  §f/servers§7 — show the list again",
+			"§7Everything else needs a linked account.")
+		return
+	}
+	w.say(
+		"§7§lWhat you can type§r",
+		"  §f/join <server>§7 — go to a server that is running",
+		"  §f/start <server>§7 — ask for a stopped server to be brought up",
+		"  §f/servers§7 — show the list again",
+		"  §f/link <your Discord name>§7 — connect your Discord account")
+}
+
+// join goes to a server that is already up, and only to one that is.
+//
+// A stopped server is not started from here. /start is where that happens, and
+// keeping the two apart means nobody spends credit, or raises a vote in a
+// Discord channel other people are reading, by typing the wrong name into what
+// they thought was a way of moving.
+func (w *worldSession) join(arg string) (bool, error) {
+	entry, err := resolve(w.menu, arg)
+	if err != nil {
+		w.say("§c" + capitalise(err.Error()) + ".")
+		return false, nil
+	}
+	if !entry.Online {
+		w.say(
+			"§e"+entry.Tag+" is not running.",
+			"§7Type §f/start "+entry.nameFor()+"§7 to ask for it to be brought up.")
+		return false, nil
+	}
+	return true, w.transfer(entry)
+}
+
+// start asks the bot to bring a server up, and is the whole point of the room.
+//
+// The proxy decides nothing about it. Whether this player may start a server
+// outright, whether a vote has to be raised instead, and what it costs are all
+// the bot's rules, applied exactly as /startserver applies them on Discord; the
+// answer that comes back is shown to the player as it was written.
+func (w *worldSession) start(ctx context.Context, arg string) (bool, error) {
 	entry, err := resolve(w.menu, arg)
 	if err != nil {
 		w.say("§c" + capitalise(err.Error()) + ".")
@@ -176,15 +231,8 @@ func (w *worldSession) join(ctx context.Context, arg string) (bool, error) {
 	}
 
 	if entry.Online {
+		w.say("§a" + entry.Tag + " is already running.")
 		return true, w.transfer(entry)
-	}
-
-	if !w.linked {
-		w.say(
-			"§e"+entry.Tag+" is not running, and asking for it to be started needs",
-			"§ea linked Discord account.")
-		w.sayLinkHelp()
-		return false, nil
 	}
 
 	w.say("§7Asking for §f" + entry.Tag + "§7 to be started…")
@@ -209,6 +257,38 @@ func (w *worldSession) join(ctx context.Context, arg string) (bool, error) {
 	return false, nil
 }
 
+// link connects this Minecraft account to a Discord one.
+//
+// The proof runs the way it always has: a one-time code appears in game, where
+// only the person actually holding this Minecraft account can read it, and has
+// to be typed on Discord, where only the owner of that account can type it.
+// Neither half is enough alone, which is what makes the pair of them a link.
+//
+// Settling it takes a person reading a direct message, so this call only gets
+// the code in front of them. How it ends arrives on a later refresh.
+func (w *worldSession) link(ctx context.Context, arg string) error {
+	if strings.TrimSpace(arg) == "" {
+		w.say(linkPromptLines()...)
+		return nil
+	}
+	if w.linked {
+		w.say("§7Your Discord account is already linked. Nothing to do.")
+		return nil
+	}
+
+	res, err := w.proxy.opts.Control.Link(ctx, w.player, arg)
+	if err != nil {
+		w.proxy.log.Warn("link request failed", "player", w.name, "error", err)
+		w.say("§cThe bot did not answer. Try again in a moment.")
+		return nil
+	}
+	if res.Status == control.LinkPending {
+		w.linkState = control.LinkStatePending
+	}
+	w.say(linkReply(res)...)
+	return nil
+}
+
 // refresh rebuilds the menu from the bot and, if the server the player is
 // waiting for has come up, moves them to it.
 func (w *worldSession) refresh(ctx context.Context) (bool, error) {
@@ -221,8 +301,10 @@ func (w *worldSession) refresh(ctx context.Context) (bool, error) {
 	}
 
 	previous := w.menu
+	wasLinked := w.linked
 	w.menu = buildMenu(sess)
 	w.linked = sess.Linked
+	w.reportLink(sess, wasLinked)
 
 	if w.waitingFor != 0 {
 		for _, e := range w.menu {
@@ -234,7 +316,12 @@ func (w *worldSession) refresh(ctx context.Context) (bool, error) {
 	}
 
 	// Nobody is waiting on a particular server, but one coming up is news: it
-	// turns "there is nothing to join" into a choice they can act on.
+	// turns "there is nothing to join" into a choice they can act on. Only for
+	// somebody who can act on it — telling an unlinked player to type a command
+	// that will refuse them is worse than not telling them at all.
+	if !w.linked {
+		return false, nil
+	}
 	for _, e := range w.menu {
 		if !e.Online {
 			continue
@@ -306,11 +393,73 @@ func (w *worldSession) returnAddress() (host string, port int, ok bool) {
 	return "", 0, false
 }
 
-func (w *worldSession) sayLinkHelp() {
-	w.say(
+// reportLink tells a player how the /link they started turned out.
+//
+// It is reported from the refresh rather than waited on, because settling it
+// needs somebody to read a direct message and type into it — which may take
+// minutes, or never happen. Each state is announced once: a line repeated every
+// five seconds would bury everything else they are told.
+func (w *worldSession) reportLink(sess *control.Session, wasLinked bool) {
+	if w.linked && !wasLinked {
+		w.linkState = control.LinkStateLinked
+		w.say(
+			"§aYour Discord account is linked.",
+			"§7You can use §f/join§7 and §f/start§7 now.")
+		w.say(menuLines(w.menu, true)...)
+		return
+	}
+	if sess.Link == nil || sess.Link.State == w.linkState {
+		return
+	}
+	w.linkState = sess.Link.State
+	if sess.Link.State == control.LinkStateFailed {
+		msg := strings.TrimSpace(sess.Link.Message)
+		if msg == "" {
+			msg = "That link attempt did not go through."
+		}
+		w.say("§c"+msg, "§7Type §f/link <your Discord name>§7 to try again.")
+	}
+}
+
+// linkPromptLines is the standing instruction for somebody who has not linked.
+// It is shown on arrival, whenever a command is refused for want of a link, and
+// when /link is typed with nothing after it.
+func linkPromptLines() []string {
+	return []string{
 		"§7§lLinking your account§r",
-		"§7Run §f/link§7 in Discord and follow what it tells you.",
-		"§7You only have to do it once.")
+		"§7Type §f/link <your Discord name>§7 — your Discord username or your",
+		"§7user id. The bot will message you there with what to do next.",
+		"§7You only have to do it once.",
+	}
+}
+
+// linkReply turns a control-API link result into chat.
+//
+// As with a start, the bot's own wording is preferred wherever it has some: it
+// knows which account it found and why it would not do, and saying it twice in
+// two places would mean two places to keep in step.
+func linkReply(res *control.LinkResult) []string {
+	msg := strings.TrimSpace(res.Message)
+	if res.Status != control.LinkPending {
+		if msg == "" {
+			msg = "That did not work. Check the name and try again."
+		}
+		return []string{"§c" + msg}
+	}
+
+	lines := []string{"§8§m                              "}
+	if res.Discord != "" {
+		lines = append(lines, "§7Sent a message to §f"+res.Discord+"§7 on Discord.")
+	} else {
+		lines = append(lines, "§7Sent you a message on Discord.")
+	}
+	lines = append(lines,
+		"§7Open it and type this code:",
+		"§b§l  "+res.Code,
+		"§8§m                              ",
+		"§7Nobody but you can see this code. Stay here — you will be told",
+		"§7when it goes through.")
+	return lines
 }
 
 // say sends lines to the player, giving up quietly if they have gone. A player

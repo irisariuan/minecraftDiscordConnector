@@ -25,7 +25,7 @@ Documentation:
 ## Features
 
 - **Server Control**: Start, stop, suspend, and resume the Minecraft server via Discord commands.
-- **Minecraft Proxy**: One public port in front of every managed Minecraft server. A player who connects while their server is down is kept instead of refused, in an empty waiting room where they can see what is available and type `/join` to start one — under the same rules `/startserver` uses, a direct start if they are permitted and otherwise a start vote in Discord. Connecting by itself starts nothing. See **[docs/PROXY.md](docs/PROXY.md)**.
+- **Minecraft Proxy**: One public port in front of every managed Minecraft server. A player who connects while their server is down is kept instead of refused, in an empty waiting room where they can see what is available and type `/start <server>` to bring one up — under the same rules `/startserver` uses, a direct start if they are permitted and otherwise a start vote in Discord — or `/join <server>` to go to one already running. A player who has not linked a Discord account lands there too, and links with `/link <discord name>` without a server having to be running at all. Connecting by itself starts nothing. See **[docs/PROXY.md](docs/PROXY.md)**.
 - **Plugin Management**: Search, append, and delete plugins using Modrinth API; upload custom plugins via Discord or web UI.
 - **Approval System**: Sensitive actions (like server start/stop) can require multi-user approval.
 - **Permission System**: Fine-grained user and role permissions for all commands.

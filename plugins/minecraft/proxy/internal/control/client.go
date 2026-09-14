@@ -58,6 +58,39 @@ const (
 	StatusFailed = "failed"
 )
 
+// Status values returned by POST /link, where a player in the waiting world
+// names the Discord account they want to be known by.
+const (
+	// LinkPending means a code is now waiting to be typed on Discord. It is the
+	// only status that leaves anything still to happen; every other one is the
+	// end of the attempt.
+	LinkPending = "pending"
+	// LinkAlreadyLinked means this player already has a Discord account.
+	LinkAlreadyLinked = "already_linked"
+	// LinkUnknownUser means no Discord user goes by that name.
+	LinkUnknownUser = "unknown_user"
+	// LinkTaken means that Discord account is already linked to somebody else.
+	LinkTaken = "taken"
+	// LinkUnreachable means the bot could not message that Discord user, which
+	// in practice means they have direct messages turned off.
+	LinkUnreachable = "unreachable"
+	// LinkFailed is anything else; the accompanying Message explains.
+	LinkFailed = "failed"
+)
+
+// States a link attempt can be in once it has been accepted, reported back on
+// each POST /session so a player standing in the waiting world can be told how
+// it ended without the proxy having to hold the request open.
+const (
+	// LinkStatePending means the code has not been typed yet.
+	LinkStatePending = "pending"
+	// LinkStateLinked means it worked; the session's Linked is now true.
+	LinkStateLinked = "linked"
+	// LinkStateFailed means it will not complete — a wrong account, a refusal,
+	// or the code expiring.
+	LinkStateFailed = "failed"
+)
+
 // Forwarding modes a backend can be configured for.
 const (
 	ForwardingNone       = "none"
@@ -182,12 +215,24 @@ type SessionServerInfo struct {
 	PollURL     string `json:"pollUrl"`
 }
 
+// LinkAttempt is how a /link the player asked for earlier is going. It is nil
+// when they have not asked for one.
+type LinkAttempt struct {
+	State   string `json:"state"`
+	Message string `json:"message"`
+	Discord string `json:"discord"`
+}
+
 // Session is who a player is and what they may do.
 type Session struct {
 	Linked                bool                `json:"linked"`
 	DiscordID             string              `json:"discordId"`
 	VoteChannelConfigured bool                `json:"voteChannelConfigured"`
 	Servers               []SessionServerInfo `json:"servers"`
+	// Link reports an in-game link attempt this player started, so the waiting
+	// world can tell them how it ended. The bot settles it on Discord, minutes
+	// later or never, so it is polled rather than waited on.
+	Link *LinkAttempt `json:"linkRequest"`
 }
 
 // Player is the identity the proxy asserts about one connection.
@@ -265,6 +310,45 @@ func (c *Client) Start(ctx context.Context, player Player, serverID int) (*Start
 	}
 	var out StartResult
 	if err := c.do(ctx, http.MethodPost, "/start", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// LinkResult is the outcome of asking to be linked to a Discord account.
+// Message is safe to show verbatim in game.
+type LinkResult struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	// Code is the one-time code the player must type on Discord. It is set only
+	// for LinkPending, and is shown to the player rather than sent anywhere:
+	// proving they are the one sitting in front of this Minecraft account is
+	// the whole point of it.
+	Code string `json:"code"`
+	// Discord is the account the code was sent to, as the bot resolved it, so
+	// the player can see whether it found the right person.
+	Discord string `json:"discord"`
+}
+
+type linkRequest struct {
+	UUID        string `json:"uuid"`
+	OfflineUUID string `json:"offlineUuid"`
+	Name        string `json:"name"`
+	Discord     string `json:"discord"`
+}
+
+// Link calls POST /link. It returns as soon as the bot has messaged the named
+// Discord account; whether the player then types the code is reported by the
+// Link field of a later Session.
+func (c *Client) Link(ctx context.Context, player Player, discord string) (*LinkResult, error) {
+	req := linkRequest{
+		UUID:        player.UUID,
+		OfflineUUID: player.OfflineUUID,
+		Name:        player.Name,
+		Discord:     discord,
+	}
+	var out LinkResult
+	if err := c.do(ctx, http.MethodPost, "/link", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

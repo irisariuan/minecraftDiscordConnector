@@ -715,13 +715,14 @@ func TestHoldUntilBackendComesUp(t *testing.T) {
 	t.Fatal("the hold never resolved into a login")
 }
 
-// TestUnlinkedPlayerIsLetThrough checks that the proxy does not gate on
-// verification at all.
+// TestUnlinkedPlayerIsLetThrough checks that a player with no waiting world is
+// never gated on verification.
 //
-// Linking is the game side's business: a player who has not linked yet joins
-// like anyone else and completes /link on Discord from in game, exactly as they
-// did before the proxy existed. The proxy turning them away here would have
-// made that impossible, since the server has to be running for /link to work.
+// An unlinked player is normally sent to the waiting world to link there, but
+// that needs a world to be built for their client, and this one has none. There
+// is then nothing the proxy could tell them, so refusing them would only leave
+// them unable to link at all. They join like anyone else and link the old way:
+// /link on Discord, from in game, exactly as before the proxy existed.
 func TestUnlinkedPlayerIsLetThrough(t *testing.T) {
 	rig := newE2ERig(t, true, false)
 
@@ -746,9 +747,10 @@ func TestUnlinkedPlayerIsLetThrough(t *testing.T) {
 }
 
 // TestUnlinkedPlayerIsHeldWithoutRequestingAStart checks the one thing that
-// does stay gated. Starting a server needs a Discord account to check
+// stays gated even here. Starting a server needs a Discord account to check
 // permission against and charge, so an unlinked player waits instead of having
-// a request raised in their name. They are still not turned away.
+// a request raised in their name. They are still not turned away. As above,
+// this is the path taken when no world can be built for their client.
 func TestUnlinkedPlayerIsHeldWithoutRequestingAStart(t *testing.T) {
 	rig := newE2ERig(t, false, false)
 
@@ -942,7 +944,12 @@ func e2eWorldStore(t *testing.T) limbo.Store {
 
 // enterWaitingWorld walks the client from an authenticated login to standing in
 // the waiting world, and returns the greeting it was shown.
-func (c *e2eClient) enterWaitingWorld() []string {
+//
+// The greeting is several lines and ends differently depending on who is
+// reading it, so the caller says which line finishes it. Reading exactly the
+// greeting matters: a line left unread would be picked up as the answer to
+// whatever the test does next.
+func (c *e2eClient) enterWaitingWorld(until string) []string {
 	c.t.Helper()
 
 	c.expect(idLoginSuccess)
@@ -957,18 +964,16 @@ func (c *e2eClient) enterWaitingWorld() []string {
 	c.expect(e2ePlayGameEvent)
 	c.expect(e2ePlayPosition)
 
-	// The greeting is several lines, and the last of them names the command to
-	// type, so reading until that appears is reading the whole of it.
 	var lines []string
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		line := c.readChatLine()
 		lines = append(lines, line)
-		if strings.Contains(line, "/join") {
+		if strings.Contains(line, until) {
 			return lines
 		}
 	}
-	c.t.Fatalf("the waiting world never said how to choose; it said %q", lines)
+	c.t.Fatalf("the waiting world never said %q; it said %q", until, lines)
 	return nil
 }
 
@@ -1086,7 +1091,7 @@ func TestWaitingWorldStartsAServerAndHandsThePlayerOver(t *testing.T) {
 	client := e2eDial(t, rig.addr, "mc.example.com")
 	client.encrypt()
 
-	greeting := client.enterWaitingWorld()
+	greeting := client.enterWaitingWorld("/start <server>")
 	if !strings.Contains(strings.Join(greeting, "\n"), "Survival") {
 		t.Errorf("the greeting never named the server: %q", greeting)
 	}
@@ -1097,14 +1102,14 @@ func TestWaitingWorldStartsAServerAndHandsThePlayerOver(t *testing.T) {
 		t.Fatalf("the proxy asked for a start before the player did (%d times)", got)
 	}
 
-	client.mustWrite(protocol.NewWriter(e2eSbChatCommand).String("join survival").Packet())
+	client.mustWrite(protocol.NewWriter(e2eSbChatCommand).String("start survival").Packet())
 
 	deadline := time.Now().Add(10 * time.Second)
 	for rig.bot.startCalls.Load() == 0 && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if rig.bot.startCalls.Load() == 0 {
-		t.Fatal("typing /join never reached the bot as a start request")
+		t.Fatal("typing /start never reached the bot as a start request")
 	}
 
 	rig.bot.setOnline(true)
@@ -1122,6 +1127,38 @@ func TestWaitingWorldStartsAServerAndHandsThePlayerOver(t *testing.T) {
 	server, ok := decodeChoice(cookie, time.Now())
 	if !ok || server != 1 {
 		t.Errorf("stored choice was %d (ok=%v), wanted server 1", server, ok)
+	}
+}
+
+// TestUnlinkedPlayerWaitsInTheWorldAndCannotStartAnything is the unlinked half
+// of the feature, end to end.
+//
+// The server is up and it is the only one, which for anybody else means going
+// straight to it with no world in the way. Somebody with no Discord account
+// goes to the world instead, because that is the only place they can be told
+// how to get one — and while they are there, asking for a server is refused
+// locally rather than raised in the name of an account that does not exist.
+func TestUnlinkedPlayerWaitsInTheWorldAndCannotStartAnything(t *testing.T) {
+	rig := newE2ERigWith(t, true, false, e2eWorldStore(t))
+
+	client := e2eDial(t, rig.addr, "mc.example.com")
+	client.encrypt()
+
+	greeting := client.enterWaitingWorld("only have to do it once")
+	if !strings.Contains(strings.Join(greeting, "\n"), "/link") {
+		t.Errorf("an unlinked player was not told to link: %q", greeting)
+	}
+
+	client.mustWrite(protocol.NewWriter(e2eSbChatCommand).String("start survival").Packet())
+
+	// The refusal is the proxy's own: nothing about it should reach the bot,
+	// which has no account to charge or check.
+	if got := client.readChatLine(); !strings.Contains(got, "not linked") {
+		t.Errorf("reply to /start was %q, wanted it to say the account is not linked", got)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if got := rig.bot.startCalls.Load(); got != 0 {
+		t.Errorf("the bot was asked to start a server %d times for an unlinked player, wanted 0", got)
 	}
 }
 

@@ -24,8 +24,9 @@ import {
 	isProxyEnabled,
 	listProxiedServers,
 } from "./runtime/proxySettings";
+import { linkedAccount } from "./runtime/identity";
+import { beginLink, linkAttemptOf } from "./runtime/linkRequests";
 
-const PLUGIN_ID = "minecraft";
 const LOG_PREFIX = "[mcproxy]";
 /**
  * Mode of the control socket: owner only. The socket is the whole access
@@ -53,6 +54,14 @@ const startSchema = z.object({
 	name: z.string().min(1).max(64),
 	serverId: z.number().int(),
 });
+const linkSchema = z.object({
+	uuid: uuidSchema,
+	offlineUuid: uuidSchema.optional().default(""),
+	name: z.string().min(1).max(64),
+	// A Discord username or a raw user id, as the player typed it. Bounded
+	// because it is echoed back to them in a message.
+	discord: z.string().min(1).max(64),
+});
 
 /**
  * Messages travel back into the game verbatim, so they must stay plain text:
@@ -60,43 +69,6 @@ const startSchema = z.object({
  */
 function plainText(message: string): string {
 	return message.replace(/§./g, "").replace(/\s*[\r\n]+\s*/g, " ").trim();
-}
-
-/** Look up the Discord account linked to a Minecraft UUID, or null. */
-async function identityOf(uuid: string) {
-	if (!uuid) return null;
-	try {
-        return await data
-            .request("identity:getByExternal", {
-                pluginId: PLUGIN_ID,
-                externalId: uuid,
-            });
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Resolve a player the proxy has verified, by either identity they may be
- * recorded under.
- *
- * The proxy authenticates against Mojang and reports that UUID. A server behind
- * `forwarding: none` runs offline and knows the same player by the UUID it
- * derives from their name, so `/link` run in game there records *that* one.
- * Trying both is what lets an online-mode proxy sit in front of a backend with
- * no forwarding configured at all.
- *
- * The offline UUID is only trustworthy because the proxy derives it from the
- * name Mojang confirmed: claiming someone else's offline identity would mean
- * owning their Minecraft account first.
- */
-async function linkedAccount(player: {
-	uuid: string;
-	offlineUuid: string;
-}) {
-	return (
-		(await identityOf(player.uuid)) ?? (await identityOf(player.offlineUuid))
-	);
 }
 
 /**
@@ -178,6 +150,7 @@ function createControlApp(token: string): Express {
 				res.json({
 					linked: false,
 					voteChannelConfigured,
+					linkRequest: linkAttemptOf(parsed.data.uuid),
 					servers: proxied.map((server, index) => ({
 						id: server.id,
 						tag: server.tag,
@@ -226,6 +199,7 @@ function createControlApp(token: string): Express {
 				linked: true,
 				discordId: link.discordId,
 				voteChannelConfigured,
+				linkRequest: linkAttemptOf(parsed.data.uuid),
 				servers,
 			});
 		} catch (err) {
@@ -246,7 +220,7 @@ function createControlApp(token: string): Express {
 				res.json({
 					status: "not_linked",
 					message:
-						"Your Minecraft account is not linked to Discord yet. Run /link on Discord once you are in game.",
+						"Your Minecraft account is not linked to Discord yet. Type /link with your Discord name to link it here.",
 				});
 				return;
 			}
@@ -273,6 +247,29 @@ function createControlApp(token: string): Express {
 			});
 		} catch (err) {
 			console.error(`${LOG_PREFIX} POST /start failed:`, err);
+			res.json({
+				status: "failed",
+				message: "The bot could not handle that request, try again later.",
+			});
+		}
+	});
+
+	app.post("/link", jsonParser, async (req, res) => {
+		const parsed = linkSchema.safeParse(req.body);
+		if (!parsed.success) {
+			res.status(400).json({ error: "invalid_request" });
+			return;
+		}
+		try {
+			const result = await beginLink(parsed.data);
+			res.json({
+				status: result.status,
+				message: plainText(result.message),
+				code: result.code ?? "",
+				discord: result.discord ?? "",
+			});
+		} catch (err) {
+			console.error(`${LOG_PREFIX} POST /link failed:`, err);
 			res.json({
 				status: "failed",
 				message: "The bot could not handle that request, try again later.",

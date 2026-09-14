@@ -294,6 +294,24 @@ export type AppRequestMap = {
 		params: { filePath: string };
 		result: number;
 	};
+	/** Find a Discord user by their username or their raw user id.
+	 *  Exact matches only: a near miss is a different person. */
+	"discord:findUser": {
+		params: { query: string };
+		result: { id: string; username: string } | null;
+	};
+	/** Direct-message a user and wait for them to type `otp` back into the
+	 *  modal it carries. Resolves when they get it right, when the wait runs
+	 *  out, or immediately when they cannot be messaged at all. */
+	"discord:confirmOtp": {
+		params: {
+			discordId: string;
+			otp: string;
+			content: string;
+			timeoutMs?: number;
+		};
+		result: { status: "confirmed" | "unreachable" | "timeout" };
+	};
 	/** Read a whitelisted environment variable. */
 	"env:get": { params: { key: PluginEnvKey }; result: string | undefined };
 	/** Read a value from a plugin's namespaced state store. */

@@ -29,14 +29,16 @@ client ──► first byte 0xFE ──► legacy pre-1.7 ping, answered and clo
              POST /session ──► who is this, what may they use
                     │
      ┌──────────────┼──────────────────────┐
- one server,    a choice to make       no world to
- already up          │                 offer them
+ one server,    not linked yet,        no world to
+ already up,    or a choice to         offer them
+ and linked     make                        │
      │               │                      │
  join backend   waiting world           hold mid-login
  (forward        (empty room, chat,      (POST /start if linked,
-  identity,       /join, then a           keep the client alive,
-  relay login,    transfer back           wait, then join backend)
-  tunnel)         through the front
+  identity,       /link, /start,          keep the client alive,
+  relay login,    /join, then a           wait, then join backend)
+  tunnel)         transfer back
+                  through the front
                   door)
 ```
 
@@ -62,10 +64,14 @@ world, which is what makes a chunkless world legal: a client will not leave its
 loading screen until it is either standing in a chunk or outside the world
 vertically.
 
-Inside, `/join <server>` picks a destination and asks for it to be started if it
-is down, `/servers` reprints the list and `/help` explains. Plain chat is
-accepted as well as commands, because a player who cannot work out why nothing
-is happening will try typing without a slash. Names resolve by tag, by slug, by
+Inside, `/join <server>` moves the player to a destination that is already up,
+`/start <server>` asks for a stopped one to be brought up, `/link <discord name>`
+connects a Discord account, `/servers` reprints the list and `/help` explains.
+Joining and starting are deliberately separate verbs: a start spends credit or
+posts a vote where other people can see it, and neither should follow from
+mistyping a name at the command for moving. Plain chat is accepted as well as
+commands, because a player who cannot work out why nothing is happening will try
+typing without a slash. Names resolve by tag, by slug, by
 id or by an unambiguous prefix: there is no command tree declared, so there is no
 tab completion to lean on. That is a deliberate omission — declaring one means
 sending an argument parser id that has moved between versions, and the packet is
@@ -106,12 +112,30 @@ and is told so plainly instead of being left to time out.
 
 ### Linking
 
-The proxy does not gate on whether a player has linked a Discord account.
-Linking happens in game through `/link`, which needs a server to be running, so
-refusing unlinked players here would make linking unreachable for anyone new.
-They are routed, held and admitted to the waiting world like anyone else. The one
-thing they cannot do is ask for a server to be started, because that is decided
-by a Discord account's permission and paid for with its credit.
+Everything the proxy decides about a player is decided against a Discord
+account: which servers they may use, whether they may start one, what it costs.
+Somebody without one therefore has nothing that can be resolved, so they go to
+the waiting world ahead of every other consideration — ahead of a hostname, and
+ahead of a choice they made a moment ago — and can type nothing there but
+`/link`.
+
+`/link <discord name>` runs the ordinary one-time-code exchange with its two
+halves swapped: the bot messages the named Discord account, and the code is
+shown **in game**, where only whoever holds the Minecraft account can read it.
+It exists because the Discord-side `/link` needs a server to be running — the
+connector plugin is what puts the code on screen there — which would leave a new
+player arriving to find everything down with no way in at all.
+
+Settling it takes a person reading a direct message, so `POST /link` returns as
+soon as there is a code to show and the outcome arrives on a later `POST
+/session`, in its `linkRequest` field. A confirmed link is written against both
+identities the player can be known by, since a `forwarding: none` backend knows
+them by the offline one.
+
+The gate applies only where a world can be built. A client that cannot be shown
+one cannot be told anything either, so it keeps the old precedence and links the
+old way — refusing it would make linking unreachable for exactly the players who
+most need it explained.
 
 ## Recording a world
 
@@ -273,15 +297,20 @@ The proxy has no third-party dependencies; everything is standard library.
   from a source, never by interpolation.
 - **A held player cannot be sent messages.** That is the difference between the
   two ways of waiting, and the whole reason the world exists.
-- **An unlinked player with no server running waits indefinitely.** They cannot
-  raise a start request themselves, because that needs a Discord account's
-  permission and credit. In the waiting world they are at least told so; in a
-  mute hold they sit on the connecting screen until somebody else brings a
-  server up.
+- **An unlinked player held mutely waits indefinitely.** They cannot raise a
+  start request, because that needs a Discord account's permission and credit,
+  and they cannot be shown `/link` either, so they sit on the connecting screen
+  until somebody else brings a server up. In the waiting world neither is true:
+  they can link on the spot and start a server as soon as they have.
+- **Linking in game needs a Discord username the bot can see.** Usernames are
+  unique across Discord but nothing exposes a global lookup by one, so the
+  search runs over the guilds the bot is in. Somebody sharing no guild with the
+  bot is reported as not found — which is the right answer, since the bot would
+  have no way to message them either.
 - **Clients older than 1.13 cannot be held**, only routed to a server that is
   already running.
 - **No tab completion in the waiting world.** The command tree is not declared,
-  so a typed `/join` shows red in the chat box before it is sent. Declaring one
+  so a typed `/join` or `/start` shows red in the chat box before it is sent. Declaring one
   means sending an argument parser id that has moved between versions, and a
   malformed tree disconnects the player — a worse trade than an ugly chat box,
   given the command is sent either way.

@@ -64,6 +64,10 @@ type decision struct {
 // An explicit choice always wins over all of this. A hostname naming a server,
 // or a cookie left over from the waiting world's own transfer, means the player
 // has already decided, and re-asking them would be a loop.
+//
+// One thing wins over even that: having no Discord account linked yet. Nothing
+// about where a player may go can be worked out without one, so they go to the
+// world to attend to it first.
 func (p *Proxy) decide(sess *control.Session, host string, protocol int32, chosen int) decision {
 	if len(sess.Servers) == 0 {
 		return decision{Plan: planRefuse, Reason: "no servers configured", Message: msgNoServers}
@@ -71,6 +75,21 @@ func (p *Proxy) decide(sess *control.Session, host string, protocol int32, chose
 	ids := accessibleIDs(sess)
 	if len(ids) == 0 {
 		return decision{Plan: planRefuse, Reason: "no accessible servers", Message: msgNoAccess}
+	}
+
+	// A player with no Discord account attached is sent to the world before
+	// anything else is considered, including a hostname or a choice they made a
+	// moment ago. Everything past this point is decided against a Discord
+	// account — which server they may use, whether they may start one, what it
+	// costs — so there is nothing to route them by until they have one, and the
+	// world is the only place the proxy can tell them so.
+	//
+	// It only applies where a world can actually be built. A client that cannot
+	// be shown one cannot be told anything either, so it keeps the old
+	// precedence and links the way it always did: from in game, on a backend,
+	// once somebody else brings one up.
+	if !sess.Linked && p.worldUnavailable(protocol) == "" {
+		return decision{Plan: planWorld, Reason: "no linked Discord account yet"}
 	}
 
 	online := make(map[int]bool, len(sess.Servers))

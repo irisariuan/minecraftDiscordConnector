@@ -20,9 +20,13 @@ func TestDecide(t *testing.T) {
 	}
 
 	cases := []struct {
-		name     string
-		servers  []control.SessionServerInfo
-		host     string
+		name    string
+		servers []control.SessionServerInfo
+		host    string
+		// unlinked, rather than linked, so that the common case — a player the
+		// bot recognises — is the zero value and does not have to be written out
+		// on every row.
+		unlinked bool
 		protocol int32
 		chosen   int
 		wantPlan plan
@@ -110,6 +114,36 @@ func TestDecide(t *testing.T) {
 			protocol: modern,
 			wantPlan: planRefuse,
 		},
+		{
+			name:     "unlinked, with one server running: the world, to be told to link",
+			servers:  []control.SessionServerInfo{srv(1, "Survival", true)},
+			unlinked: true,
+			protocol: modern,
+			wantPlan: planWorld,
+		},
+		{
+			name:     "unlinked beats a hostname: there is nothing to route them by yet",
+			servers:  []control.SessionServerInfo{srv(1, "Survival", true), srv(2, "Creative", true)},
+			host:     "creative.example.com",
+			unlinked: true,
+			protocol: modern,
+			wantPlan: planWorld,
+		},
+		{
+			name:     "unlinked beats a cookie, for the same reason",
+			servers:  []control.SessionServerInfo{srv(1, "Survival", true), srv(2, "Creative", true)},
+			unlinked: true,
+			protocol: modern,
+			chosen:   2,
+			wantPlan: planWorld,
+		},
+		{
+			name:     "unlinked on a client with no world keeps the old precedence",
+			servers:  []control.SessionServerInfo{srv(1, "Survival", true)},
+			unlinked: true,
+			protocol: old,
+			wantPlan: planJoin, wantSrv: 1,
+		},
 	}
 
 	p := proxyWithWorldFor(modern)
@@ -117,7 +151,8 @@ func TestDecide(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := p.decide(&control.Session{Servers: tc.servers}, tc.host, tc.protocol, tc.chosen)
+			sess := &control.Session{Linked: !tc.unlinked, Servers: tc.servers}
+			got := p.decide(sess, tc.host, tc.protocol, tc.chosen)
 			if got.Plan != tc.wantPlan {
 				t.Fatalf("plan = %s (%s), want %s", got.Plan, got.Reason, tc.wantPlan)
 			}
@@ -139,7 +174,7 @@ func TestDecide(t *testing.T) {
 func TestDecideIgnoresACookieNamingAServerThePlayerMayNotUse(t *testing.T) {
 	t.Parallel()
 
-	sess := &control.Session{Servers: []control.SessionServerInfo{
+	sess := &control.Session{Linked: true, Servers: []control.SessionServerInfo{
 		{ID: 1, Tag: "Survival", Online: true, Accessible: true},
 		{ID: 9, Tag: "Staff", Online: true},
 	}}
