@@ -155,6 +155,10 @@ JSON. It is optional with defaults, so existing servers keep working untouched:
 - **`forwardingSecret`** — the Velocity modern-forwarding secret. Only read for
   `"velocity"`; leave it `null` otherwise.
 
+Edit the block from Discord with `/mcserver edit` (it also covers the plugin/mod
+directory and the IPC socket override). The proxy re-reads each server record, so
+proxy changes apply to the next connection even while the server is running.
+
 ### ⚠️ Forwarding requires an unreachable backend
 
 `bungeecord` and `velocity` both require the backend to run in **offline mode**

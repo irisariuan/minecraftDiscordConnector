@@ -2,14 +2,17 @@ import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import { PermissionFlags, type CommandFile } from "../../api";
 
 import { createHandler, createSubcommandBuilder } from "./mcserver/create";
+import { editHandler, editSubcommandBuilder } from "./mcserver/edit";
 import { upgradeHandler, upgradeSubcommandBuilder } from "./mcserver/upgrade";
 
 export default {
 	command: new SlashCommandBuilder()
 		.setName("mcserver")
-		.setDescription("Create or upgrade a Minecraft server")
+		.setDescription("Create, edit or upgrade a Minecraft server")
 		// ── create subcommand ──────────────────────────────────────────────
 		.addSubcommand(createSubcommandBuilder)
+		// ── edit subcommand ────────────────────────────────────────────────
+		.addSubcommand(editSubcommandBuilder)
 		// ── upgrade subcommand ─────────────────────────────────────────────
 		.addSubcommand(upgradeSubcommandBuilder),
 
@@ -23,6 +26,8 @@ export default {
 		switch (sub) {
 			case "create":
 				return await createHandler(params);
+			case "edit":
+				return await editHandler(params);
 			case "upgrade":
 				return await upgradeHandler(params);
 		}

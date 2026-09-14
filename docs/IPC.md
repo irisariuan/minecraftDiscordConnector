@@ -26,7 +26,8 @@ long as the bot has that server registered and online.
 
 Unix socket paths are capped at ~104 bytes by the OS, and some filesystems
 (network shares in particular) cannot hold a socket node at all. Either case
-needs the `ipcSocket` override pointed somewhere local and short.
+needs the `ipcSocket` override pointed somewhere local and short — set it with
+`/mcserver edit`; it is picked up the next time the server starts.
 
 The bot opens a listener when it launches a server and closes it (unlinking the
 socket) when the process exits. Servers that are already online when the bot

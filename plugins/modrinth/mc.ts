@@ -24,8 +24,14 @@ export {
 } from "../minecraft/loader/jar";
 export {
 	fetchVersionOptionsForLoader,
+	inferModType,
 	KNOWN_LOADERS,
 } from "../minecraft/loader/serverLoader";
+export { validateMinecraftConfig } from "../minecraft/config";
+export type {
+	MinecraftConfig,
+	MinecraftProxyConfig,
+} from "../minecraft/config";
 
 /** Provider namespace used for every artifact Modrinth tracks. */
 export const MODRINTH_PROVIDER = "modrinth";
