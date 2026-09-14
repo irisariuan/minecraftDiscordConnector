@@ -6,6 +6,13 @@ import {
 	LAUNCHER_PID_ENV_KEY,
 	RESTART_EXIT_CODE,
 } from "./protocol";
+import {
+	runPipeline,
+	type PipelineContext,
+	type PipelineMode,
+	type PipelineReason,
+	type PipelineRun,
+} from "./pipeline";
 
 export { RESTART_EXIT_CODE } from "./protocol";
 
@@ -64,8 +71,26 @@ function parseCount(raw: string): number {
 
 /** Validate a user-supplied branch name before handing it to git. */
 export async function isValidBranchName(name: string): Promise<boolean> {
-	if (!name || name.startsWith("-")) return false;
+	if (!isSafeRefInput(name)) return false;
 	return (await git("check-ref-format", "--branch", name)).ok;
+}
+
+/**
+ * Cheap shape check before a user-supplied string reaches git at all.
+ *
+ * Anything that survives this is still only ever passed as a single argument
+ * after `--`, or resolved to a hex sha first; this rejects the shapes that
+ * would be read as options or ranges rather than as one revision.
+ */
+function isSafeRefInput(input: string): boolean {
+	if (!input || input.length > 200) return false;
+	if (input.startsWith("-")) return false;
+	if (/\s/.test(input)) return false;
+	// eslint-disable-next-line no-control-regex
+	if (/[\u0000-\u001f\u007f]/.test(input)) return false;
+	if (input.includes("..")) return false;
+	if (input.includes(":")) return false;
+	return true;
 }
 
 // ─── Status ───────────────────────────────────────────────────────────────────
@@ -262,6 +287,36 @@ export async function listBranches(): Promise<BranchList> {
 	return { current, local, remote };
 }
 
+/** Tag names, newest first. */
+export async function listTags(limit = 50): Promise<string[]> {
+	const res = await git(
+		"for-each-ref",
+		"--sort=-creatordate",
+		`--count=${limit}`,
+		"--format=%(refname:short)",
+		"refs/tags",
+	);
+	return res.ok ? res.stdout.split("\n").filter((l) => l.length > 0) : [];
+}
+
+/** Recent commits reachable from any branch, for `/launcher switch` suggestions. */
+export async function listRecentCommits(limit = 20): Promise<CommitInfo[]> {
+	const res = await git(
+		"log",
+		"--all",
+		`--max-count=${limit}`,
+		"--format=%H%x1f%h%x1f%s%x1f%cI",
+	);
+	if (!res.ok) return [];
+	return res.stdout
+		.split("\n")
+		.filter((l) => l.length > 0)
+		.map((line) => {
+			const [sha = "", shortSha = "", subject = "", date = ""] = line.split("\x1f");
+			return { sha, shortSha, subject, date };
+		});
+}
+
 // ─── Dependency refresh ───────────────────────────────────────────────────────
 
 /** Whether the dependency manifest changed between two commits. */
@@ -299,40 +354,178 @@ async function refreshDepsIfNeeded(
 
 export type DepsOutcome = Awaited<ReturnType<typeof refreshDepsIfNeeded>>;
 
+// ─── Targets ──────────────────────────────────────────────────────────────────
+
+/**
+ * What `/launcher switch` was pointed at. A branch keeps the checkout on a
+ * branch; anything else — a tag, a sha, `HEAD~2` — is checked out detached,
+ * which is the normal way to run a specific commit.
+ */
+export interface ResolvedTarget {
+	kind: "localBranch" | "remoteBranch" | "commit";
+	/** Exactly what the user typed. */
+	input: string;
+	/** Branch to end up on, or null for a detached checkout. */
+	branch: string | null;
+	/** Remote-tracking ref a new local branch is created from. */
+	remoteRef: string | null;
+	sha: string;
+	shortSha: string;
+	subject: string;
+}
+
+export type TargetResolution =
+	| { status: "ok"; target: ResolvedTarget }
+	| { status: "invalidName" }
+	| { status: "notFound" };
+
+/**
+ * Work out what a user-supplied string refers to, preferring branches so the
+ * common case never lands in detached HEAD by accident:
+ *
+ * 1. a local branch → switch to it
+ * 2. a branch that only exists on a remote → create it as a tracking branch
+ * 3. anything git can resolve to a commit (tag, sha, `HEAD~2`) → detached
+ */
+export async function resolveTarget(input: string): Promise<TargetResolution> {
+	if (!isSafeRefInput(input)) return { status: "invalidName" };
+
+	const branches = await listBranches();
+	const isLocal = branches.local.includes(input);
+	const remoteRef = isLocal ? null : (branches.remote.get(input) ?? null);
+
+	// For a branch, resolve through the ref that will actually be checked out;
+	// for a remote-only branch that is the remote-tracking ref.
+	const revArg = remoteRef ?? input;
+	const rev = await git("rev-parse", "--verify", "--quiet", `${revArg}^{commit}`);
+	if (!rev.ok || !/^[0-9a-f]{40}$/.test(rev.stdout)) {
+		if (isLocal || remoteRef) {
+			// A branch git listed but cannot resolve is a broken ref, not a typo.
+			return { status: "notFound" };
+		}
+		return { status: "notFound" };
+	}
+	const commit = await readCommit(rev.stdout);
+
+	return {
+		status: "ok",
+		target: {
+			kind: isLocal ? "localBranch" : remoteRef ? "remoteBranch" : "commit",
+			input,
+			branch: isLocal || remoteRef ? input : null,
+			remoteRef,
+			sha: rev.stdout,
+			shortSha: commit?.shortSha ?? rev.stdout.slice(0, 7),
+			subject: commit?.subject ?? "",
+		},
+	};
+}
+
+// ─── Pipeline plumbing ────────────────────────────────────────────────────────
+
+function describeRef(status: GitStatus): string {
+	if (status.detached) return status.head?.shortSha ?? "HEAD";
+	return status.branch;
+}
+
+function pipelineContext(
+	reason: PipelineReason,
+	from: { ref: string; sha: string },
+	to: { ref: string; sha: string },
+): PipelineContext {
+	return {
+		reason,
+		fromRef: from.ref,
+		fromSha: from.sha,
+		toRef: to.ref,
+		toSha: to.sha,
+	};
+}
+
+/**
+ * Run the pipeline by hand against the current checkout, for `/launcher
+ * pipeline apply|unapply`. From and to are both HEAD: nothing is moving, the
+ * operator is re-running or undoing the steps for the version already here.
+ */
+export async function runPipelineManually(
+	mode: PipelineMode,
+): Promise<PipelineRun> {
+	const status = await readGitStatus();
+	const here = { ref: describeRef(status), sha: status.head?.sha ?? "HEAD" };
+	return runPipeline(mode, pipelineContext("manual", here, here));
+}
+
 // ─── Switch ───────────────────────────────────────────────────────────────────
 
 export type SwitchResult =
-	| { status: "switched"; from: string; to: string; deps: DepsOutcome }
-	| { status: "alreadyOn"; branch: string }
+	| {
+			status: "switched";
+			from: string;
+			to: string;
+			target: ResolvedTarget;
+			deps: DepsOutcome;
+			unapply: PipelineRun | null;
+			apply: PipelineRun | null;
+	  }
+	| { status: "alreadyOn"; target: string }
 	| { status: "dirty"; files: number }
 	| { status: "invalidName" }
-	| { status: "notFound"; branch: string }
+	| { status: "notFound"; target: string }
+	| { status: "unapplyFailed"; run: PipelineRun }
 	| { status: "error"; message: string };
 
 /**
- * Check out `name`. Local branches are switched to directly; a branch that
- * only exists on a remote is created as a tracking branch. Refuses to run on a
- * dirty working tree so local edits are never carried across or lost.
+ * Check out `input` — a branch, a tag, or a commit — and move the host's side
+ * effects with it.
+ *
+ * The order is what makes the pipeline reversible: the version being left is
+ * unapplied **before** the checkout, while its own steps are still the ones in
+ * the working tree, and the version being moved to is applied after. A failed
+ * unapply aborts the switch entirely rather than stranding the host between
+ * two versions.
+ *
+ * Refuses to run on a dirty working tree so local edits are never carried
+ * across or lost.
  */
-export async function switchBranch(name: string): Promise<SwitchResult> {
-	if (!(await isValidBranchName(name))) return { status: "invalidName" };
+export async function switchVersion(
+	input: string,
+	options: { pipeline?: boolean } = {},
+): Promise<SwitchResult> {
+	const usePipeline = options.pipeline ?? true;
+
+	const resolution = await resolveTarget(input);
+	if (resolution.status === "invalidName") return { status: "invalidName" };
+	if (resolution.status === "notFound") return { status: "notFound", target: input };
+	const { target } = resolution;
 
 	const before = await readGitStatus();
-	if (before.branch === name) return { status: "alreadyOn", branch: name };
+	const fromSha = before.head?.sha ?? "HEAD";
+	const alreadyOn =
+		target.branch !== null
+			? !before.detached && before.branch === target.branch
+			: before.detached && fromSha === target.sha;
+	if (alreadyOn) return { status: "alreadyOn", target: input };
 
-	const branches = await listBranches();
-	const remoteRef = branches.local.includes(name)
-		? null
-		: (branches.remote.get(name) ?? null);
-	if (!branches.local.includes(name) && !remoteRef) {
-		return { status: "notFound", branch: name };
-	}
 	if (before.dirtyFiles > 0) return { status: "dirty", files: before.dirtyFiles };
 
-	const fromSha = before.head?.sha ?? "HEAD";
-	const res = remoteRef
-		? await git("switch", "--track", "--", remoteRef)
-		: await git("switch", "--", name);
+	const ctx = pipelineContext(
+		"switch",
+		{ ref: describeRef(before), sha: fromSha },
+		{ ref: target.branch ?? target.shortSha, sha: target.sha },
+	);
+
+	let unapply: PipelineRun | null = null;
+	if (usePipeline) {
+		unapply = await runPipeline("unapply", ctx);
+		if (!unapply.ok) return { status: "unapplyFailed", run: unapply };
+	}
+
+	const res = target.remoteRef
+		? await git("switch", "--track", "--", target.remoteRef)
+		: target.branch
+			? await git("switch", "--", target.branch)
+			: // A resolved sha, never the raw input.
+				await git("switch", "--detach", target.sha);
 	if (!res.ok) {
 		return {
 			status: "error",
@@ -342,25 +535,70 @@ export async function switchBranch(name: string): Promise<SwitchResult> {
 
 	const after = await readGitStatus();
 	const deps = await refreshDepsIfNeeded(fromSha, after.head?.sha ?? "HEAD");
-	return { status: "switched", from: before.branch, to: name, deps };
+	const apply = usePipeline ? await runPipeline("apply", ctx) : null;
+
+	return {
+		status: "switched",
+		from: describeRef(before),
+		to: target.branch ?? target.shortSha,
+		target,
+		deps,
+		unapply,
+		apply,
+	};
 }
 
 // ─── Pull ─────────────────────────────────────────────────────────────────────
 
 export type PullResult =
 	| { status: "upToDate"; branch: string }
-	| { status: "updated"; branch: string; from: CommitInfo | null; to: CommitInfo | null; commits: number; deps: DepsOutcome }
+	| {
+			status: "updated";
+			branch: string;
+			from: CommitInfo | null;
+			to: CommitInfo | null;
+			commits: number;
+			deps: DepsOutcome;
+			unapply: PipelineRun | null;
+			apply: PipelineRun | null;
+	  }
 	| { status: "noUpstream"; branch: string }
 	| { status: "dirty"; files: number }
+	| { status: "unapplyFailed"; run: PipelineRun }
 	| { status: "error"; message: string };
 
-/** Fast-forward the current branch to its upstream. Never merges or rebases. */
-export async function pullFastForward(): Promise<PullResult> {
+/**
+ * Fast-forward the current branch to its upstream. Never merges or rebases.
+ *
+ * A fast-forward is a version change like any other, so it runs the same
+ * unapply → move → apply pipeline as `/launcher switch`.
+ */
+export async function pullFastForward(
+	options: { pipeline?: boolean } = {},
+): Promise<PullResult> {
+	const usePipeline = options.pipeline ?? true;
+
 	const before = await readGitStatus({ fetch: true });
 	if (before.fetchError) return { status: "error", message: before.fetchError };
 	if (!before.upstream) return { status: "noUpstream", branch: before.branch };
 	if (before.behind === 0) return { status: "upToDate", branch: before.branch };
 	if (before.dirtyFiles > 0) return { status: "dirty", files: before.dirtyFiles };
+
+	const targetRes = await git("rev-parse", "--verify", "--quiet", "@{u}^{commit}");
+	const ctx = pipelineContext(
+		"pull",
+		{ ref: before.branch, sha: before.head?.sha ?? "HEAD" },
+		{
+			ref: before.upstream,
+			sha: targetRes.ok ? targetRes.stdout : (before.remoteHead?.sha ?? "@{u}"),
+		},
+	);
+
+	let unapply: PipelineRun | null = null;
+	if (usePipeline) {
+		unapply = await runPipeline("unapply", ctx);
+		if (!unapply.ok) return { status: "unapplyFailed", run: unapply };
+	}
 
 	const res = await git("merge", "--ff-only", "--quiet", "@{u}");
 	if (!res.ok) {
@@ -374,6 +612,8 @@ export async function pullFastForward(): Promise<PullResult> {
 		before.head?.sha ?? "HEAD",
 		after.head?.sha ?? "HEAD",
 	);
+	const apply = usePipeline ? await runPipeline("apply", ctx) : null;
+
 	return {
 		status: "updated",
 		branch: before.branch,
@@ -381,6 +621,8 @@ export async function pullFastForward(): Promise<PullResult> {
 		to: after.head,
 		commits: before.behind,
 		deps,
+		unapply,
+		apply,
 	};
 }
 
