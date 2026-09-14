@@ -33,11 +33,32 @@ const FORWARDING_MODES = ["none", "bungeecord", "velocity"] as const;
 /** Placeholder shown for secrets so they never appear in a Discord embed. */
 const SECRET_MASK = "••••••••";
 
+/** Everything this command can change: the record's ports plus its config. */
+interface ServerEdit {
+	ports: number[];
+	config: MinecraftConfig;
+}
+
+/**
+ * Parse a comma-separated port list. Returns null when the list is empty or any
+ * entry is not a port number, so a typo never silently drops a port.
+ */
+function parsePortList(raw: string): number[] | null {
+	const parts = raw
+		.split(",")
+		.map((p) => p.trim())
+		.filter((p) => p.length > 0);
+	if (parts.length === 0) return null;
+	const ports = parts.map((p) => parseInt(p, 10));
+	if (ports.some((p) => isNaN(p) || p < 1 || p > 65535)) return null;
+	return ports;
+}
+
 export function editSubcommandBuilder(sub: SlashCommandSubcommandBuilder) {
 	return sub
 		.setName("edit")
 		.setDescription(
-			"Edit a registered Minecraft server's plugin & proxy configuration",
+			"Edit a registered Minecraft server's ports, paths & proxy settings",
 		);
 }
 
@@ -145,23 +166,25 @@ async function pickServer(
 }
 
 /** The wizard steps, pre-filled from the server's current configuration. */
-function buildPhases(current: MinecraftConfig): PhasedPhase[] {
+function buildPhases(current: ServerEdit): PhasedPhase[] {
+	const config = current.config;
+
 	/** Forwarding scheme after this phase's (optional) pick is applied. */
 	const resolveForwarding = (values: PhasedValues) =>
-		values.forwarding || current.proxy.forwarding;
+		values.forwarding || config.proxy.forwarding;
 
 	return [
 		{
-			label: "Paths",
+			label: "Paths & Ports",
 			description:
-				"Where mods/plugins live and which IPC socket the in-JVM connector attaches to.",
+				"Where mods/plugins live, which IPC socket the in-JVM connector attaches to, and the port(s) the server listens on.",
 			fields: [
 				{
 					id: "pluginDir",
 					label: "Plugin/Mods Directory",
 					description: "Absolute path to the plugins/mods folder",
 					required: true,
-					defaultValue: current.pluginDir,
+					defaultValue: config.pluginDir,
 				},
 				{
 					id: "ipcSocket",
@@ -169,14 +192,27 @@ function buildPhases(current: MinecraftConfig): PhasedPhase[] {
 					description:
 						"Absolute or server-relative path; blank uses connector.sock",
 					required: false,
-					defaultValue: current.ipcSocket ?? "",
+					defaultValue: config.ipcSocket ?? "",
+				},
+				{
+					id: "port",
+					label: "Port(s)",
+					description:
+						"Comma-separated integers between 1–65535; the proxy dials the first one",
+					placeholder: "25565",
+					required: true,
+					defaultValue: current.ports.join(", "),
 				},
 			],
+			validate: (values) =>
+				parsePortList(values.port ?? "")
+					? null
+					: "Invalid port value(s). Provide comma-separated integers between 1 and 65535.",
 		},
 		{
 			label: "Loader",
 			description: [
-				`Server software. Leave the menu untouched to keep ${inlineCode(current.loaderType || "unset")}.`,
+				`Server software. Leave the menu untouched to keep ${inlineCode(config.loaderType || "unset")}.`,
 				"Changing it only updates the record — use `/mcserver upgrade` to swap the actual server JAR.",
 			].join("\n"),
 			fields: [
@@ -184,12 +220,12 @@ function buildPhases(current: MinecraftConfig): PhasedPhase[] {
 					id: "loaderType",
 					label: "Server Type",
 					type: "select" as const,
-					placeholder: `Current: ${current.loaderType || "unset"} — leave to keep`,
+					placeholder: `Current: ${config.loaderType || "unset"} — leave to keep`,
 					selectOptions: KNOWN_LOADERS.map((l) => ({
 						label: l,
 						value: l,
 						description:
-							l === current.loaderType ? "current" : undefined,
+							l === config.loaderType ? "current" : undefined,
 					})),
 					required: false,
 				},
@@ -204,7 +240,7 @@ function buildPhases(current: MinecraftConfig): PhasedPhase[] {
 					id: "enabled",
 					label: "Proxied",
 					type: "select" as const,
-					placeholder: `Current: ${current.proxy.enabled ? "enabled" : "disabled"} — leave to keep`,
+					placeholder: `Current: ${config.proxy.enabled ? "enabled" : "disabled"} — leave to keep`,
 					selectOptions: [
 						{
 							label: "Enabled",
@@ -223,12 +259,12 @@ function buildPhases(current: MinecraftConfig): PhasedPhase[] {
 					id: "forwarding",
 					label: "Player-info Forwarding",
 					type: "select" as const,
-					placeholder: `Current: ${current.proxy.forwarding} — leave to keep`,
+					placeholder: `Current: ${config.proxy.forwarding} — leave to keep`,
 					selectOptions: FORWARDING_MODES.map((m) => ({
 						label: m,
 						value: m,
 						description:
-							m === current.proxy.forwarding
+							m === config.proxy.forwarding
 								? "current"
 								: undefined,
 					})),
@@ -239,7 +275,7 @@ function buildPhases(current: MinecraftConfig): PhasedPhase[] {
 					label: "Backend Host",
 					description: "Address the proxy dials to reach the server",
 					required: true,
-					defaultValue: current.proxy.host,
+					defaultValue: config.proxy.host,
 				},
 				{
 					id: "forwardingSecret",
@@ -247,7 +283,7 @@ function buildPhases(current: MinecraftConfig): PhasedPhase[] {
 					description:
 						"Only used with velocity forwarding; blank clears it",
 					required: false,
-					defaultValue: current.proxy.forwardingSecret ?? "",
+					defaultValue: config.proxy.forwardingSecret ?? "",
 				},
 			],
 			validate: (values) => {
@@ -271,7 +307,7 @@ function buildPhases(current: MinecraftConfig): PhasedPhase[] {
  * forwarding secret can be masked in the embed without its change going
  * unnoticed.
  */
-function diffLines(before: MinecraftConfig, after: MinecraftConfig): string[] {
+function diffLines(before: ServerEdit, after: ServerEdit): string[] {
 	const show = (value: string | null) =>
 		value ? inlineCode(value) : italic("none");
 	const mask = (value: string | null) =>
@@ -285,27 +321,48 @@ function diffLines(before: MinecraftConfig, after: MinecraftConfig): string[] {
 	];
 
 	const rows: Row[] = [
-		["Loader type", before.loaderType, after.loaderType, show],
-		["Mod type", before.modType, after.modType, show],
-		["Plugin/mod dir", before.pluginDir, after.pluginDir, show],
-		["IPC socket", before.ipcSocket, after.ipcSocket, show],
 		[
-			"Proxied",
-			String(before.proxy.enabled),
-			String(after.proxy.enabled),
+			"Port(s)",
+			before.ports.join(", "),
+			after.ports.join(", "),
 			show,
 		],
-		["Proxy host", before.proxy.host, after.proxy.host, show],
+		[
+			"Loader type",
+			before.config.loaderType,
+			after.config.loaderType,
+			show,
+		],
+		["Mod type", before.config.modType, after.config.modType, show],
+		[
+			"Plugin/mod dir",
+			before.config.pluginDir,
+			after.config.pluginDir,
+			show,
+		],
+		["IPC socket", before.config.ipcSocket, after.config.ipcSocket, show],
+		[
+			"Proxied",
+			String(before.config.proxy.enabled),
+			String(after.config.proxy.enabled),
+			show,
+		],
+		[
+			"Proxy host",
+			before.config.proxy.host,
+			after.config.proxy.host,
+			show,
+		],
 		[
 			"Forwarding",
-			before.proxy.forwarding,
-			after.proxy.forwarding,
+			before.config.proxy.forwarding,
+			after.config.proxy.forwarding,
 			show,
 		],
 		[
 			"Forwarding secret",
-			before.proxy.forwardingSecret,
-			after.proxy.forwardingSecret,
+			before.config.proxy.forwardingSecret,
+			after.config.proxy.forwardingSecret,
 			mask,
 		],
 	];
@@ -348,7 +405,11 @@ export async function editHandler(
 	}
 
 	const serverTag = dbServer.tag ?? `Server #${dbServer.id}`;
-	const { config: current, invalidReason } = readConfig(dbServer.config);
+	const { config: currentConfig, invalidReason } = readConfig(dbServer.config);
+	const current: ServerEdit = {
+		ports: dbServer.port,
+		config: currentConfig,
+	};
 
 	// ── Collect the edits ───────────────────────────────────────────────────
 	const phaseValues = await runPhasedInput({
@@ -360,28 +421,31 @@ export async function editHandler(
 
 	const pluginDir = phaseValues[0]!.pluginDir!.trim();
 	const ipcSocket = phaseValues[0]!.ipcSocket?.trim() || null;
-	const loaderType = phaseValues[1]!.loaderType || current.loaderType;
+	// The phase validator already rejected an unparseable list.
+	const ports = parsePortList(phaseValues[0]!.port ?? "") ?? current.ports;
+	const loaderType = phaseValues[1]!.loaderType || currentConfig.loaderType;
 	const enabledPick = phaseValues[2]!.enabled;
 	const forwarding = (phaseValues[2]!.forwarding ||
-		current.proxy.forwarding) as MinecraftConfig["proxy"]["forwarding"];
-	const host = phaseValues[2]!.host?.trim() || current.proxy.host;
+		currentConfig.proxy
+			.forwarding) as MinecraftConfig["proxy"]["forwarding"];
+	const host = phaseValues[2]!.host?.trim() || currentConfig.proxy.host;
 	const forwardingSecret =
 		phaseValues[2]!.forwardingSecret?.trim() || null;
 
 	const updated: MinecraftConfig = {
-		...current,
+		...currentConfig,
 		loaderType,
 		// The mod type follows the loader, so keep it in step when that changes.
 		modType:
-			loaderType === current.loaderType
-				? current.modType
+			loaderType === currentConfig.loaderType
+				? currentConfig.modType
 				: inferModType(loaderType),
 		pluginDir,
 		ipcSocket,
 		proxy: {
 			enabled: enabledPick
 				? enabledPick === "true"
-				: current.proxy.enabled,
+				: currentConfig.proxy.enabled,
 			host,
 			forwarding,
 			forwardingSecret,
@@ -400,7 +464,10 @@ export async function editHandler(
 		});
 	}
 
-	const changes = diffLines(current, validated.config);
+	const edited: ServerEdit = { ports, config: validated.config };
+	const changes = diffLines(current, edited);
+	const portsChanged =
+		current.ports.join(", ") !== ports.join(", ");
 	if (changes.length === 0 && !invalidReason) {
 		return interaction.editReply({
 			content: "ℹ️ Nothing changed — the configuration is unmodified.",
@@ -415,6 +482,21 @@ export async function editHandler(
 			.getServer(serverId)
 			?.isOnline.getData(true)
 			.catch(() => false)) ?? false;
+
+	// Ports are not unique in the schema, so a clash is only reported — two
+	// servers sharing a port simply cannot be online at the same time.
+	const clashes = portsChanged
+		? (await data.request("db:getAllServers").catch(() => []))
+				.filter((other) => other.id !== serverId)
+				.flatMap((other) =>
+					other.port
+						.filter((port) => ports.includes(port))
+						.map(
+							(port) =>
+								`${inlineCode(String(port))} — ${other.tag ?? `Server #${other.id}`}`,
+						),
+				)
+		: [];
 
 	const reviewEmbed = new EmbedBuilder()
 		.setTitle(`✏️ Edit ${serverTag}`)
@@ -440,9 +522,18 @@ export async function editHandler(
 		});
 	}
 
+	if (clashes.length > 0) {
+		reviewEmbed.addFields({
+			name: "⚠️ Port already claimed by another server",
+			value: `${clashes.join("\n")}\nThey will not be able to run at the same time.`,
+		});
+	}
+
 	if (isOnline) {
 		reviewEmbed.setFooter({
-			text: "Server is online: proxy settings apply immediately, path changes on the next start.",
+			text: portsChanged
+				? "Server is online: the proxy dials the new port at once, but the running process keeps its old one until restarted."
+				: "Server is online: proxy settings apply immediately, path changes on the next start.",
 		});
 	}
 
@@ -497,6 +588,7 @@ export async function editHandler(
 			// Spread into plain objects so the config satisfies the JSON
 			// column's structural type.
 			data: {
+				port: ports,
 				config: {
 					...validated.config,
 					proxy: { ...validated.config.proxy },
@@ -534,12 +626,19 @@ export async function editHandler(
 				),
 				inline: true,
 			},
+			{
+				name: "Port(s)",
+				value: inlineCode(ports.join(", ")),
+				inline: true,
+			},
 		)
 		.setTimestamp();
 
 	if (reload === "partial") {
 		summaryEmbed.setFooter({
-			text: "The server is running: proxy settings are live, but path changes take effect after the next start.",
+			text: portsChanged
+				? "The server is running: proxy settings are live, but the port and path changes only take effect after a restart."
+				: "The server is running: proxy settings are live, but path changes take effect after the next start.",
 		});
 	}
 
