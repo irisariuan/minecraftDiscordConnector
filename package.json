@@ -33,7 +33,8 @@
 	},
 	"scripts": {
 		"build": "cd webUi; bun run build; cd ..",
-		"start": "bun index.ts",
+		"start": "bun plugins/launcher/launcher.ts",
+		"start:bare": "bun index.ts",
 		"test": "bun test",
 		"typecheck": "bunx tsc --noEmit",
 		"migrate": "bunx prisma migrate deploy && bunx prisma generate",
