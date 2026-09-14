@@ -16,8 +16,31 @@ import {
 	getVoteChannelId,
 	isProxyEnabled,
 	listProxiedServers,
+	listRecordedWorlds,
 	setVoteChannelId,
 } from "../runtime/proxySettings";
+
+/**
+ * Protocol version numbers as the versions people actually say.
+ *
+ * Only the versions the proxy can serve a waiting world for are here; anything
+ * else is shown as its bare protocol number, which is still enough to look up.
+ */
+const CLIENT_VERSIONS: Record<number, string> = {
+	766: "1.20.5–1.20.6",
+	767: "1.21–1.21.1",
+	768: "1.21.2–1.21.3",
+	769: "1.21.4",
+	770: "1.21.5",
+	771: "1.21.6",
+	772: "1.21.7–1.21.8",
+	773: "1.21.9–1.21.10",
+	776: "26.2",
+};
+
+function describeVersion(protocol: number): string {
+	return CLIENT_VERSIONS[protocol] ?? `protocol ${protocol}`;
+}
 
 export default {
 	command: new SlashCommandBuilder()
@@ -56,12 +79,13 @@ export default {
 		const subcommand = interaction.options.getSubcommand(true);
 
 		if (subcommand === "status") {
-			const [enabled, listenPort, voteChannelId, servers] =
+			const [enabled, listenPort, voteChannelId, servers, worlds] =
 				await Promise.all([
 					isProxyEnabled(),
 					getListenPort(),
 					getVoteChannelId(),
 					listProxiedServers(),
+					listRecordedWorlds(),
 				]);
 			const embed = new EmbedBuilder()
 				.setTitle("🛰️ Minecraft Proxy")
@@ -79,6 +103,12 @@ export default {
 						value: voteChannelId
 							? channelMention(voteChannelId)
 							: "*not configured* — in-game start votes are disabled",
+					},
+					{
+						name: "Waiting room",
+						value: worlds.length
+							? `Available to ${worlds.map(describeVersion).join(", ")}. Other client versions wait on the connecting screen until someone joins a running server with one.`
+							: "*nothing recorded yet* — players wait on the connecting screen. The first join to a running server records the waiting room for that client version.",
 					},
 					{
 						name: `Proxied servers (${servers.length})`,

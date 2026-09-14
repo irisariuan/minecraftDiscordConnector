@@ -20,6 +20,8 @@ import (
 
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/auth"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/control"
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/limbo"
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/nbt"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/protocol"
 )
 
@@ -225,6 +227,10 @@ type e2eClient struct {
 	t    *testing.T
 	raw  net.Conn
 	conn *protocol.Conn
+	// cookie is what this client answers a cookie request with. Nil means it
+	// has none, which is what a client that has never seen the waiting world
+	// says.
+	cookie []byte
 }
 
 func e2eDial(t *testing.T, addr, host string) *e2eClient {
@@ -309,18 +315,48 @@ func (c *e2eClient) encrypt() {
 }
 
 // expect reads one packet and asserts its id.
+//
+// A cookie request is answered and skipped rather than asserted on, because the
+// proxy sends one on every modern login and a real client answers it without
+// the player ever knowing. Every test would otherwise have to step over it.
 func (c *e2eClient) expect(id int32) *protocol.Packet {
 	c.t.Helper()
-	_ = c.raw.SetReadDeadline(time.Now().Add(10 * time.Second))
-	pkt, err := c.conn.ReadPacket()
+	for {
+		_ = c.raw.SetReadDeadline(time.Now().Add(10 * time.Second))
+		pkt, err := c.conn.ReadPacket()
+		if err != nil {
+			c.t.Fatalf("read packet (wanted 0x%02x): %v", id, err)
+		}
+		_ = c.raw.SetReadDeadline(time.Time{})
+
+		if pkt.ID == idCookieRequest && id != idCookieRequest {
+			c.answerCookie(pkt)
+			continue
+		}
+		if pkt.ID != id {
+			c.t.Fatalf("got packet 0x%02x, wanted 0x%02x", pkt.ID, id)
+		}
+		return pkt
+	}
+}
+
+// answerCookie replies to a cookie request with whatever this client is
+// carrying, which is usually nothing.
+func (c *e2eClient) answerCookie(pkt *protocol.Packet) {
+	c.t.Helper()
+	key, err := protocol.NewReader(pkt.Data).String(32767)
 	if err != nil {
-		c.t.Fatalf("read packet (wanted 0x%02x): %v", id, err)
+		c.t.Fatalf("read cookie request key: %v", err)
 	}
-	if pkt.ID != id {
-		c.t.Fatalf("got packet 0x%02x, wanted 0x%02x", pkt.ID, id)
+	w := protocol.NewWriter(idCookieResponse).String(key)
+	if c.cookie != nil {
+		w.Bool(true).ByteArray(c.cookie)
+	} else {
+		w.Bool(false)
 	}
-	_ = c.raw.SetReadDeadline(time.Time{})
-	return pkt
+	if err := c.conn.WritePacket(w.Packet()); err != nil {
+		c.t.Fatalf("send cookie response: %v", err)
+	}
 }
 
 // answerHoldPing replies to one login plugin request, which is what keeps a
@@ -358,6 +394,13 @@ type e2eRig struct {
 
 func newE2ERig(t *testing.T, online, linked bool) *e2eRig {
 	t.Helper()
+	return newE2ERigWith(t, online, linked, nil)
+}
+
+// newE2ERigWith builds a rig whose proxy has somewhere to keep recorded worlds,
+// which is what decides whether a waiting player is given one or held mutely.
+func newE2ERigWith(t *testing.T, online, linked bool, snapshots limbo.Store) *e2eRig {
+	t.Helper()
 
 	backend := newE2EBackend(t)
 	bot := newE2EBot(t, backend.port(), online, linked)
@@ -390,6 +433,7 @@ func newE2ERig(t *testing.T, online, linked bool) *e2eRig {
 		Poller:     poller,
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Verifier:   auth.NewVerifierAt(nil, session.URL),
+		Snapshots:  snapshots,
 	})
 	if err != nil {
 		t.Fatalf("build proxy: %v", err)
@@ -746,5 +790,246 @@ func TestSessionCarriesTheOfflineIdentity(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the bot never saw a session request")
+	}
+}
+
+// ─── The waiting world ────────────────────────────────────────────────────────
+
+// Play-phase packet ids for the protocol the end-to-end client speaks. They are
+// spelled out here rather than read from the limbo package so that a change to
+// that table has to be made twice, deliberately, rather than silently agreeing
+// with itself.
+const (
+	e2ePlayLoginID       = 0x2B
+	e2ePlayAbilities     = 0x38
+	e2ePlayGameEvent     = 0x22
+	e2ePlayPosition      = 0x40
+	e2ePlaySystemChat    = 0x6C
+	e2ePlayKeepAlive     = 0x26
+	e2ePlayStoreCookie   = 0x6B
+	e2ePlayTransfer      = 0x73
+	e2eSbPlayKeepAlive   = 0x18
+	e2eSbChatCommand     = 0x04
+	e2eLoginAcknowledged = 0x03
+	e2eAckConfiguration  = 0x03
+)
+
+// e2eWorldStore is a recorded world for the version the test client speaks. The
+// packets are not real registry data: the proxy replays them without looking
+// inside, and pretending otherwise would test a property it does not have.
+func e2eWorldStore(t *testing.T) limbo.Store {
+	t.Helper()
+	store := limbo.NewMemoryStore()
+	err := store.Put(&limbo.Snapshot{
+		Protocol:   e2eProtocol,
+		Config:     []protocol.Packet{{ID: 0x07, Data: []byte("registries")}},
+		LoginPlay:  protocol.Packet{ID: e2ePlayLoginID, Data: []byte("the world")},
+		Source:     "Survival",
+		RecordedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("seed the recorded world: %v", err)
+	}
+	return store
+}
+
+// enterWaitingWorld walks the client from an authenticated login to standing in
+// the waiting world, and returns the greeting it was shown.
+func (c *e2eClient) enterWaitingWorld() []string {
+	c.t.Helper()
+
+	c.expect(idLoginSuccess)
+	c.mustWrite(protocol.NewWriter(e2eLoginAcknowledged).Packet())
+
+	c.expect(0x07)                    // the recorded registry data
+	c.expect(cbFinishConfigurationID) // the proxy's own finish
+	c.mustWrite(protocol.NewWriter(e2eAckConfiguration).Packet())
+
+	c.expect(e2ePlayLoginID)
+	c.expect(e2ePlayAbilities)
+	c.expect(e2ePlayGameEvent)
+	c.expect(e2ePlayPosition)
+
+	// The greeting is several lines, and the last of them names the command to
+	// type, so reading until that appears is reading the whole of it.
+	var lines []string
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		line := c.readChatLine()
+		lines = append(lines, line)
+		if strings.Contains(line, "/join") {
+			return lines
+		}
+	}
+	c.t.Fatalf("the waiting world never said how to choose; it said %q", lines)
+	return nil
+}
+
+// cbFinishConfigurationID is the clientbound Finish Configuration the proxy
+// sends to end the phase.
+const cbFinishConfigurationID = 0x03
+
+// readChatLine reads until a line of chat arrives, answering keep-alives on the
+// way as a real client does.
+func (c *e2eClient) readChatLine() string {
+	c.t.Helper()
+	for {
+		_ = c.raw.SetReadDeadline(time.Now().Add(10 * time.Second))
+		pkt, err := c.conn.ReadPacket()
+		if err != nil {
+			c.t.Fatalf("read while waiting for chat: %v", err)
+		}
+		switch pkt.ID {
+		case e2ePlayKeepAlive:
+			id, err := protocol.NewReader(pkt.Data).Long()
+			if err != nil {
+				c.t.Fatalf("keep-alive has no id: %v", err)
+			}
+			c.mustWrite(protocol.NewWriter(e2eSbPlayKeepAlive).Long(id).Packet())
+		case e2ePlaySystemChat:
+			return chatText(c.t, pkt)
+		default:
+			c.t.Fatalf("unexpected packet 0x%02x in the waiting world", pkt.ID)
+		}
+	}
+}
+
+// readUntilTransfer reads until the player is handed back to the proxy,
+// returning the cookie that carries their choice.
+func (c *e2eClient) readUntilTransfer() (cookie []byte, host string, port int32) {
+	c.t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = c.raw.SetReadDeadline(time.Now().Add(10 * time.Second))
+		pkt, err := c.conn.ReadPacket()
+		if err != nil {
+			c.t.Fatalf("read while waiting for the transfer: %v", err)
+		}
+		switch pkt.ID {
+		case e2ePlayKeepAlive:
+			id, _ := protocol.NewReader(pkt.Data).Long()
+			c.mustWrite(protocol.NewWriter(e2eSbPlayKeepAlive).Long(id).Packet())
+		case e2ePlaySystemChat:
+			// Progress reports while the server starts.
+		case e2ePlayStoreCookie:
+			r := protocol.NewReader(pkt.Data)
+			if _, err := r.String(32767); err != nil {
+				c.t.Fatalf("cookie has no key: %v", err)
+			}
+			cookie, err = r.ByteArray()
+			if err != nil {
+				c.t.Fatalf("cookie has no payload: %v", err)
+			}
+		case e2ePlayTransfer:
+			r := protocol.NewReader(pkt.Data)
+			host, _ = r.String(32767)
+			port, _ = r.VarInt()
+			return cookie, host, port
+		default:
+			c.t.Fatalf("unexpected packet 0x%02x while waiting for the transfer", pkt.ID)
+		}
+	}
+	c.t.Fatal("the player was never transferred")
+	return nil, "", 0
+}
+
+func (c *e2eClient) mustWrite(pkt *protocol.Packet) {
+	c.t.Helper()
+	if err := c.conn.WritePacket(pkt); err != nil {
+		c.t.Fatalf("write packet 0x%02x: %v", pkt.ID, err)
+	}
+}
+
+// chatText pulls the readable text out of a system chat packet, which is a
+// component followed by the flag that chooses chat or the action bar.
+func chatText(t *testing.T, pkt *protocol.Packet) string {
+	t.Helper()
+	if len(pkt.Data) < 2 {
+		t.Fatalf("system chat packet is %d bytes", len(pkt.Data))
+	}
+	root, err := nbt.Unmarshal(pkt.Data[:len(pkt.Data)-1], true)
+	if err != nil {
+		t.Fatalf("chat content is not network NBT: %v", err)
+	}
+	var b strings.Builder
+	if s, ok := root["text"].(nbt.String); ok {
+		b.WriteString(string(s))
+	}
+	if extra, ok := root["extra"].(nbt.List); ok {
+		for _, elem := range extra.Elems {
+			run, ok := elem.(nbt.Compound)
+			if !ok {
+				continue
+			}
+			if s, ok := run["text"].(nbt.String); ok {
+				b.WriteString(string(s))
+			}
+		}
+	}
+	return b.String()
+}
+
+// TestWaitingWorldStartsAServerAndHandsThePlayerOver is the whole feature end to
+// end: a player arrives while the server is down, is put into a world where the
+// proxy can talk to them, asks for the server themselves, and is transferred to
+// it the moment it is up — without ever being disconnected.
+func TestWaitingWorldStartsAServerAndHandsThePlayerOver(t *testing.T) {
+	rig := newE2ERigWith(t, false, true, e2eWorldStore(t))
+
+	client := e2eDial(t, rig.addr, "mc.example.com")
+	client.encrypt()
+
+	greeting := client.enterWaitingWorld()
+	if !strings.Contains(strings.Join(greeting, "\n"), "Survival") {
+		t.Errorf("the greeting never named the server: %q", greeting)
+	}
+
+	// Nothing has been asked of the bot yet. A player in the waiting world
+	// chooses for themselves, unlike a held one who is acted for.
+	if got := rig.bot.startCalls.Load(); got != 0 {
+		t.Fatalf("the proxy asked for a start before the player did (%d times)", got)
+	}
+
+	client.mustWrite(protocol.NewWriter(e2eSbChatCommand).String("join survival").Packet())
+
+	deadline := time.Now().Add(10 * time.Second)
+	for rig.bot.startCalls.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if rig.bot.startCalls.Load() == 0 {
+		t.Fatal("typing /join never reached the bot as a start request")
+	}
+
+	rig.bot.setOnline(true)
+
+	cookie, host, port := client.readUntilTransfer()
+	if host != "mc.example.com" {
+		t.Errorf("transferred to %q, wanted the address the client itself used", host)
+	}
+	if port == 0 {
+		t.Error("transferred to port 0")
+	}
+	if len(cookie) == 0 {
+		t.Fatal("no choice was stored; the player would arrive having apparently chosen nothing")
+	}
+	server, ok := decodeChoice(cookie, time.Now())
+	if !ok || server != 1 {
+		t.Errorf("stored choice was %d (ok=%v), wanted server 1", server, ok)
+	}
+}
+
+// TestWaitingWorldIsNotUsedWhenNothingHasBeenRecorded pins the fallback: with no
+// recording for the client's version there is no world to build, and the player
+// is held mid-login exactly as they were before the world existed.
+func TestWaitingWorldIsNotUsedWhenNothingHasBeenRecorded(t *testing.T) {
+	rig := newE2ERigWith(t, false, true, limbo.NewMemoryStore())
+
+	client := e2eDial(t, rig.addr, "mc.example.com")
+	client.encrypt()
+
+	// A hold keeps the connection alive with login plugin requests; a world
+	// would have sent Login Success by now.
+	if id := client.answerHoldPing(); id != 1 {
+		t.Errorf("first hold ping had message id %d, wanted 1", id)
 	}
 }

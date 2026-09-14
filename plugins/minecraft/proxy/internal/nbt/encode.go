@@ -130,3 +130,20 @@ func appendList(b []byte, l List) ([]byte, error) {
 	}
 	return b, nil
 }
+
+// MarshalNetworkTag encodes any tag in the network form: the tag id followed
+// directly by its payload, with no name.
+//
+// The root of a network NBT value is not required to be a compound. A text
+// component in particular is written as a bare TAG_String whenever it carries
+// no formatting of its own, which is the common case for a line of chat, so
+// restricting the root to a compound would make the simplest value the one
+// that could not be expressed.
+func MarshalNetworkTag(t Tag) ([]byte, error) {
+	if t == nil {
+		return nil, fmt.Errorf("nbt: nil root tag")
+	}
+	buf := make([]byte, 0, 64)
+	buf = append(buf, t.TagType())
+	return appendPayload(buf, t)
+}

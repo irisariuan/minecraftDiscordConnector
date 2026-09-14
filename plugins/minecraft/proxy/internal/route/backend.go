@@ -12,6 +12,7 @@ import (
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/auth"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/control"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/forward"
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/limbo"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/mcver"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/protocol"
 )
@@ -112,8 +113,55 @@ func (p *Proxy) joinBackend(
 		return err
 	}
 
+	// A join to a running server is the only chance the proxy ever gets to see
+	// what a client of this version needs before it will enter a world. When it
+	// does not already know, it watches this one go past.
+	if p.shouldRecord(hs.Protocol) {
+		snap, err := p.recordJoin(client, backend, hs.Protocol, entry)
+		if snap != nil {
+			if putErr := p.opts.Snapshots.Put(snap); putErr != nil {
+				p.log.Warn("could not keep the recorded world",
+					"protocol", hs.Protocol, "server", entry.Tag, "error", putErr)
+			} else {
+				p.log.Info("recorded a waiting world",
+					"protocol", hs.Protocol, "server", entry.Tag, "packets", len(snap.Config))
+			}
+		}
+		return err
+	}
+
 	p.tunnel(client, backend)
 	return nil
+}
+
+// snapshotFreshness is how long a recording is used before the next join at
+// that version is watched again.
+//
+// A backend's registry set is not fixed: a data pack, a mod or a game update
+// changes it, and a recording made before such a change describes a world the
+// backend no longer has. Nothing here can detect that, so it is re-taken on a
+// timer instead. A day is long enough that the cost — one join per version
+// carrying the full registry set rather than an abbreviated one — is paid
+// rarely, and short enough that a change made on a Monday is not still being
+// replayed on a Friday.
+const snapshotFreshness = 24 * time.Hour
+
+// shouldRecord reports whether this join is worth watching.
+//
+// Recording costs the joining player a larger registry set than they would
+// otherwise receive, because the proxy stops their client telling the backend
+// which parts it already has. That is a real cost to a real person, so it is
+// paid only when there is nothing recorded for their version, or when what is
+// recorded is old enough to be suspect.
+func (p *Proxy) shouldRecord(protocolVersion int32) bool {
+	if p.opts.Snapshots == nil || !limbo.Supports(protocolVersion) {
+		return false
+	}
+	snap, ok := p.opts.Snapshots.Get(protocolVersion)
+	if !ok {
+		return true
+	}
+	return time.Since(snap.RecordedAt) > snapshotFreshness
 }
 
 // relayBackendLogin pumps the backend's login packets through to the client

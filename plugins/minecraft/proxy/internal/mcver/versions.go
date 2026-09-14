@@ -74,11 +74,6 @@ func EncryptionResponseHasSalt(protocol int32) bool {
 // "should authenticate" boolean added alongside transfers.
 func EncryptionRequestHasAuthFlag(protocol int32) bool { return protocol >= V1_20_5 }
 
-// CanHoldInWorld reports whether the proxy can put a waiting player into a
-// holding world where it can talk to them and take commands. Below this the
-// only non-disconnecting option is to stall the login itself.
-func CanHoldInWorld(protocol int32) bool { return protocol >= V1_20_5 }
-
 // V1_13 is the oldest protocol with login plugin messages, which is the only
 // mechanism that keeps a stalled login alive.
 const V1_13 = 393

@@ -107,6 +107,7 @@ export type PluginEnvKey =
 	| "MC_PROXY_IPC_PATH"
 	| "MC_PROXY_PUBLIC_HOST"
 	| "MC_PROXY_BIN"
+	| "MC_PROXY_WORLD_CACHE"
 	| "MC_PROXY_TOKEN";
 
 /** Input data for creating a server record. */

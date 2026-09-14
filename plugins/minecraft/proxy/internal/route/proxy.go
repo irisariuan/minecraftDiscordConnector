@@ -14,6 +14,7 @@ import (
 
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/auth"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/control"
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/limbo"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/mcver"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/protocol"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/status"
@@ -32,6 +33,11 @@ type Options struct {
 	// Verifier checks players against the Mojang session server. Leave it nil
 	// outside tests; the zero value builds the real one.
 	Verifier *auth.Verifier
+	// Snapshots holds the configuration phases recorded from real backends,
+	// which is what the waiting world is built out of. Leave it nil to turn the
+	// waiting world off entirely; every player then gets the mute hold, which is
+	// what the proxy did before the world existed.
+	Snapshots limbo.Store
 }
 
 // Proxy accepts Minecraft connections on one port and routes them.
@@ -172,6 +178,23 @@ func (p *Proxy) statusInfo(clientProtocol int32) status.Info {
 }
 
 const defaultMOTD = "§bServer Hub§r\n§7Join to start a server"
+
+// canOfferWorld reports whether this client could be put into the waiting world
+// right now.
+//
+// Two things have to be true, and they fail for different reasons. The proxy
+// must know the play-phase packet numbering for the version, which is a
+// question about this code; and it must have a recorded configuration phase for
+// it, which is a question about whether anybody has yet joined a running server
+// with a client like this one. Either way the answer is the same: no world, so
+// the player gets the hold instead.
+func (p *Proxy) canOfferWorld(protocolVersion int32) bool {
+	if p.opts.Snapshots == nil || !limbo.Supports(protocolVersion) {
+		return false
+	}
+	_, ok := p.opts.Snapshots.Get(protocolVersion)
+	return ok
+}
 
 // entryFor looks up a backend's connection details.
 func (p *Proxy) entryFor(id int) (control.ServerEntry, bool) {

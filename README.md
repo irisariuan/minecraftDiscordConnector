@@ -25,7 +25,7 @@ Documentation:
 ## Features
 
 - **Server Control**: Start, stop, suspend, and resume the Minecraft server via Discord commands.
-- **Minecraft Proxy**: One public port in front of every managed Minecraft server. A player who connects while their server is down is held on the connecting screen instead of being refused, and the act of joining starts the server — directly if they are permitted, otherwise by raising a start vote in Discord. See **[docs/PROXY.md](docs/PROXY.md)**.
+- **Minecraft Proxy**: One public port in front of every managed Minecraft server. A player who connects while their server is down is kept instead of refused — in an empty waiting room where they can pick a server and type `/join` to start it, or, on a client the proxy cannot build a world for, parked silently on the connecting screen while it asks on their behalf. Either way the rules are the ones `/startserver` uses: a direct start if they are permitted, otherwise a start vote in Discord. See **[docs/PROXY.md](docs/PROXY.md)**.
 - **Plugin Management**: Search, append, and delete plugins using Modrinth API; upload custom plugins via Discord or web UI.
 - **Approval System**: Sensitive actions (like server start/stop) can require multi-user approval.
 - **Permission System**: Fine-grained user and role permissions for all commands.
@@ -107,8 +107,9 @@ Documentation:
     MC_PROXY_ENABLED=false
     MC_PROXY_LISTEN_PORT=25565 # public Minecraft port
     MC_PROXY_IPC_PATH=data/mcproxy.sock # control socket (IPC)
-    MC_PROXY_PUBLIC_HOST=mc.example.com # reserved, see docs/PROXY.md
+    MC_PROXY_PUBLIC_HOST=mc.example.com # only if the client's own address is unroutable
     MC_PROXY_BIN=plugins/minecraft/proxy/bin/mcproxy
+    MC_PROXY_WORLD_CACHE=data/mcproxy-worlds # recorded worlds; safe to delete
     MC_PROXY_TOKEN=           # optional; random per start when unset
     ```
 

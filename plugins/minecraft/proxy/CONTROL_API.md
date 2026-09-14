@@ -48,10 +48,11 @@ which backends exist and whether they are up.
 }
 ```
 
-- `publicHost` is the address clients use to reach the proxy. It is currently
-  reserved: the proxy reads it but does not act on it, and it exists for a future
-  hand-off that moves a player between backends mid-session. The bot sends `""`
-  when nothing is configured.
+- `publicHost` is the address clients use to reach the proxy. It is a fallback
+  for the waiting world's transfer: the proxy normally sends a player back to the
+  address their own client connected with, since that address is known to work
+  for them, and consults this only when the handshake carried nothing usable. The
+  bot sends `""` when nothing is configured.
 - `motd` uses legacy `§` colour codes and may contain one `\n`.
 - `servers` lists only servers whose plugin is `minecraft` and whose
   `config.proxy.enabled` is true. `online` is live process state.

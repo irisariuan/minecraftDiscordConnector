@@ -18,6 +18,7 @@ import {
 	getMaxPlayers,
 	getMotd,
 	getProxyBin,
+	getWorldCacheDir,
 	getPublicHost,
 	getVoteChannelId,
 	isProxyEnabled,
@@ -365,6 +366,7 @@ function createSupervisor(ipcPath: string, token: string) {
 			return;
 		}
 		const listenPort = await getListenPort();
+		const worldCache = await getWorldCacheDir();
 		const startedAt = Date.now();
 		let spawned: Bun.Subprocess<"ignore", "pipe", "pipe">;
 		try {
@@ -374,6 +376,7 @@ function createSupervisor(ipcPath: string, token: string) {
 					MC_PROXY_IPC_PATH: ipcPath,
 					MC_PROXY_TOKEN: token,
 					MC_PROXY_LISTEN_PORT: String(listenPort),
+					MC_PROXY_WORLD_CACHE: worldCache,
 				},
 				stdin: "ignore",
 				stdout: "pipe",

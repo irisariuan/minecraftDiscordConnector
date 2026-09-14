@@ -27,8 +27,8 @@ const (
 	msgBackendOnlineMode = "That server is not set up to run behind this proxy: it still has online-mode=true. Ask an administrator to set online-mode=false in its server.properties."
 )
 
-// handleLogin runs everything from Login Start to either a backend tunnel or a
-// hold. It is the one place that decides what happens to a player.
+// handleLogin runs everything from Login Start to a backend, a waiting world or
+// a hold. It is the one place that decides what happens to a player.
 func (p *Proxy) handleLogin(ctx context.Context, conn *protocol.Conn, raw net.Conn, hs *handshake) error {
 	if hs.Protocol < mcver.MinSupported {
 		return disconnectLogin(conn, msgTooOld)
@@ -62,28 +62,39 @@ func (p *Proxy) handleLogin(ctx context.Context, conn *protocol.Conn, raw net.Co
 		return fmt.Errorf("session lookup for %s: %w", profile.Name, err)
 	}
 
-	if len(sess.Servers) == 0 {
-		return disconnectLogin(conn, msgNoServers)
-	}
-	if len(accessibleIDs(sess)) == 0 {
-		return disconnectLogin(conn, msgNoAccess)
-	}
+	host := cleanHost(hs.Host)
+	d := p.decide(sess, host, hs.Protocol, 0)
 
-	target, online := p.chooseTarget(sess, cleanHost(hs.Host))
-
-	if online {
-		entry, ok := p.entryFor(target)
-		if !ok {
-			return fmt.Errorf("server %d vanished between decision and connect", target)
+	// A player is only asked about a stored choice when they are about to be
+	// asked to choose, which is the only situation where the answer changes
+	// anything — and is exactly the situation a player returning from the
+	// waiting world arrives in. Asking every login instead would put a round
+	// trip in front of every join for the sake of one that rarely happens.
+	if d.Plan == planWorld {
+		if chosen := p.readChoice(conn, hs.Protocol); chosen != 0 {
+			d = p.decide(sess, host, hs.Protocol, chosen)
 		}
-		p.log.Info("routing player", "player", profile.Name, "server", entry.Tag)
-		return p.joinBackend(ctx, conn, hs, entry, profile, ip)
 	}
+	p.log.Info("routing player",
+		"player", profile.Name, "plan", d.Plan, "reason", d.Reason, "protocol", hs.Protocol)
 
-	if !mcver.CanBeHeld(hs.Protocol) {
-		return disconnectLogin(conn, msgCannotHold)
+	switch d.Plan {
+	case planRefuse:
+		return disconnectLogin(conn, d.Message)
+
+	case planJoin:
+		entry, ok := p.entryFor(d.Server)
+		if !ok {
+			return fmt.Errorf("server %d vanished between decision and connect", d.Server)
+		}
+		return p.joinBackend(ctx, conn, hs, entry, profile, ip)
+
+	case planWorld:
+		return p.serveWorld(ctx, conn, hs, profile, player, sess)
+
+	default:
+		return p.hold(ctx, conn, hs, d.Server, profile, player, sess.Linked)
 	}
-	return p.hold(ctx, conn, hs, target, profile, player, sess.Linked)
 }
 
 // playerIdentity builds what the bot is told about a verified player.

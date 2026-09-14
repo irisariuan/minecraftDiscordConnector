@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/control"
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/limbo"
 	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/route"
 )
 
@@ -42,6 +43,8 @@ func run() error {
 			"address to bind the player listener to")
 		logLevel = flag.String("log-level", env("MC_PROXY_LOG_LEVEL", "info"),
 			"debug, info, warn or error")
+		worldCache = flag.String("world-cache", env("MC_PROXY_WORLD_CACHE", "data/mcproxy-worlds"),
+			"directory holding the configuration phases recorded from backends, which are what the waiting world is built from; empty turns the waiting world off")
 	)
 	flag.Parse()
 
@@ -76,18 +79,42 @@ func run() error {
 		return err
 	}
 
+	snapshots := openWorldCache(*worldCache, logger)
+
 	proxy, err := route.New(route.Options{
 		ListenAddr: fmt.Sprintf("%s:%d", *bindAddr, port),
 		Control:    client,
 		Poller:     poller,
 		Logger:     logger,
+		Snapshots:  snapshots,
 	})
 	if err != nil {
 		return err
 	}
 
-	logger.Info("mcproxy starting", "control", channel, "port", port)
+	logger.Info("mcproxy starting",
+		"control", channel, "port", port, "recordedWorlds", limbo.Count(snapshots))
 	return proxy.ListenAndServe(ctx)
+}
+
+// openWorldCache opens the store of recorded configuration phases.
+//
+// Failing to open it is not worth refusing to start over. Without the store the
+// proxy simply has no waiting world to offer and falls back to holding players
+// mid-login, which is what it did before the world existed — a worse experience
+// than the one intended, but a far better one than a proxy that will not run.
+func openWorldCache(dir string, logger *slog.Logger) limbo.Store {
+	if dir == "" {
+		logger.Info("waiting world disabled; players will be held mid-login instead")
+		return nil
+	}
+	store, err := limbo.NewDiskStore(dir, logger)
+	if err != nil {
+		logger.Warn("could not open the recorded worlds; falling back to holding players",
+			"dir", dir, "error", err)
+		return nil
+	}
+	return store
 }
 
 // resolvePort settles which port to accept players on. An explicit value always

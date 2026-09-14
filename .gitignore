@@ -50,3 +50,6 @@ plugins/minecraft/proxy/bin/
 
 # Control socket between the bot and the Minecraft proxy
 *.sock
+
+# Waiting worlds the proxy records from backends; rebuilt on the next join.
+data/mcproxy-worlds/

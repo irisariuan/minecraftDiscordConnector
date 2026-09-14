@@ -27,4 +27,6 @@ silently desynchronise a real client, so this is the check worth running after
 any change to the login path.
 
 Neither script can complete a login: that needs a Mojang session, which is what
-the Go tests in `internal/route/e2e_test.go` stand in for.
+the Go tests in `internal/route/e2e_test.go` stand in for. Those tests also cover
+the waiting world end to end — entering it, choosing a server in it, and being
+transferred out — which is beyond what a raw socket script can reach.

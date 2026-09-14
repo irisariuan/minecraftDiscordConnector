@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import { createStore, data, type PluginEnvKey } from "../../api";
 import { validateMinecraftConfig, type MinecraftProxyConfig } from "../config";
 
@@ -17,6 +18,8 @@ export const DEFAULT_MAX_PLAYERS = 100;
 export const DEFAULT_MOTD = "§bServer Hub§r\n§7Join to start a server";
 /** Where `bun run build:proxy` puts the compiled Go binary. */
 export const DEFAULT_PROXY_BIN = "plugins/minecraft/proxy/bin/mcproxy";
+/** Where the proxy keeps the waiting worlds it has recorded from backends. */
+export const DEFAULT_WORLD_CACHE = "data/mcproxy-worlds";
 
 /** Store keys, kept in one place so the command and the script agree. */
 export const ProxyStoreKey = {
@@ -68,6 +71,42 @@ export async function getIpcPath(): Promise<string> {
 /** Path of the compiled Go proxy binary. */
 export async function getProxyBin(): Promise<string> {
 	return (await env("MC_PROXY_BIN")) ?? DEFAULT_PROXY_BIN;
+}
+
+/**
+ * Directory the proxy keeps recorded waiting worlds in.
+ *
+ * Before a modern client will enter a world it demands a long, version-specific
+ * set of registries, so the proxy records one from a real backend the first time
+ * anybody joins with a given client version and replays it later, when no
+ * backend is running. Deleting this directory costs nothing permanent: the next
+ * join at each version records it again. Setting it empty turns the waiting
+ * world off, and players are held silently mid-login instead.
+ */
+export async function getWorldCacheDir(): Promise<string> {
+	return (await env("MC_PROXY_WORLD_CACHE")) ?? DEFAULT_WORLD_CACHE;
+}
+
+/**
+ * Protocol versions the proxy has recorded a waiting world for, ascending.
+ *
+ * Read from the cache directory rather than asked of the proxy: it is a
+ * directory of `<protocol>.snapshot` files, the bot already knows where it is,
+ * and this is only ever used to answer an operator asking why some players are
+ * being held instead of shown the waiting room.
+ */
+export async function listRecordedWorlds(): Promise<number[]> {
+	const dir = await getWorldCacheDir();
+	if (!dir) return [];
+	const names = await readdir(dir).catch(() => [] as string[]);
+	const versions: number[] = [];
+	for (const name of names) {
+		const match = /^(\d+)\.snapshot$/.exec(name);
+		if (!match?.[1]) continue;
+		const parsed = Number(match[1]);
+		if (Number.isInteger(parsed)) versions.push(parsed);
+	}
+	return versions.sort((a, b) => a - b);
 }
 
 /**

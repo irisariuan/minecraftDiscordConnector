@@ -6,7 +6,7 @@ the same address; the proxy works out which backend they want and routes them
 there.
 
 Its real purpose is what happens when that backend is **down**. Instead of
-refusing the connection with "Can't connect to server", the proxy *holds* the
+refusing the connection with "Can't connect to server", the proxy *keeps* the
 player and gives them a way to bring the server up — immediately if they are
 allowed to, otherwise by raising a start vote in Discord.
 
@@ -16,30 +16,56 @@ domain socket** (`plugins/minecraft/proxy/CONTROL_API.md`). Nothing about that
 channel touches the network: there is no port to firewall, and access is decided
 by filesystem permissions on the socket, which the bot creates mode 0600.
 
-## How holding works
+## The two ways of waiting
 
 The proxy is the online-mode authority: it performs the encryption handshake and
 verifies the player against Mojang itself. The backends behind it run in offline
 mode and trust the identity the proxy forwards to them.
 
-A player waiting for a server is parked **in the login phase**. Nothing has been
-sent to them past the encryption exchange, so their client sits on its own
-connecting screen: no error, no kick, no prompt to reconnect. When the backend
-comes up, the proxy opens the backend connection, relays the real Login Success,
+From there a player who cannot be sent straight to a running server waits in one
+of two places. Both keep them connected indefinitely; the difference is whether
+the proxy can talk to them.
+
+### The waiting room
+
+An empty world, served by the proxy itself, where the player floats in the void
+and can read and type. It lists the servers they may use, says which are
+running, and takes commands:
+
+| typed in game | what it does |
+| --- | --- |
+| `/join <server>` | go there, starting it first if it is down |
+| `/servers` | print the list again |
+| `/help` | what can be typed |
+| `/link` | how to connect a Discord account |
+
+Names can be given as the server's tag, its simplified form, its id, or any
+unambiguous prefix — `surv` finds `Survival` as long as nothing else starts the
+same way. Plain chat works too, so a player who types `join survival` without
+the slash is understood.
+
+Asking for a stopped server applies exactly the rules `/startserver` applies on
+Discord: an immediate start for a linked account holding the `startServer`
+permission, and otherwise a start-approval poll with the usual fees and counts.
+Whatever the bot says about it is what the player is shown, word for word.
+
+When the server is up the player is **transferred**: their client reconnects to
+the same address by itself, carrying the choice they made, and lands on the
+server. They are never returned to the server list and never see an error.
+
+There is no tab completion, and a typed command shows red in the chat box before
+it is sent. That is deliberate — see "Known limitations" in the design notes.
+
+### The silent hold
+
+Where the proxy cannot build a world for a client, it parks the player **in the
+login phase** instead. Nothing is sent past the encryption exchange, so their
+client sits on its own connecting screen: no error, no kick, no prompt to
+reconnect. When the backend comes up, the proxy relays the real Login Success
 and the hold resolves into an ordinary join with nothing lost.
 
-The proxy does not build a holding world to chat with waiting players. A world
-would need a correct registry set, tag set, dimension codec and chunk for every
-protocol version, all of which change release to release and none of which fail
-gracefully when they are wrong. The login-phase hold needs no version-specific
-data at all, so it is correct on every version from 1.13 onwards, including
-versions that have not shipped yet.
-
-What that costs is the ability to say anything to a waiting player. The proxy
-therefore acts for them instead of asking them: **joining is the request to
-start**. The bot applies exactly the rules it would apply to `/startserver` on
-Discord — an immediate start for a linked account holding the `startServer`
-permission, and otherwise a start-approval poll with the usual fees and counts.
+Nothing can be shown to a player being held, so the proxy acts for them instead
+of asking: **joining is the request to start**, under the same rules as above.
 
 A client stalled mid-login gives up after about thirty seconds of silence, so
 the hold sends it a login plugin message every ten seconds on a channel no
@@ -48,36 +74,57 @@ the hold needs. Login plugin messages arrived in **Minecraft 1.13**; a client
 older than that cannot be held and is told so plainly rather than left to time
 out. It can still be routed to a server that is already running.
 
-### Before you rely on long holds
+### Which one a player gets
 
-The hold keeps a client alive by sending it a login plugin message every ten
-seconds, which the vanilla client always answers. That the client then waits
-*indefinitely* follows from how its read timeout works, but it is inferred
-rather than documented, and no Mojang documentation rules out a separate hard
-cap on how long a login may take.
+The waiting room needs two things, and both have to be true:
 
-So before you depend on this, test it: join while a server is down and stay
-there past 30 seconds, past a minute, and past five minutes, on the oldest and
-newest client versions your players use. If a client gives up with "timed out",
-the hold is not working for that version and players should be told to start
-servers from Discord instead.
+1. **A client version the proxy knows the packet numbering for.** That is 1.20.5
+   through 1.21.10, and 26.2. Two releases in between — 1.21.11 and 26.1 — have
+   no published numbering and are deliberately left out rather than guessed at.
+2. **A recorded world for that version.** See below.
 
-### A waiting player is never kicked
+Anything else is held. Nothing needs configuring either way, and no player is
+ever worse off than they were before the waiting room existed.
 
-That holds even when the vote fails. A rejected or expired poll leaves the
-player exactly where they were, connected and waiting, free to disconnect and
-try again whenever they like. The proxy does **not** re-raise a poll on their
-behalf, because that would charge the poll fee again and spam the channel. If a
-vote fails, someone has to ask again — on Discord, or by rejoining.
+## Recorded worlds
 
-Because nothing can be displayed during a hold, a player whose vote failed sees
-no explanation in game. They will sit on the connecting screen until they give
-up. Tell your players that, or keep an eye on the vote channel for them.
+Before a modern client will enter a world it demands a long list of registries
+describing it — dimension types, biomes, damage types and a couple of dozen more.
+The list grows with every release and a client that finds one wrong does not
+complain, it disconnects.
+
+Rather than ship that data and watch it rot, the proxy **records it from your own
+servers**. The first time somebody joins a running backend with a given client
+version, the proxy writes down what that backend told them and keeps it in
+`data/mcproxy-worlds/`. Later, when nothing is running, it replays that recording
+to build the waiting room. The data is right by construction: it came from the
+very server those players are heading for.
+
+What this means in practice:
+
+- **A version has no waiting room until somebody has joined a running server with
+  it.** Until then those players get the silent hold. One successful join fixes
+  it for good.
+- **The player whose join is recorded pays a small cost**: their client receives
+  the registry set in full rather than the abbreviated form it would normally
+  negotiate. It is a few tens of kilobytes, once per version per day.
+- **Recordings refresh daily**, because a data pack, a mod or a game update
+  changes what a server sends.
+- **The directory is disposable.** Delete it and the next join at each version
+  records it again. It is in `.gitignore` and holds nothing sensitive.
+
+Set `MC_PROXY_WORLD_CACHE` to move it, or to an empty string to turn the waiting
+room off entirely and hold every player instead.
 
 ## Choosing between servers
 
-When more than one server is running, the **hostname the player connected with**
-selects the destination. Point several names at the proxy:
+In order of precedence:
+
+**1. A choice just made in the waiting room.** Carried in a cookie the client
+holds for two minutes. It is re-checked against the player's own permissions on
+arrival, so editing it gains nothing.
+
+**2. The hostname the player connected with.** Point several names at the proxy:
 
 ```
 survival.example.com  ─┐
@@ -91,14 +138,48 @@ simplified form of the tag: lower-cased, spaces and underscores turned into
 hyphens, other punctuation dropped. So a server tagged `Survival` matches
 `survival`, and one tagged `Hard Mode` matches `hard-mode`.
 
-This is the only selection mechanism that works during a hold, and it works on
+This is the only mechanism that works during a silent hold, and it works on
 every client version. It also selects which server a player's join *starts* when
 everything is down.
 
-With no hostname match, the proxy prefers any server that is already running,
-and falls back to the lowest server id. That is stable across reconnects rather
-than arbitrary, but if you run more than one server you should set up the
-hostnames — otherwise players cannot express a preference at all.
+**3. The waiting room**, where they are asked.
+
+**4. Failing all of that**, the proxy prefers any server that is already running
+and falls back to the lowest server id — stable across reconnects rather than
+arbitrary. If you run more than one server and have players on versions that
+only get the silent hold, set up the hostnames: it is the only way those players
+can express a preference.
+
+A player with exactly one server, already running, is never asked anything and
+goes straight there.
+
+### Before you rely on long holds
+
+The silent hold keeps a client alive by sending it a login plugin message every
+ten seconds, which the vanilla client always answers. That the client then waits
+*indefinitely* follows from how its read timeout works, but it is inferred
+rather than documented, and no Mojang documentation rules out a separate hard
+cap on how long a login may take.
+
+So before you depend on it, test it: join while a server is down and stay there
+past 30 seconds, past a minute, and past five minutes, on the oldest client
+versions your players use. If a client gives up with "timed out", the hold is not
+working for that version and those players should be told to start servers from
+Discord instead. The waiting room is not affected — it keeps the connection alive
+with ordinary keep-alives, which are documented to work indefinitely.
+
+### A waiting player is never kicked
+
+That holds even when the vote fails. A rejected or expired poll leaves the
+player exactly where they were, connected and waiting, free to disconnect and
+try again whenever they like. The proxy does **not** re-raise a poll on their
+behalf, because that would charge the poll fee again and spam the channel. If a
+vote fails, someone has to ask again — on Discord, in the waiting room, or by
+rejoining.
+
+A player in the waiting room is told what happened. A player being held silently
+is not, and will sit on the connecting screen until they give up. Tell your
+players that, or keep an eye on the vote channel for them.
 
 ## Building
 
@@ -123,7 +204,8 @@ If the binary is missing, the bot logs one actionable line telling you to run
 | `MC_PROXY_ENABLED` | *(unset — off)* | Set to `true`/`1`/`yes`/`on` to run the proxy at all. Anything else and the plugin logs one line and stays completely inert. |
 | `MC_PROXY_LISTEN_PORT` | `25565` | Public Minecraft port the proxy accepts clients on. This is the port your players connect to. |
 | `MC_PROXY_IPC_PATH` | `data/mcproxy.sock` | Unix socket the bot serves the control API on, and the only channel between the bot and the proxy. Its directory is created if missing, and the socket is set to mode 0600. A stale socket left by a crash is cleared on startup, but a socket a *live* process is still serving is never stolen — the bot refuses to start instead. |
-| `MC_PROXY_PUBLIC_HOST` | *(empty)* | Address players use to reach the proxy. Reserved: it is reported to the proxy but not yet acted on, and exists for a future hand-off that moves a player between backends mid-session. |
+| `MC_PROXY_PUBLIC_HOST` | *(empty)* | Address players are sent back to when the waiting room transfers them. Normally unnecessary: the proxy reuses the address the client itself connected with, which is the one address known to work for that client. Set it only when that address is not reachable from outside, such as a container name seen through a port forward. |
+| `MC_PROXY_WORLD_CACHE` | `data/mcproxy-worlds` | Directory of worlds recorded from your backends, which is what the waiting room is built from. Safe to delete; it fills itself in again. Set it empty to turn the waiting room off and hold every player silently instead. |
 | `MC_PROXY_BIN` | `plugins/minecraft/proxy/bin/mcproxy` | Path to the compiled proxy binary. |
 | `MC_PROXY_TOKEN` | *(random per start)* | Bearer token guarding the control API. When unset the bot generates a random one at startup and hands it to the child in its environment — which is what you want unless you are running the proxy out-of-tree. |
 
@@ -289,8 +371,10 @@ Two consequences worth knowing:
 
 - **An unlinked player cannot start a server.** Starting is decided by a Discord
   account's permission and paid for with its credit, and there is no account to
-  check or charge. They are still held rather than refused, so if somebody else
-  starts the server, or a vote passes, they are let in with everyone else.
+  check or charge. They are still kept rather than refused, so if somebody else
+  starts the server, or a vote passes, they are let in with everyone else. In the
+  waiting room they are told this, and told to run `/link` on Discord; in a
+  silent hold they cannot be told anything.
 - **Whatever your connector does with unverified players in game, it still
   does.** The bot's own join callback reports a player as unverified exactly as
   it did before, so any restriction or kick your server applies is unchanged.

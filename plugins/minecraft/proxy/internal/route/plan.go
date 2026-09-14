@@ -1,0 +1,133 @@
+package route
+
+import (
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/control"
+	"github.com/irisariuan/minecraftDiscordConnector/plugins/minecraft/proxy/internal/mcver"
+)
+
+// plan is what the proxy has decided to do with a player, once it knows who
+// they are and what they may use.
+type plan int
+
+const (
+	// planJoin sends them straight to a running backend.
+	planJoin plan = iota
+	// planWorld puts them in the waiting world to choose for themselves.
+	planWorld
+	// planHold parks them mid-login until their one destination comes up. It is
+	// what a client too old for the waiting world gets, and what a player who
+	// has already chosen gets when their choice is not running yet.
+	planHold
+	// planRefuse means there is nothing to route them to.
+	planRefuse
+)
+
+// String names a plan for the log line that records why a player went where
+// they went.
+func (p plan) String() string {
+	switch p {
+	case planJoin:
+		return "join"
+	case planWorld:
+		return "world"
+	case planHold:
+		return "hold"
+	case planRefuse:
+		return "refuse"
+	default:
+		return "unknown"
+	}
+}
+
+// decision is a plan plus the server it concerns.
+type decision struct {
+	Plan plan
+	// Server is the chosen backend, and is meaningless for planWorld (where the
+	// point is that no choice has been made yet) and planRefuse.
+	Server int
+	// Reason is why, for the log. Routing decisions are otherwise invisible:
+	// when somebody asks "why did it put me there", this is the answer.
+	Reason string
+	// Message is what to tell the player, for planRefuse only.
+	Message string
+}
+
+// decide works out what happens to a player.
+//
+// The waiting world is used when, and only when, there is something for the
+// player to decide. Somebody with one server that is already running has no
+// decision to make, and making them pass through an empty world to be told so
+// would be a worse experience than the one they have now. Everyone else — more
+// than one server to pick between, or a server that is not up yet — gets a
+// world where the proxy can actually talk to them.
+//
+// An explicit choice always wins over all of this. A hostname naming a server,
+// or a cookie left over from the waiting world's own transfer, means the player
+// has already decided, and re-asking them would be a loop.
+func (p *Proxy) decide(sess *control.Session, host string, protocol int32, chosen int) decision {
+	if len(sess.Servers) == 0 {
+		return decision{Plan: planRefuse, Reason: "no servers configured", Message: msgNoServers}
+	}
+	ids := accessibleIDs(sess)
+	if len(ids) == 0 {
+		return decision{Plan: planRefuse, Reason: "no accessible servers", Message: msgNoAccess}
+	}
+
+	online := make(map[int]bool, len(sess.Servers))
+	accessible := make(map[int]bool, len(sess.Servers))
+	for _, srv := range sess.Servers {
+		if srv.Accessible {
+			accessible[srv.ID] = true
+			online[srv.ID] = srv.Online
+		}
+	}
+
+	// An explicit choice, in order of how deliberate it is: a cookie is a
+	// choice this player made in the waiting world seconds ago, a hostname is
+	// one they made when they added the server to their list.
+	//
+	// The cookie is checked against this login's own access list rather than
+	// trusted, because it is stored on the client and a player can edit it.
+	// An edited one names a server they are simply asked about again.
+	if chosen != 0 && accessible[chosen] {
+		if online[chosen] {
+			return decision{Plan: planJoin, Server: chosen, Reason: "chosen in the waiting world"}
+		}
+		return holdOrRefuse(chosen, protocol, "chosen in the waiting world, not up yet")
+	}
+	if id, ok := forcedHost(host, sess.Servers); ok {
+		if online[id] {
+			return decision{Plan: planJoin, Server: id, Reason: "selected by hostname"}
+		}
+		return holdOrRefuse(id, protocol, "selected by hostname, not up yet")
+	}
+
+	// One server, already running: there is nothing to ask about.
+	if len(ids) == 1 && online[ids[0]] {
+		return decision{Plan: planJoin, Server: ids[0], Reason: "the only server, and it is up"}
+	}
+
+	if p.canOfferWorld(protocol) {
+		return decision{Plan: planWorld, Reason: "letting the player choose"}
+	}
+
+	// No world to offer: either the client is too old for one, or nothing has
+	// been recorded for its version yet. Fall back to the mute hold, which works
+	// on any client from 1.13 but cannot ask the player anything, so the
+	// long-standing precedence picks for them.
+	target, up := p.chooseTarget(sess, host)
+	if up {
+		return decision{Plan: planJoin, Server: target, Reason: "client too old for the waiting world"}
+	}
+	return holdOrRefuse(target, protocol, "client too old for the waiting world")
+}
+
+// holdOrRefuse parks a player until their server is up, unless their client is
+// too old even for that, in which case they are told why rather than left to
+// time out against a silence they cannot interpret.
+func holdOrRefuse(server int, protocol int32, reason string) decision {
+	if !mcver.CanBeHeld(protocol) {
+		return decision{Plan: planRefuse, Reason: reason + ", and too old to hold", Message: msgCannotHold}
+	}
+	return decision{Plan: planHold, Server: server, Reason: reason}
+}
