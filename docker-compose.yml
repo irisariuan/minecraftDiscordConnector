@@ -61,7 +61,6 @@ services:
       PORT: 3000
     ports:
       - "${BOT_PORT:-3000}:3000"
-      - "${API_PORT:-6001}:6001"
     volumes:
       # Minecraft server data (adjust path as needed)
       - minecraft_data:/app/servers

@@ -42,7 +42,8 @@ Documentation:
 - Node.js v18+
 - PostgreSQL database
 - Discord bot token and application
-- Minecraft server (with REST API at `localhost:6001`)
+- Minecraft server (with the connector plugin installed; it attaches over a
+  Unix socket, see [docs/IPC.md](docs/IPC.md))
 - Cloudflare API key (for DNS updates)
 - Modrinth-compatible Minecraft server (for plugin management)
 
@@ -99,7 +100,6 @@ Documentation:
     LOADER_TYPE=paper        # or your server type
     MOD_TYPE=plugin          # or your mod type
     SERVER_PORT=25565        # optional (default 25565)
-    SERVER_API_PORT=6001     # optional (connector REST API port)
     SERVER_TAG=Default Server # optional display tag
 
     # ── Minecraft proxy (optional) ─────────────────────────────────

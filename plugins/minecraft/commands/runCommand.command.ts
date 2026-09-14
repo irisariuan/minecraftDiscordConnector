@@ -14,7 +14,7 @@ import {
 	sendMessagesToUsersById,
 	type CommandFile,
 } from "../../api";
-import type { MinecraftConfig } from "../config";
+import { isAttached } from "../runtime/ipc";
 import { parseCommandOutput, runCommandOnServer } from "../runtime/request";
 
 export default {
@@ -54,8 +54,7 @@ export default {
 				flags: MessageFlags.Ephemeral,
 			});
 		}
-		const { apiPort } = server.getPluginConfig() as unknown as MinecraftConfig;
-		if (apiPort === null) {
+		if (!isAttached(server.id)) {
 			return await interaction.followUp({
 				content: "Running commands is not supported on this server",
 				flags: MessageFlags.Ephemeral,
@@ -76,7 +75,7 @@ export default {
 
 		if (canRunCommand && force) {
 			const output = server.captureSomeOutput(capture);
-			const { success } = await runCommandOnServer(apiPort, command);
+			const { success } = await runCommandOnServer(server.id, command);
 			await interaction.editReply(
 				parseCommandOutput((await output)?.join("\n") ?? null, success),
 			);
@@ -107,7 +106,7 @@ export default {
 				async onSuccess(approval, message) {
 					const output = server.captureSomeOutput(capture);
 					const { success } = await runCommandOnServer(
-						apiPort,
+						server.id,
 						approval.content,
 					);
 					const users = await data.request("permission:getUsersWith", {

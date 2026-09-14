@@ -29,9 +29,7 @@ function envMinecraftConfig(): Record<string, unknown> {
 		modType: process.env.MOD_TYPE,
 		minecraftVersion: process.env.MINECRAFT_VERSION,
 		pluginDir: serverDir ? safeJoin(serverDir, "plugins") : undefined,
-		apiPort: process.env.SERVER_API_PORT
-			? Number(process.env.SERVER_API_PORT)
-			: undefined,
+		ipcSocket: undefined,
 	};
 }
 

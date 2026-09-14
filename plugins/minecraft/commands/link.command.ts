@@ -1,12 +1,12 @@
 import { ComponentType, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { data, getRandomOtp, type CommandFile } from "../../api";
-import type { MinecraftConfig } from "../config";
+import { isAttached } from "../runtime/ipc";
 import {
 	createOtpButtonRow,
 	createOtpInputModal,
 	OTPAction,
 } from "../runtime/otp";
-import { isRegistered, registerOnServer } from "../runtime/request";
+import { markVerifiedOnServer, registerOnServer } from "../runtime/request";
 
 const PLUGIN_ID = "minecraft";
 
@@ -27,15 +27,14 @@ export default {
 				"This command is only available on Minecraft servers.",
 			);
 		}
-		const { apiPort } = server.getPluginConfig() as unknown as MinecraftConfig;
-		if (apiPort === null) {
+		if (!isAttached(server.id)) {
 			return await interaction.editReply(
-				"Server API is not enabled on this server",
+				"The connector plugin is not attached to this server",
 			);
 		}
 		const playerName = interaction.options.getString("playername", true);
 		const otp = getRandomOtp();
-		const uuid = await registerOnServer(apiPort, playerName, otp);
+		const uuid = await registerOnServer(server.id, playerName, otp);
 		if (!uuid)
 			return await interaction.editReply(
 				"Player not found! Please check if your player name is correct!",
@@ -106,7 +105,7 @@ export default {
 				});
 			}
 
-			if (await isRegistered(apiPort, uuid)) {
+			if (await markVerifiedOnServer(server.id, uuid)) {
 				await submission.reply({
 					content: "Successfully linked your account!",
 					flags: MessageFlags.Ephemeral,

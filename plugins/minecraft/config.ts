@@ -10,8 +10,12 @@ export interface MinecraftConfig {
 	modType: string;
 	minecraftVersion: string;
 	pluginDir: string;
-	/** Port of the in-JVM connector REST API, or null when not enabled. */
-	apiPort: number | null;
+	/**
+	 * Override for the IPC socket the in-JVM connector plugin attaches to —
+	 * absolute, or relative to the server directory. Null uses the default
+	 * (`connector.sock` in the server directory).
+	 */
+	ipcSocket: string | null;
 	/** How this server is exposed through the Minecraft proxy. */
 	proxy: MinecraftProxyConfig;
 }
@@ -64,7 +68,7 @@ const schema = z.object({
 	modType: z.string().min(1),
 	minecraftVersion: z.string().min(1),
 	pluginDir: z.string().min(1),
-	apiPort: z.number().int().nullable().default(null),
+	ipcSocket: z.string().min(1).nullable().default(null),
 	proxy: proxySchema,
 });
 
@@ -100,9 +104,7 @@ export function envMinecraftConfig(): MinecraftConfig | null {
 		modType,
 		minecraftVersion,
 		pluginDir: safeJoin(serverDir, "plugins"),
-		apiPort: process.env.SERVER_API_PORT
-			? Number(process.env.SERVER_API_PORT)
-			: 6001,
+		ipcSocket: null,
 		proxy: {
 			enabled: true,
 			host: "127.0.0.1",

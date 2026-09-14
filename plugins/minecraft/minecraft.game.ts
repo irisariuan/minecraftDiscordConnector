@@ -14,6 +14,13 @@ import {
 	type MinecraftConfig,
 } from "./config";
 import { KNOWN_LOADERS } from "./loader/serverLoader";
+import {
+	closeIpcListener,
+	IPC_ENV_VAR,
+	isAttached,
+	openIpcListener,
+	socketPathFor,
+} from "./runtime/ipc";
 import { parseMinecraftOutput } from "./runtime/parser";
 import {
 	cancelServerSideShutdown,
@@ -38,15 +45,49 @@ const lifecycle: Partial<ServerLifecycle> = {
 		return parseMinecraftOutput(line);
 	},
 
+	/**
+	 * Open the server's IPC socket before starting it, and tell the connector
+	 * plugin where to find it. The plugin dials in once the JVM is up.
+	 */
+	async launch(ctx: ServerRuntimeContext): Promise<number | null> {
+		const socketPath = socketPathFor(
+			ctx.generic.serverDir,
+			mc(ctx).ipcSocket,
+		);
+		try {
+			await openIpcListener(ctx.serverId, socketPath);
+		} catch (err) {
+			// A server without the connector plugin still runs; it just loses
+			// the capabilities that need it.
+			console.error(
+				`[minecraft] failed to open the IPC socket for server #${ctx.serverId}:`,
+				err,
+			);
+		}
+		return ctx.process.spawn(ctx.generic.startCommand, {
+			cwd: ctx.generic.serverDir,
+			env: { [IPC_ENV_VAR]: socketPath },
+		});
+	},
+
+	/** Tear the socket down once the process is gone. */
+	cleanup(ctx: ServerRuntimeContext): void {
+		closeIpcListener(ctx.serverId).catch((err) =>
+			console.error(
+				`[minecraft] failed to close the IPC socket for server #${ctx.serverId}:`,
+				err,
+			),
+		);
+	},
+
 	async terminate(
 		ctx: ServerRuntimeContext,
 		options: TerminateOptions,
 	): Promise<TerminateResult> {
-		const { apiPort } = mc(ctx);
 		const grace = Math.max(0, options.grace ?? 0) * 20; // minecraft plugin uses ticks (20 ticks = 1 second)
 
-		// No connector API: generic timeout → force-kill.
-		if (apiPort === null) {
+		// No connector plugin attached: generic timeout → force-kill.
+		if (!isAttached(ctx.serverId)) {
 			if (grace <= 0) {
 				return { success: await ctx.process.kill("SIGKILL") };
 			}
@@ -64,7 +105,7 @@ const lifecycle: Partial<ServerLifecycle> = {
 		}
 
 		// Ask the server to shut down after `grace` ticks.
-		const scheduled = await scheduleServerShutdown(apiPort, grace);
+		const scheduled = await scheduleServerShutdown(ctx.serverId, grace);
 		if (!scheduled) return { success: false };
 		if (grace <= 0) return { success: true };
 
@@ -88,34 +129,28 @@ const lifecycle: Partial<ServerLifecycle> = {
 
 const capabilities: ServerCapabilities = {
 	async runCommand(ctx: ServerRuntimeContext, command: string) {
-		const { apiPort } = mc(ctx);
-		if (apiPort === null) return { success: false, output: null };
-		const { success, output } = await runCommandOnServer(apiPort, command);
+		const { success, output } = await runCommandOnServer(
+			ctx.serverId,
+			command,
+		);
 		return { success, output };
 	},
 
 	async listPlayers(ctx: ServerRuntimeContext): Promise<PlayerInfo[] | null> {
-		const { apiPort } = mc(ctx);
-		if (apiPort === null) return null;
-		const players = await fetchOnlinePlayers(apiPort);
+		const players = await fetchOnlinePlayers(ctx.serverId);
 		return players?.map((p) => ({ name: p.name, id: p.uuid })) ?? null;
 	},
 
 	async getLogs(ctx: ServerRuntimeContext): Promise<ParsedLogLine[] | null> {
-		const { apiPort } = mc(ctx);
-		if (apiPort === null) return null;
-		const logs = await getLogs(apiPort);
-		return logs;
+		return await getLogs(ctx.serverId);
 	},
 
 	async hasScheduledShutdown(ctx: ServerRuntimeContext) {
-		const { apiPort } = mc(ctx);
-		return apiPort === null ? false : hasServerSideShutdown(apiPort);
+		return await hasServerSideShutdown(ctx.serverId);
 	},
 
 	async cancelScheduledShutdown(ctx: ServerRuntimeContext) {
-		const { apiPort } = mc(ctx);
-		return apiPort === null ? false : cancelServerSideShutdown(apiPort);
+		return await cancelServerSideShutdown(ctx.serverId);
 	},
 
 	// Marker capabilities: the plugin's own commands/routes do the work.
@@ -138,7 +173,7 @@ export default defineGamePlugin<MinecraftConfig>({
 			modType: "plugin",
 			minecraftVersion: "",
 			pluginDir: "",
-			apiPort: null,
+			ipcSocket: null,
 			proxy: {
 				enabled: true,
 				host: "127.0.0.1",

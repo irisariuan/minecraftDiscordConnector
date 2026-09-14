@@ -42,7 +42,6 @@ services:
         ports:
             # Expose additional ports for debugging
             - "3000:3000" # Main API
-            - "6001:6001" # Minecraft API
             - "9229:9229" # Node.js debug port (if needed)
         command: ["bun", "--hot", "index.ts"]
         restart: "no" # Don't auto-restart in development

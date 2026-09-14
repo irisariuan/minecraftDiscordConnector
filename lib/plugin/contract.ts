@@ -75,8 +75,14 @@ export interface ServerProcessHandle {
 	 * Spawn the process. Core wires stdout through the active
 	 * {@link ServerLifecycle.parseOutput} and flips the online flag. Returns the
 	 * pid, or null if already running.
+	 *
+	 * `env` entries are merged over the bot's own environment, letting a plugin
+	 * hand the child process values it needs at startup (e.g. an IPC path).
 	 */
-	spawn(command: string[], options?: { cwd?: string }): Promise<number | null>;
+	spawn(
+		command: string[],
+		options?: { cwd?: string; env?: Record<string, string> },
+	): Promise<number | null>;
 	/** Force-kill the process. Resolves true if a running process was killed. */
 	kill(signal?: number | NodeJS.Signals): Promise<boolean>;
 	/** Current liveness (cached). */

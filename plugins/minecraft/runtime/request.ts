@@ -1,4 +1,12 @@
-import { safeFetch } from "../../api";
+/**
+ * Typed calls into a running server's connector plugin.
+ *
+ * Every call travels over the server's IPC socket (see `./ipc.ts`). A server
+ * whose connector plugin is not attached — not installed, still starting, or
+ * crashed — makes these return the "unavailable" value rather than throwing, so
+ * callers can degrade the same way they did when the API was absent.
+ */
+import { connectionFor, type PluginMethods } from "./ipc";
 
 export type LogType = "info" | "warn" | "error" | "unknown";
 export interface LogLine {
@@ -7,37 +15,35 @@ export interface LogLine {
 	message: string;
 }
 
-export async function getLogs(apiPort: number): Promise<LogLine[] | null> {
-	const res = await safeFetch(`http://localhost:${apiPort}/logs`, {}, false);
-	if (!res?.ok) {
+/** Issue one request, mapping a detached plugin or a failure to null. */
+async function call<M extends keyof PluginMethods>(
+	serverId: number,
+	method: M,
+	...args: PluginMethods[M]["params"] extends undefined
+		? []
+		: [PluginMethods[M]["params"]]
+): Promise<PluginMethods[M]["result"] | null> {
+	const connection = connectionFor(serverId);
+	if (!connection) return null;
+	try {
+		return await connection.request(method, ...args);
+	} catch (err) {
+		console.error(
+			`[minecraft] "${method}" failed on server #${serverId}:`,
+			err instanceof Error ? err.message : err,
+		);
 		return null;
 	}
-	const data = await res.json();
-	if (!Array.isArray(data)) {
-		throw new Error("Invalid logs format");
-	}
-	return data;
 }
 
-export async function runCommandOnServer(apiPort: number, command: string) {
-	const res = await safeFetch(`http://localhost:${apiPort}/runCommand`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			command,
-		}),
-	});
-	if (!res?.ok) {
-		return { success: false, output: null, logger: null };
-	}
-	const data = (await res.json()) as {
-		success: boolean;
-		output: string;
-		logger: string;
-	};
-	return data;
+export async function getLogs(serverId: number): Promise<LogLine[] | null> {
+	const result = await call(serverId, "logs.get");
+	return (result?.lines as LogLine[] | undefined) ?? null;
+}
+
+export async function runCommandOnServer(serverId: number, command: string) {
+	const result = await call(serverId, "command.run", { command });
+	return result ?? { success: false, output: null, logger: null };
 }
 
 export interface Player {
@@ -46,23 +52,14 @@ export interface Player {
 }
 
 export async function fetchOnlinePlayers(
-	apiPort: number,
+	serverId: number,
 ): Promise<Player[] | null> {
-	const res = await safeFetch(
-		`http://localhost:${apiPort}/players`,
-		{
-			method: "GET",
-			headers: {
-				"Content-Type": "application/json",
-			},
-		},
-		false,
-	);
-	if (!res?.ok) {
-		return null;
-	}
-	const data = (await res.json()) as Player[];
-	return data;
+	const result = await call(serverId, "player.list");
+	if (!result) return null;
+	return result.players.map((player) => ({
+		name: player.name,
+		uuid: player.id,
+	}));
 }
 
 export function parseCommandOutput(output: string | null, success: boolean) {
@@ -74,93 +71,54 @@ export function parseCommandOutput(output: string | null, success: boolean) {
 		: "No output returned from the command.";
 }
 
-export async function isServerAlive(apiPort: number) {
-	const alive = await safeFetch(
-		`http://localhost:${apiPort}/ping`,
-		{ signal: AbortSignal.timeout(1000 * 3) },
-		false,
-	);
-	return alive?.ok ?? false;
-}
-
-// ─── OTP registration / linkage (moved from the core Server class) ────────────
+// ─── OTP registration / linkage ───────────────────────────────────────────────
 
 /**
- * Register a player↔Discord link on the running Minecraft server via its
- * connector API. Returns the registered UUID on success, else null.
+ * Deliver a link OTP to a player in-game through the connector plugin.
+ * Returns the resolved UUID on success, else null.
  */
 export async function registerOnServer(
-	apiPort: number,
+	serverId: number,
 	identifier: string,
 	otp: string,
 	usingPlayerName = true,
 ): Promise<string | null> {
-	const response = await safeFetch(`http://localhost:${apiPort}/register`, {
-		method: "POST",
-		body: usingPlayerName
-			? JSON.stringify({ playerName: identifier, otp })
-			: JSON.stringify({ uuid: identifier, otp }),
+	const result = await call(serverId, "player.register", {
+		...(usingPlayerName ? { playerName: identifier } : { uuid: identifier }),
+		otp,
 	});
-	if (!response?.ok) return null;
-	const json = (await response.json().catch(() => null)) as {
-		uuid: string;
-	} | null;
-	return json?.uuid ?? null;
+	return result?.uuid ?? null;
 }
 
-/** Ask the connector API whether a UUID is registered. */
-export async function isRegistered(
-	apiPort: number,
+/** Tell the server a UUID is now linked, lifting its join restrictions. */
+export async function markVerifiedOnServer(
+	serverId: number,
 	uuid: string,
 ): Promise<boolean> {
-	const response = await safeFetch(`http://localhost:${apiPort}/registered`, {
-		method: "POST",
-		body: JSON.stringify({ uuid }),
-	});
-	return response?.ok ?? false;
+	return (await call(serverId, "player.markVerified", { uuid })) !== null;
 }
 
-// ─── Scheduled-shutdown control (moved from the core Server class) ─────────────
+// ─── Scheduled-shutdown control ───────────────────────────────────────────────
 
 /** Schedule a server-side (tick-based) graceful shutdown. */
 export async function scheduleServerShutdown(
-	apiPort: number,
+	serverId: number,
 	tick: number,
 ): Promise<boolean> {
-	const response = await safeFetch(`http://localhost:${apiPort}/shutdown`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ tick }),
-	});
-	if (!response) return false;
-	const { success } = (await response.json().catch(() => ({
-		success: false,
-	}))) as { success: boolean };
-	return success;
+	const result = await call(serverId, "shutdown.schedule", { tick });
+	return result?.success ?? false;
 }
 
 /** Whether the server currently has a server-side scheduled shutdown. */
-export async function hasServerSideShutdown(apiPort: number): Promise<boolean> {
-	const response = await safeFetch(
-		`http://localhost:${apiPort}/shuttingDown`,
-	).catch(() => null);
-	if (!response) return false;
-	const { result } = (await response.json().catch(() => ({
-		result: false,
-	}))) as { result: boolean };
-	return result;
+export async function hasServerSideShutdown(serverId: number): Promise<boolean> {
+	const result = await call(serverId, "shutdown.status");
+	return result?.scheduled ?? false;
 }
 
 /** Cancel a server-side scheduled shutdown. */
 export async function cancelServerSideShutdown(
-	apiPort: number,
+	serverId: number,
 ): Promise<boolean> {
-	const response = await safeFetch(
-		`http://localhost:${apiPort}/cancelShutdown`,
-	);
-	if (!response) return false;
-	const { success } = (await response.json().catch(() => ({
-		success: false,
-	}))) as { success: boolean };
-	return success;
+	const result = await call(serverId, "shutdown.cancel");
+	return result?.success ?? false;
 }

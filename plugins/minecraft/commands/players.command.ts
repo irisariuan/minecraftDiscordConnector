@@ -1,6 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from "discord.js";
 import { sendPaginationMessage, type CommandFile } from "../../api";
-import type { MinecraftConfig } from "../config";
+import { isAttached } from "../runtime/ipc";
 import { fetchOnlinePlayers, type Player } from "../runtime/request";
 
 export default {
@@ -9,10 +9,9 @@ export default {
 		.setDescription("Get a list of online players"),
 	requireServer: true,
 	async execute({ interaction, server }) {
-		const { apiPort } = server.getPluginConfig() as unknown as MinecraftConfig;
-		if (apiPort === null) {
+		if (!isAttached(server.id)) {
 			return await interaction.followUp({
-				content: "Server API is not enabled on this server",
+				content: "The connector plugin is not attached to this server",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -22,7 +21,8 @@ export default {
 				notFoundMessage: "No players found",
 				title: "Online Players",
 			},
-			getResult: async () => (await fetchOnlinePlayers(apiPort)) ?? undefined,
+			getResult: async () =>
+				(await fetchOnlinePlayers(server.id)) ?? undefined,
 			filterFunc: (filter) => (player) => {
 				if (!filter) return true;
 				return player.name.toLowerCase().includes(filter.toLowerCase());

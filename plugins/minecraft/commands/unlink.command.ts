@@ -1,7 +1,6 @@
 import { SlashCommandBuilder } from "discord.js";
 import { data, type CommandFile } from "../../api";
-import type { MinecraftConfig } from "../config";
-import { isRegistered } from "../runtime/request";
+import { markVerifiedOnServer } from "../runtime/request";
 
 const PLUGIN_ID = "minecraft";
 
@@ -44,9 +43,9 @@ export default {
 			externalId: match.externalId,
 		});
 
-		// Best-effort: notify the server that the link is gone.
-		const { apiPort } = server.getPluginConfig() as unknown as MinecraftConfig;
-		if (apiPort !== null) await isRegistered(apiPort, match.externalId);
+		// Best-effort: poke the running server about the player. No-op when the
+		// connector plugin is not attached.
+		await markVerifiedOnServer(server.id, match.externalId);
 
 		await interaction.editReply("Successfully unlinked your account!");
 	},

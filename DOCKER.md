@@ -80,7 +80,6 @@ This guide explains how to run the Discord Minecraft Bot using Docker and Docker
 | Service | Internal Port | Default External Port | Environment Variable |
 |---------|---------------|----------------------|---------------------|
 | Bot API | 3000 | 3000 | `BOT_PORT` |
-| Minecraft API | 6001 | 6001 | `API_PORT` |
 | PostgreSQL | 5432 | 5432 | `POSTGRES_PORT` |
 | Web UI | 3000 | 3001 | `WEBUI_PORT` |
 

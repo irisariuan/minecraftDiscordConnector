@@ -91,8 +91,8 @@ client match the restored data.
 ## Notes
 
 - The core no longer reads Minecraft environment variables. `SERVER_DIR`,
-  `MINECRAFT_VERSION`, `LOADER_TYPE`, `MOD_TYPE`, `SERVER_PORT`,
-  `SERVER_API_PORT`, and `SERVER_TAG` are now consumed by the **Minecraft
+  `MINECRAFT_VERSION`, `LOADER_TYPE`, `MOD_TYPE`, `SERVER_PORT`, and
+  `SERVER_TAG` are now consumed by the **Minecraft
   plugin's** bootstrap (only used to create a default server when the database
   is empty). See [PLUGINS.md](./PLUGINS.md).
 - Existing servers whose `pluginId` has no matching loaded plugin will raise an

@@ -344,7 +344,7 @@ export async function createHandler(
 				modType,
 				minecraftVersion: mcVersion,
 				pluginDir,
-				apiPort: null,
+				ipcSocket: null,
 			},
 		});
 	} catch (err) {

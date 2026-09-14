@@ -89,7 +89,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # 25565 is the Minecraft proxy listen port (MC_PROXY_LISTEN_PORT).
 # The proxy control API is a Unix socket inside the container, so there is
 # nothing to expose for it.
-EXPOSE 3000 6001 25565
+EXPOSE 3000 25565
 
 # Environment variables (set defaults, override with docker run -e or docker-compose)
 ENV NODE_ENV=production

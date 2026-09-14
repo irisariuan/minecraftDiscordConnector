@@ -30,11 +30,12 @@ const rawPluginsPath = await input({
 });
 const pluginsPath = resolve(rawPluginsPath);
 
-const rawApiPort = await input({
-	message: "Please enter server API port (optional)",
+const rawIpcSocket = await input({
+	message:
+		"Please enter the connector IPC socket path (optional, defaults to connector.sock in the server directory)",
 	required: false,
 });
-const apiPort = rawApiPort ? parseInt(rawApiPort) : undefined;
+const ipcSocket = rawIpcSocket || undefined;
 
 const loaderType = await input({
 	message: "Please enter loader type (e.g., fabric, forge, vanilla)",
@@ -88,7 +89,7 @@ try {
 			modType,
 			minecraftVersion: version,
 			pluginDir: pluginsPath,
-			apiPort,
+			ipcSocket,
 		} as Prisma.InputJsonValue,
 	});
 

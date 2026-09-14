@@ -184,10 +184,10 @@ export type AppRequestMap = {
 		params: { user: string | { id: string }; serverId?: number };
 		result: PermissionValue;
 	};
-	/** A generic runtime snapshot of the online server bound to a port, or null.
-	 *  Used by game plugins that expose an inbound callback server. */
-	"server:getActiveByPort": {
-		params: { port: number };
+	/** A generic runtime snapshot of an online server, or null when it is not
+	 *  running. Used by game plugins handling calls from a live server. */
+	"server:getActiveById": {
+		params: { id: number };
 		result: {
 			id: number;
 			pluginId: string;

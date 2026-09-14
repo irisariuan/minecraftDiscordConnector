@@ -15,7 +15,7 @@ platform-wide concerns; every game-specific behaviour lives in a plugin.
   artifacts (`ServerArtifact`), and external identities (`IdentityLink`).
 
 The core contains **no** hard-coded game assumptions — no `"minecraft"`,
-`loaderType`, `apiPort`, REST endpoints, UUIDs, or fixed game-type list.
+`loaderType`, IPC sockets, UUIDs, or a fixed game-type list.
 
 ## The plugin boundary
 
@@ -100,8 +100,8 @@ Then, as needed:
 
 - Add `*.command.ts` files for game-specific Discord commands. Gate them with
   `features.requiredCapabilities` so they only run against your servers.
-- Add `*.script.ts` for startup wiring (e.g. an inbound callback HTTP server —
-  see `plugins/minecraft/callback.script.ts`).
+- Add `*.script.ts` for startup wiring (e.g. an inbound callback channel — see
+  `plugins/minecraft/ipc.script.ts`).
 - Track mods/packages via the generic `artifact:*` channels under your own
   `provider` string; store per-server state via `createStore` or the artifact
   metadata.
@@ -114,7 +114,8 @@ generic behaviour.
 ## Reference plugins
 
 - `plugins/minecraft/` — the full Minecraft implementation (lifecycle, loader
-  discovery, REST client, callback server, pay-to-play, OTP linking, commands).
+  discovery, the IPC channel to the in-JVM connector plugin, pay-to-play, OTP
+  linking, commands). See [IPC.md](./IPC.md).
 - `plugins/modrinth/` — a package provider layered on the Minecraft plugin,
   tracking artifacts under `provider = "modrinth"`.
 - `plugins/githubConnector/` — a standalone installer that tracks a GitHub

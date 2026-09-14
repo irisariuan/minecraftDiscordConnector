@@ -203,8 +203,10 @@ export class Server {
 
 	private processHandle() {
 		return {
-			spawn: (command: string[], options?: { cwd?: string }) =>
-				this.doSpawn(command, options),
+			spawn: (
+				command: string[],
+				options?: { cwd?: string; env?: Record<string, string> },
+			) => this.doSpawn(command, options),
 			kill: (signal?: number | NodeJS.Signals) => this.forceStop(signal),
 			isOnline: async (useFresh?: boolean) =>
 				(await this.isOnline.getData(useFresh)) ?? false,
@@ -398,12 +400,13 @@ export class Server {
 	/** Spawn the process and wire generic stdout capture through the plugin's parser. */
 	private async doSpawn(
 		command: string[],
-		options?: { cwd?: string },
+		options?: { cwd?: string; env?: Record<string, string> },
 	): Promise<number | null> {
 		if (this.instance || (await this.isOnline.getData(true))) return null;
 		const parseOutput = this.lifecycle().parseOutput;
 		const instance = spawn(command, {
 			cwd: options?.cwd ?? this.config.serverDir,
+			env: options?.env ? { ...process.env, ...options.env } : undefined,
 			stdin: "pipe",
 			stdout: "pipe",
 			onExit: (_subprocess, exitCode, signalCode, error) => {
@@ -585,18 +588,6 @@ export class ServerManager {
 		}
 	}
 
-	async getActiveServerFromPort(port: number) {
-		for (const server of this.servers.values()) {
-			if (
-				server.config.port.includes(port) &&
-				(await server.isOnline.getData())
-			) {
-				return server;
-			}
-		}
-		return null;
-	}
-
 	/** Recompute the "any server online" flag and emit on transition. */
 	async checkServerStatus() {
 		let anyOnline = false;
@@ -634,9 +625,9 @@ function approvalUrl(approval: Approval): string | null {
 
 /** Register runtime data channels that need a live {@link ServerManager}/client. */
 function registerServerRuntimeHandlers(manager: ServerManager, client: Client) {
-	appEvents.handle("server:getActiveByPort", async ({ port }) => {
-		const server = await manager.getActiveServerFromPort(port);
-		if (!server) return null;
+	appEvents.handle("server:getActiveById", async ({ id }) => {
+		const server = manager.getServer(id);
+		if (!server || !(await server.isOnline.getData())) return null;
 		return {
 			id: server.id,
 			pluginId: server.pluginId,
