@@ -31,7 +31,7 @@ export type LinkStatus =
 	| "failed";
 
 /** States an accepted attempt passes through, reported on `POST /session`. */
-export type LinkState = "pending" | "linked" | "failed";
+type LinkState = "pending" | "linked" | "failed";
 
 export interface LinkResult {
 	status: LinkStatus;

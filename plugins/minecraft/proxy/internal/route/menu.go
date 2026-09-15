@@ -27,9 +27,9 @@ type menuEntry struct {
 	// vote may still be possible; the bot decides that, not the proxy.
 	CanStart bool
 	// PollPending means a vote is already open, so asking again would only
-	// duplicate it.
+	// duplicate it. The link to it is not carried here: a player who asks
+	// anyway is answered by the bot, which supplies the link with the answer.
 	PollPending bool
-	PollURL     string
 }
 
 // buildMenu lists the servers a player may use, in a stable order.
@@ -51,7 +51,6 @@ func buildMenu(sess *control.Session) []menuEntry {
 			Online:      srv.Online,
 			CanStart:    srv.CanStart,
 			PollPending: srv.PollPending,
-			PollURL:     srv.PollURL,
 		})
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
@@ -225,48 +224,40 @@ func resolve(entries []menuEntry, arg string) (menuEntry, error) {
 	}
 }
 
-// startReply turns a control-API start result into a line of chat.
+// said prefers the bot's own wording, and falls back to the proxy's only when
+// the bot supplied none.
 //
-// The bot's own message is preferred wherever it has one: it knows the price, the
-// poll and the permission rule, and repeating that knowledge here would mean two
-// places to keep in step. The proxy only supplies a fallback and the colour.
+// Every answer the waiting world gives about starting or linking follows this
+// rule. The bot knows the price, the poll, the permission and which Discord
+// account it found; keeping a second copy of any of that here would mean two
+// places to keep in step, and the one the player reads would be the stale one.
+func said(message, fallback string) string {
+	if msg := strings.TrimSpace(message); msg != "" {
+		return msg
+	}
+	return fallback
+}
+
+// startReply turns a control-API start result into a line of chat. The proxy
+// supplies only the colour and, where the bot said nothing, the words.
 func startReply(res *control.StartResult) string {
-	msg := strings.TrimSpace(res.Message)
 	switch res.Status {
 	case control.StatusStarted:
-		if msg == "" {
-			msg = "Starting the server. You will be moved as soon as it is up."
-		}
-		return "§a" + msg
+		return "§a" + said(res.Message, "Starting the server. You will be moved as soon as it is up.")
 	case control.StatusAlreadyOnline:
-		if msg == "" {
-			msg = "That server is already running. Moving you there."
-		}
-		return "§a" + msg
+		return "§a" + said(res.Message, "That server is already running. Moving you there.")
 	case control.StatusPollCreated, control.StatusPollPending:
-		if msg == "" {
-			msg = "A vote is open on Discord. You will be moved if it passes."
-		}
-		line := "§e" + msg
+		line := "§e" + said(res.Message, "A vote is open on Discord. You will be moved if it passes.")
 		if res.PollURL != "" {
 			line += " §7(" + res.PollURL + ")"
 		}
 		return line
 	case control.StatusNoChannel:
-		if msg == "" {
-			msg = "No vote channel is set up here. Start the vote from Discord instead."
-		}
-		return "§e" + msg
+		return "§e" + said(res.Message, "No vote channel is set up here. Start the vote from Discord instead.")
 	case control.StatusNotLinked:
-		if msg == "" {
-			msg = "Link your Discord account before you can ask for a server to be started."
-		}
-		return "§e" + msg
+		return "§e" + said(res.Message, "Link your Discord account before you can ask for a server to be started.")
 	default:
-		if msg == "" {
-			msg = "That server could not be started."
-		}
-		return "§c" + msg
+		return "§c" + said(res.Message, "That server could not be started.")
 	}
 }
 

@@ -26,7 +26,7 @@ export function identitiesOf(player: { uuid: string; offlineUuid?: string }) {
 }
 
 /** Look up the Discord account linked to one Minecraft UUID, or null. */
-export async function identityOf(uuid: string) {
+async function identityOf(uuid: string) {
 	if (!uuid) return null;
 	try {
 		return await data.request("identity:getByExternal", {

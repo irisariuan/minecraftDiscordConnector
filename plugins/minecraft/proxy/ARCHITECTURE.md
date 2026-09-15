@@ -34,11 +34,11 @@ client ──► first byte 0xFE ──► legacy pre-1.7 ping, answered and clo
  and linked     make                        │
      │               │                      │
  join backend   waiting world           hold mid-login
- (forward        (empty room, chat,      (POST /start if linked,
-  identity,       /link, /start,          keep the client alive,
-  relay login,    /join, then a           wait, then join backend)
-  tunnel)         transfer back
-                  through the front
+ (forward        (empty room, chat,      (start nothing, keep
+  identity,       /link, /start,           the client alive, wait
+  relay login,    /join, then a            for somebody else to
+  tunnel)         transfer back            start it, then join
+                  through the front        backend)
                   door)
 ```
 

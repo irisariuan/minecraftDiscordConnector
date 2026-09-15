@@ -196,6 +196,27 @@ func (w *worldSession) sayHelp() {
 		"  §f/link <your Discord name>§7 — connect your Discord account")
 }
 
+// pick resolves the name a player typed, telling them why not when it names
+// nothing. Both /join and /start begin here, and both have to: a name that
+// resolves to nothing is the most likely thing to go wrong in a room with no
+// tab completion.
+func (w *worldSession) pick(arg string) (menuEntry, bool) {
+	entry, err := resolve(w.menu, arg)
+	if err == nil {
+		return entry, true
+	}
+	// resolve writes its errors lowercase, as Go errors are written, but a
+	// player reads these, so they are made to read as sentences on the way out.
+	// The fallback is for an error with nothing in it, which would otherwise
+	// leave the player with silence — and silence reads as a broken server.
+	msg := err.Error()
+	if msg == "" {
+		msg = "that is not a server here"
+	}
+	w.say("§c" + strings.ToUpper(msg[:1]) + msg[1:] + ".")
+	return menuEntry{}, false
+}
+
 // join goes to a server that is already up, and only to one that is.
 //
 // A stopped server is not started from here. /start is where that happens, and
@@ -203,9 +224,8 @@ func (w *worldSession) sayHelp() {
 // Discord channel other people are reading, by typing the wrong name into what
 // they thought was a way of moving.
 func (w *worldSession) join(arg string) (bool, error) {
-	entry, err := resolve(w.menu, arg)
-	if err != nil {
-		w.say("§c" + capitalise(err.Error()) + ".")
+	entry, ok := w.pick(arg)
+	if !ok {
 		return false, nil
 	}
 	if !entry.Online {
@@ -224,9 +244,8 @@ func (w *worldSession) join(arg string) (bool, error) {
 // the bot's rules, applied exactly as /startserver applies them on Discord; the
 // answer that comes back is shown to the player as it was written.
 func (w *worldSession) start(ctx context.Context, arg string) (bool, error) {
-	entry, err := resolve(w.menu, arg)
-	if err != nil {
-		w.say("§c" + capitalise(err.Error()) + ".")
+	entry, ok := w.pick(arg)
+	if !ok {
 		return false, nil
 	}
 
@@ -413,11 +432,9 @@ func (w *worldSession) reportLink(sess *control.Session, wasLinked bool) {
 	}
 	w.linkState = sess.Link.State
 	if sess.Link.State == control.LinkStateFailed {
-		msg := strings.TrimSpace(sess.Link.Message)
-		if msg == "" {
-			msg = "That link attempt did not go through."
-		}
-		w.say("§c"+msg, "§7Type §f/link <your Discord name>§7 to try again.")
+		w.say(
+			"§c"+said(sess.Link.Message, "That link attempt did not go through."),
+			"§7Type §f/link <your Discord name>§7 to try again.")
 	}
 }
 
@@ -433,18 +450,13 @@ func linkPromptLines() []string {
 	}
 }
 
-// linkReply turns a control-API link result into chat.
-//
-// As with a start, the bot's own wording is preferred wherever it has some: it
-// knows which account it found and why it would not do, and saying it twice in
-// two places would mean two places to keep in step.
+// linkReply turns a control-API link result into chat, under the same rule as
+// startReply: see [said]. The one thing the proxy supplies itself is the code,
+// which exists only to be read off the screen and so has to be legible among
+// everything else.
 func linkReply(res *control.LinkResult) []string {
-	msg := strings.TrimSpace(res.Message)
 	if res.Status != control.LinkPending {
-		if msg == "" {
-			msg = "That did not work. Check the name and try again."
-		}
-		return []string{"§c" + msg}
+		return []string{"§c" + said(res.Message, "That did not work. Check the name and try again.")}
 	}
 
 	lines := []string{"§8§m                              "}
@@ -499,13 +511,4 @@ func wasOnline(entries []menuEntry, id int) bool {
 	// Unknown a moment ago: treat it as having been up, so that a server
 	// appearing in the list for the first time does not read as "just started".
 	return true
-}
-
-// capitalise makes an error message read as a sentence. The errors it is given
-// are written lowercase, as Go errors are, but they are shown to a player.
-func capitalise(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }

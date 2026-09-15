@@ -69,8 +69,6 @@ const (
 	LinkAlreadyLinked = "already_linked"
 	// LinkUnknownUser means no Discord user goes by that name.
 	LinkUnknownUser = "unknown_user"
-	// LinkTaken means that Discord account is already linked to somebody else.
-	LinkTaken = "taken"
 	// LinkUnreachable means the bot could not message that Discord user, which
 	// in practice means they have direct messages turned off.
 	LinkUnreachable = "unreachable"

@@ -1,11 +1,13 @@
 import { ComponentType, MessageFlags, SlashCommandBuilder } from "discord.js";
-import { data, getRandomOtp, type CommandFile } from "../../api";
-import { isAttached } from "../runtime/ipc";
 import {
 	createOtpButtonRow,
 	createOtpInputModal,
+	data,
+	getRandomOtp,
 	OTPAction,
-} from "../runtime/otp";
+	type CommandFile,
+} from "../../api";
+import { isAttached } from "../runtime/ipc";
 import { markVerifiedOnServer, registerOnServer } from "../runtime/request";
 
 const PLUGIN_ID = "minecraft";

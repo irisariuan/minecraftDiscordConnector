@@ -22,7 +22,6 @@ import {
 
 export enum OTPAction {
 	OTP_SHOW_MODAL_BUTTON = "otp_click",
-	OTP_MODAL_SUBMIT_BUTTON = "otp_submit",
 	OTP_MODAL = "otp_modal",
 	OTP_TEXT_INPUT = "otp_text_input",
 }
@@ -55,7 +54,7 @@ export function createOtpInputModal() {
 }
 
 /** How long a direct-message code stays good for, matching the Discord `/link`. */
-export const OTP_DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const OTP_DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 export type ConfirmOtpResult = {
 	status: "confirmed" | "unreachable" | "timeout";

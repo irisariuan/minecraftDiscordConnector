@@ -450,6 +450,50 @@ func TestEnterRefusesWhatItCannotBuild(t *testing.T) {
 // before it returns, so a test that reads them after Enter returns would
 // deadlock against a pipe — and the deadlock would be the test's, not the
 // proxy's, which is the worst kind to debug.
+// A client that authenticates and then says nothing must not be able to hold a
+// connection and a goroutine open for ever.
+//
+// It is an easy case to leave unbounded, because it is not reachable without a
+// real Mojang session: the client has to complete the encryption exchange
+// before it gets here. That makes it rare, not harmless — one account could
+// open connections all day and nothing would ever notice, since a silent client
+// is silent in both directions and no keep-alive loop is running yet.
+//
+// The bound is shortened rather than waited out, but the test still fails
+// loudly — by timing out — if it is ever removed again.
+func TestEnterGivesUpOnAClientThatGoesSilent(t *testing.T) {
+	restore := replyDeadline
+	replyDeadline = 250 * time.Millisecond
+	t.Cleanup(func() { replyDeadline = restore })
+
+	serverRaw, clientRaw := socketPair(t)
+	client := &fakeClient{t: t, raw: clientRaw, conn: protocol.NewConn(clientRaw)}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := Enter(context.Background(), protocol.NewConn(serverRaw), Options{
+			Protocol: testProtocol,
+			Name:     "SmokeTester",
+			UUID:     protocol.OfflineUUID("SmokeTester"),
+			Snapshot: testSnapshot(),
+			Logger:   slog.New(slog.DiscardHandler),
+		})
+		done <- err
+	}()
+
+	client.expect(idLoginSuccess, "login success")
+	// ...and now the client never acknowledges, and never closes either.
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Enter succeeded for a client that never acknowledged the login")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Enter never returned for a client that went silent after login success")
+	}
+}
+
 func socketPair(t *testing.T) (server, client net.Conn) {
 	t.Helper()
 

@@ -28,10 +28,6 @@ func (w *Writer) Packet() *Packet {
 	return &Packet{ID: w.id, Data: w.buf}
 }
 
-// Len reports the number of payload bytes written so far, excluding the id.
-func (w *Writer) Len() int {
-	return len(w.buf)
-}
 
 // VarInt appends a variable-length 32-bit integer.
 func (w *Writer) VarInt(v int32) *Writer {

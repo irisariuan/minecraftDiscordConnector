@@ -13,12 +13,6 @@ import (
 )
 
 const (
-	// configDeadline bounds how long the client may take to work through the
-	// configuration phase. It is generous because the client is parsing a
-	// registry set that can run past a hundred kilobytes, and mean because a
-	// client that has stopped answering should not occupy a goroutine forever.
-	configDeadline = 30 * time.Second
-
 	// keepAliveInterval is how often the play phase is given something to
 	// answer. The vanilla server uses fifteen seconds and disconnects at
 	// thirty; ten leaves room for a slow round trip without ever approaching
@@ -53,6 +47,20 @@ const (
 	voidY = -4096.0
 )
 
+// replyDeadline bounds how long the client may take to send something the entry
+// sequence is waiting for. It is generous because one of those waits is for a
+// client parsing a registry set that can run past a hundred kilobytes, and mean
+// because a client that has stopped answering should not occupy a goroutine
+// forever.
+//
+// Every read before the play phase is bounded by it. Afterwards liveness
+// becomes the keep-alive loop's job, which is the only thing that can tell a
+// player who is standing still from one who has gone.
+//
+// It is a variable rather than a constant so that the test covering the silent
+// client does not have to wait out the real thing.
+var replyDeadline = 30 * time.Second
+
 // gameEventStartWaitingForChunks is the event that tells the client the server
 // has begun sending the world. Nothing follows it here, which is precisely why
 // the player has to be below the world for the loading screen to close.
@@ -74,11 +82,6 @@ const playerAbilityInvulnerable, playerAbilityFlying = 0x01, 0x02
 // the recording forced the backend to spell out every registry entry in full,
 // so there is nothing left for the client to supply from its own copy.
 func (s *Session) configure(snap *Snapshot) error {
-	if err := s.conn.SetReadDeadline(time.Now().Add(configDeadline)); err != nil {
-		return err
-	}
-	defer func() { _ = s.conn.SetReadDeadline(time.Time{}) }()
-
 	for i := range snap.Config {
 		if err := s.write(&snap.Config[i]); err != nil {
 			return fmt.Errorf("replaying configuration packet %d of %d: %w", i+1, len(snap.Config), err)
@@ -90,16 +93,41 @@ func (s *Session) configure(snap *Snapshot) error {
 	}
 
 	// The client answers with its own settings and its brand before it
-	// acknowledges, and none of that is of interest — but it has to be read,
-	// because it is in front of the acknowledgement on the wire.
+	// acknowledges, and none of that is of interest — but it is in front of the
+	// acknowledgement on the wire, so it has to be read past.
+	return s.readUntil(sbAckFinishConfiguration, "the client to finish configuring")
+}
+
+// readUntil waits for one particular packet, stepping over whatever the client
+// sends in front of it, and gives up after [replyDeadline].
+//
+// Something usually does arrive in front. The proxy asks the client for a
+// stored server choice earlier in the login and stops listening after a few
+// seconds, but giving up does not recall the question: a client on a slow link
+// answers once the proxy has moved on, and that answer is still on the wire
+// here. The same is true of the settings and brand a client sends before
+// acknowledging the configuration phase. Insisting on the packet being first
+// would turn a slow connection into a player dropped with no message, which is
+// the one outcome the waiting world exists to prevent.
+//
+// The wait is bounded in time rather than by a count of packets, because the
+// question being asked is whether this client is still participating, and time
+// is the only unit that answers it for both a silent client and a chatty one.
+func (s *Session) readUntil(id int32, what string) error {
+	if err := s.conn.SetReadDeadline(time.Now().Add(replyDeadline)); err != nil {
+		return err
+	}
+	defer func() { _ = s.conn.SetReadDeadline(time.Time{}) }()
+
 	for {
 		pkt, err := s.conn.ReadPacket()
 		if err != nil {
-			return fmt.Errorf("waiting for the client to finish configuring: %w", err)
+			return fmt.Errorf("waiting for %s: %w", what, err)
 		}
-		if pkt.ID == sbAckFinishConfiguration {
+		if pkt.ID == id {
 			return nil
 		}
+		s.log.Debug("stepping over a packet", "packet", pkt.ID, "waiting for", what)
 	}
 }
 

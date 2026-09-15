@@ -163,9 +163,6 @@ func (b *e2eBackend) statusProtocol() int32 {
 	return 47
 }
 
-func newE2EBackend(t *testing.T) *e2eBackend {
-	return newE2EBackendWith(t, false)
-}
 
 // newE2EBackendWith optionally makes the backend walk a configuration phase
 // after the login, which is what a real 1.20.2+ server does and what the proxy
