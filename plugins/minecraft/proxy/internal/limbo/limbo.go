@@ -80,6 +80,9 @@ type Session struct {
 
 	// commands carries what the player typed, without the leading slash.
 	commands chan string
+	// gone is closed when the read loop ends, which is the moment the client
+	// has hung up (or the connection has been closed under it).
+	gone chan struct{}
 
 	// closeOnce keeps Close idempotent: it is called by the caller when it is
 	// done, by the read loop when the player goes, and by the keep-alive loop
@@ -137,6 +140,7 @@ func Enter(ctx context.Context, conn *protocol.Conn, opts Options) (*Session, er
 		profile:  prof,
 		log:      log,
 		commands: make(chan string, 4),
+		gone:     make(chan struct{}),
 	}
 
 	if err := s.completeLogin(opts); err != nil {

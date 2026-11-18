@@ -28,6 +28,11 @@ import (
 // no longer means what it did.
 const worldRefresh = 5 * time.Second
 
+// transferHangupGrace is how long a transferred player is given to close the
+// connection themselves before the proxy closes it. See
+// [limbo.Session.AwaitHangup]. A variable so tests need not wait it out.
+var transferHangupGrace = 10 * time.Second
+
 // errPlayerLeft is the ordinary end of a waiting-world session: the player shut
 // the game, or walked away and the client gave up. It is not a failure.
 var errPlayerLeft = errors.New("player left the waiting world")
@@ -384,6 +389,10 @@ func (w *worldSession) transfer(entry menuEntry) error {
 	}
 	if err := w.world.Transfer(host, port); err != nil {
 		return fmt.Errorf("transfer to %s: %w", entry.Tag, err)
+	}
+	if !w.world.AwaitHangup(transferHangupGrace) {
+		w.proxy.log.Debug("transferred player did not hang up; closing",
+			"player", w.name, "server", entry.Tag)
 	}
 	return nil
 }

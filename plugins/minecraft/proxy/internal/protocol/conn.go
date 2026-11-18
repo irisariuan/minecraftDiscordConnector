@@ -318,6 +318,13 @@ func (r connReader) WriteTo(w io.Writer) (int64, error) { return r.c.br.WriteTo(
 type connWriter struct{ c *Conn }
 
 func (w connWriter) Write(p []byte) (int, error) {
+	// Nothing to send is nothing to do. io.Copy through a bufio.Reader flushes
+	// its (possibly empty) buffer before reading on, and some net.Conn
+	// implementations — net.Pipe among them — hold even an empty write until
+	// the far side reads, which turns a finished copy into a hang.
+	if len(p) == 0 {
+		return 0, nil
+	}
 	w.c.wmu.Lock()
 	defer w.c.wmu.Unlock()
 	return w.c.writeLocked(p)

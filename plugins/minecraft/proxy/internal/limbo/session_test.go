@@ -590,3 +590,40 @@ func TestEnterToleratesAPacketSentBeforeTheAcknowledgement(t *testing.T) {
 		t.Fatalf("a late cookie reply cost the player their connection: %v", err)
 	}
 }
+
+// TestAwaitHangupLetsTheClientLeaveFirst covers what follows a transfer: the
+// proxy must not close the connection under a client that has yet to act on
+// the transfer packet, but must not wait forever for one that never leaves.
+func TestAwaitHangupLetsTheClientLeaveFirst(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a client that hangs up", func(t *testing.T) {
+		t.Parallel()
+
+		session, client := enterWorld(t)
+		drainSpawn(t, client)
+
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			_ = client.raw.Close()
+		}()
+		if !session.AwaitHangup(5 * time.Second) {
+			t.Fatal("the client hung up, but AwaitHangup did not notice")
+		}
+	})
+
+	t.Run("a client that never does", func(t *testing.T) {
+		t.Parallel()
+
+		session, client := enterWorld(t)
+		drainSpawn(t, client)
+
+		start := time.Now()
+		if session.AwaitHangup(100 * time.Millisecond) {
+			t.Fatal("reported a hang-up from a client that is still connected")
+		}
+		if waited := time.Since(start); waited > 2*time.Second {
+			t.Errorf("waited %v for a 100ms timeout", waited)
+		}
+	})
+}

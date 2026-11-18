@@ -138,7 +138,11 @@ export async function beginLink(player: {
 		message: "",
 		discord: user.username,
 		code,
-		expiresAt: Date.now() + LINK_TIMEOUT_MS,
+		// Kept a little past the code's own lifetime. The direct message starts
+		// its five minutes only once it has been sent, so pruning at exactly
+		// five minutes from here could drop the attempt before settle() records
+		// that it expired, and the player would never be told.
+		expiresAt: Date.now() + LINK_TIMEOUT_MS + 60 * 1000,
 	});
 
 	void settle(player, user, code).catch((err) => {

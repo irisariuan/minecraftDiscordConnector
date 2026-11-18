@@ -104,6 +104,10 @@ export async function confirmOtpByDm(
 			time: timeoutMs,
 		});
 		let confirmed = false;
+		// Set once the wait is over. The modal outlives the button collector, so
+		// a code typed into a modal opened just before the deadline can arrive
+		// after the caller has already been told the attempt timed out.
+		let expired = false;
 
 		collector.on("collect", async (button) => {
 			await button.showModal(createOtpInputModal());
@@ -116,6 +120,14 @@ export async function confirmOtpByDm(
 				})
 				.catch(() => null);
 			if (!submission) return;
+			if (expired) {
+				// Confirming now would tell them it worked while nothing is
+				// recorded: the caller has already moved on.
+				await submission
+					.reply("This request has expired. Start linking again from the game.")
+					.catch(() => {});
+				return;
+			}
 
 			const entered = submission.fields
 				.getTextInputValue(OTPAction.OTP_TEXT_INPUT)
@@ -138,6 +150,7 @@ export async function confirmOtpByDm(
 
 		collector.on("end", () => {
 			if (confirmed) return;
+			expired = true;
 			dm.edit({
 				content: `${content}\n\n*This request has expired.*`,
 				components: [],

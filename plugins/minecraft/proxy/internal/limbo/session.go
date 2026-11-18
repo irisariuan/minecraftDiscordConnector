@@ -230,6 +230,28 @@ func (s *Session) Transfer(host string, port int) error {
 		Packet())
 }
 
+// AwaitHangup waits up to timeout for the client to close the connection
+// itself, and reports whether it did.
+//
+// It is what follows a [Session.Transfer]. The client acts on a transfer from
+// its main thread, while a socket closing under it is noticed on its network
+// thread, so a proxy that hangs up the instant the packet is written races the
+// client into a "Connection lost" screen instead of the transfer. Worse, the
+// client keeps sending movement until it switches over; closing a socket with
+// that still unread makes the kernel answer with a reset rather than an orderly
+// close. Letting the client be the one to leave avoids both. The timeout only
+// bounds a client that never does.
+func (s *Session) AwaitHangup(timeout time.Duration) bool {
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-s.gone:
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
 // write sends one packet under a deadline. See [writeTimeout].
 func (s *Session) write(pkt *protocol.Packet) error {
 	if err := s.conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
@@ -255,6 +277,7 @@ func (s *Session) Close() error {
 // and refusing to ignore an unrecognised packet would mean a new client version
 // could not stand in a room it is otherwise perfectly able to stand in.
 func (s *Session) readLoop(ctx context.Context) {
+	defer close(s.gone)
 	defer close(s.commands)
 	defer func() { _ = s.Close() }()
 
